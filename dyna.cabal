@@ -1,0 +1,56 @@
+----------------------------------------------------------------
+
+Name:           dyna
+Version:        0.3.5
+Cabal-Version:  >= 1.14
+Build-Type:     Simple
+Stability:      alpha
+Copyright:      Copyright (c) 2007--2012,
+                      Nathaniel W. Filardo, wren ng thornton
+License:        OtherLicense
+License-File:   LICENSE
+Author:         Nathaniel W. Filardo, wren ng thornton
+Maintainer:     haskell@dyna.org
+Homepage:       http://www.dyna.org/
+Category:       Compilers/Interpreters
+Synopsis:       Interpreter for the Dyna language
+Description:    A weighted logic programming language for dynamic
+                programming and natural language processing. Features
+                include memoization, both forward- and backward-chaining,
+                and namespace modularity.
+
+Library
+    Default-Language:   Haskell2010
+    Hs-Source-Dirs:     src
+
+    Exposed-Modules:    Dyna.ParserHS.Parser
+
+    Build-Depends:      base >=4,
+                        bytestring >= 0.9,
+                        semigroups >=0.8,
+                        trifecta >=0.53,
+                        unification-fd,
+                        unordered-containers>=0.2,
+                        utf8-string >=0.3
+
+Test-suite dyna-selftest-parser
+    type:               exitcode-stdio-1.0
+    Default-Language:   Haskell2010
+    Hs-Source-Dirs:     src
+
+    Build-Depends:      base >= 4,
+                        bytestring >=0.9,
+                        containers >=0.4,
+                        HUnit >=1.2,
+                        semigroups >=0.8,
+                        test-framework >=0.6,
+                        test-framework-hunit >= 0.2,
+                        test-framework-th >= 0.2,
+                        trifecta >=0.53,
+                        unordered-containers>=0.2,
+                        utf8-string >=0.3
+
+    Main-Is: Dyna/ParserHS/ParserSelftest.hs
+
+----------------------------------------------------------------
+----------------------------------------------------------- fin.
