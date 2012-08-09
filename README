@@ -10,3 +10,11 @@ src/Dyna/Test     -- code used by self-tests throughout the codebase
 
 src/Dyna/XXX      -- code that should probably go upstream;
                      modules here are named by the upstream package.
+
+
+For those not familar with cabal
+--------------------------------
+
+cabal configure --user --enable-tests
+cabal build
+cabal test
