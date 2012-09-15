@@ -1,8 +1,8 @@
 ----------------------------------------------------------------
 
 Name:           dyna
-Version:        0.3.5
-Cabal-Version:  >= 1.14
+Version:        0.4
+Cabal-Version:  >=1.14
 Build-Type:     Simple
 Stability:      alpha
 Copyright:      Copyright (c) 2007--2012,
@@ -23,34 +23,61 @@ Library
     Default-Language:   Haskell2010
     Hs-Source-Dirs:     src
 
-    Exposed-Modules:    Dyna.ParserHS.Parser
+    ghc-options:        -Wall
+
+    Exposed-Modules:    Dyna.ParserHS.Parser,
+                        Dyna.NormalizeParse,
+                        Dyna.XXX.Trifecta
 
     Build-Depends:      base >=4,
-                        bytestring >= 0.9,
+                        bytestring >=0.9,
+                        containers >=0.4,
+                        mtl >=2.1,
+                        reducers >=3.0,
                         semigroups >=0.8,
                         trifecta >=0.53,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3
 
+Executable drepl
+    Default-Language:   Haskell2010
+
+    ghc-options:        -Wall
+
+    Hs-Source-Dirs:     src
+    Build-Depends:      base >=4,
+                        bytestring >=0.9,
+                        containers >=0.4,
+                        editline >=0.2,
+                        reducers >=3.0,
+                        semigroups >=0.8,
+                        trifecta >=0.53,
+                        unordered-containers>=0.2,
+                        utf8-string >=0.3
+    
+    Main-Is: Dyna/REPL.hs
+
 Test-suite dyna-selftest-parser
     type:               exitcode-stdio-1.0
     Default-Language:   Haskell2010
     Hs-Source-Dirs:     src
 
-    Build-Depends:      base >= 4,
+    Build-Depends:      base >=4,
                         bytestring >=0.9,
                         containers >=0.4,
                         HUnit >=1.2,
+                        reducers >=3.0,
                         semigroups >=0.8,
                         test-framework >=0.6,
-                        test-framework-hunit >= 0.2,
-                        test-framework-th >= 0.2,
+                        test-framework-hunit >=0.2,
+                        test-framework-th >=0.2,
                         trifecta >=0.53,
                         unordered-containers>=0.2,
                         utf8-string >=0.3
 
     Main-Is: Dyna/ParserHS/ParserSelftest.hs
+
 
 ----------------------------------------------------------------
 ----------------------------------------------------------- fin.

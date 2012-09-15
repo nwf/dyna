@@ -186,7 +186,8 @@ progline  = spanned $ choice [ LRule <$> drule
                              ]
 
 dline :: MonadParser m => m (Spanned Line)
-dline = dynafy (progline <* optional (char '.' <*  (spaces <|> eof)))
+-- dline = dynafy (progline <* optional (char '.' <*  (spaces <|> eof)))
+dline = dynafy (progline <* optional (char '.') <* optional newline)
 
 dlines :: MonadParser m => m [Spanned Line]
 dlines = dynafy (progline `sepEndBy` (char '.' <* spaces))

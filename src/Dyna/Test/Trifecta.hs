@@ -2,7 +2,7 @@
 
 module Dyna.Test.Trifecta where
 
-import           Control.Applicative ((<*))
+import           Control.Applicative ((<*),(*>))
 import           Data.ByteString (ByteString)
 import           Data.Foldable (toList)
 import           Data.Monoid (mempty)
@@ -31,4 +31,6 @@ checkParseFail p i e = unsafeFF e $ parseByteString (p <* eof) mempty i
   unsafeFF e (Failure xs) = e @=? map extractDiag (toList xs)
   extractDiag (Diagnostic (Left s) _ m _) = (Left s, show m)
   extractDiag (Diagnostic (Right (Rendering d _ _ _ _)) _ m _) = (Right d, show m)
+
+
 

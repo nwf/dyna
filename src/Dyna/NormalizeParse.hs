@@ -14,7 +14,7 @@ import qualified Data.Set                   as S
 import qualified Text.Trifecta              as T
 
 import qualified Dyna.ParserHS.Parser       as P
-import           Dyna.Test.Trifecta         -- XXX
+-- import           Dyna.Test.Trifecta         -- XXX
 
 data Term = TFunctor !B.ByteString ![Term]
           | TVar !B.ByteString
@@ -129,7 +129,7 @@ run = flip runStateT  (AS 0 S.empty) .
       flip runReaderT (AD dynaFunctorArgDispositions dynaFunctorSelfDispositions)
 
     -- XXX
-testNormTerm = run . normalizeTerm False . unsafeParse P.dterm
+-- testNormTerm = run . normalizeTerm False . unsafeParse P.dterm
 
 normalizeRule (P.Fact t T.:~ _) = do
     nt <- normalizeTerm False t
@@ -140,7 +140,7 @@ normalizeRule (P.Rule h a es r T.:~ _) = do
     nes <- mapM (normalizeTerm True) es
     return $ Rule nh a nes nr
 
-testNormRule = run . normalizeRule . unsafeParse P.drule
+-- testNormRule = run . normalizeRule . unsafeParse P.drule
 
 {-
 neis    e = newEval "_normE_"  $ \v -> EIs v e
