@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
@@ -5,6 +6,8 @@
 -- Based in part on
 -- https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs
 -- as well as the trifecta code itself
+--
+-- XXX no longer handles comments due to trifecta code upgrade
 --
 -- TODO:
 --  We might want to use T.T.Literate, too, in the end.
@@ -19,59 +22,61 @@ module Dyna.ParserHS.Parser (
 ) where
 
 import           Control.Applicative
+import           Control.Monad
+import           Control.Monad.Trans (MonadTrans,lift)
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
 import           Data.Char (isSpace)
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
+import           Text.Parser.Expression
+import           Text.Parser.Token.Highlight
+import           Text.Parser.Token.Style
 import           Text.Trifecta
-import           Text.Trifecta.Highlight.Prim
-import           Text.Trifecta.Parser.Expr
-import           Text.Trifecta.Parser.Token.Style
 
-import           Dyna.XXX.Trifecta (identNL, pureSpanned)
+import           Dyna.XXX.Trifecta (identNL)
 
 data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
           | TVar     {-# UNPACK #-} !B.ByteString
            -- | TDBLit XXX
  deriving (Eq,Ord,Show)
 
-dynaDotOperStyle :: MonadParser m => IdentifierStyle m
+dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
 dynaDotOperStyle = IdentifierStyle
   { styleName = "Dot Operator"
-  , styleStart   = () <$ char '.'
-  , styleLetter  = () <$ oneOf "!#$%&*+/<=>?@\\^|-~:."
+  , styleStart   = char '.'
+  , styleLetter  = oneOf "!#$%&*+/<=>?@\\^|-~:."
   , styleReserved = mempty
   , styleHighlight = Operator
   , styleReservedHighlight = ReservedOperator
   }
 
-dynaOperStyle :: MonadParser m => IdentifierStyle m
+dynaOperStyle :: TokenParsing m => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
   { styleName = "Operator"
-  , styleStart   = () <$ oneOf "!#$%&*+/<=>?@\\^|-~:"
-  , styleLetter  = () <$ oneOf "!#$%&*+/<=>?@\\^|-~:."
+  , styleStart   = oneOf "!#$%&*+/<=>?@\\^|-~:"
+  , styleLetter  = oneOf "!#$%&*+/<=>?@\\^|-~:."
   , styleReserved = mempty
   , styleHighlight = Operator
   , styleReservedHighlight = ReservedOperator
   }
 
-dynaAtomStyle :: MonadParser m => IdentifierStyle m
+dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
   { styleName = "Atom"
-  , styleStart    = () <$ (lower <|> digit <|> char '_')
-  , styleLetter   = () <$ (alphaNum <|> oneOf "_'")
+  , styleStart    = (lower <|> digit <|> char '_')
+  , styleLetter   = (alphaNum <|> oneOf "_'")
   , styleReserved = H.fromList [ "is", "new", "whenever" ]
   , styleHighlight = Constant
   , styleReservedHighlight = ReservedOperator
   }
 
-dynaVarStyle :: MonadParser m => IdentifierStyle m
+dynaVarStyle :: TokenParsing m => IdentifierStyle m
 dynaVarStyle = IdentifierStyle
   { styleName = "Variable"
-  , styleStart    = () <$ (upper <|> char '_')
-  , styleLetter   = () <$ (alphaNum <|> oneOf "_'")
+  , styleStart    = (upper <|> char '_')
+  , styleLetter   = (alphaNum <|> oneOf "_'")
   , styleReserved = mempty
   , styleHighlight = Identifier
   , styleReservedHighlight = ReservedIdentifier
@@ -85,25 +90,38 @@ dynaCommentStyle =  CommentStyle
   , commentNesting = True
   }
 
-dynaLanguage :: (MonadParser m)
-             => LanguageDef m
-dynaLanguage =  LanguageDef
-  { languageCommentStyle    = dynaCommentStyle
-  , languageIdentifierStyle = undefined -- dynaAtomStyle (XXX)
-  , languageOperatorStyle   = undefined -- dynaOperStyle (XXX)
-  }
+newtype DynaLanguage m a = DL { unDL :: m a }
+  deriving (Functor,Applicative,Alternative,Monad,MonadPlus,Parsing,CharParsing)
 
-atom :: MonadParser m => m B.ByteString
+instance MonadTrans DynaLanguage where
+  lift = DL
+
+instance (TokenParsing m, MonadPlus m) => TokenParsing (DynaLanguage m) where
+  someSpace = buildSomeSpaceParser (lift someSpace) dynaCommentStyle
+  semi      = lift semi
+  highlight h (DL m) = DL (highlight h m)
+
+instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
+  line = lift line
+  position = lift position
+  slicedWith f (DL m) = DL $ slicedWith f m
+  rend = lift rend
+  restOfLine = lift restOfLine
+  
+
+bsf = fmap BU.fromString
+
+atom :: (Monad m, TokenParsing m) => m B.ByteString
 atom =     liftA BU.fromString stringLiteral
-       <|> ident dynaAtomStyle
+       <|> (bsf $ ident dynaAtomStyle)
 
 -- sparen :: MonadParser m => m a -> m a
 -- sparen = between (char '(' *> spaces) (spaces <* char ')')
 
-term :: MonadParser m => m (Spanned Term)
-term  = lexeme $ choice
+term :: DeltaParsing m => m (Spanned Term)
+term  = token $ choice
       [       parens texpr
-      ,       spanned $ TVar <$> (ident dynaVarStyle)
+      ,       spanned $ TVar <$> (bsf$ident dynaVarStyle)
       , try $ spanned $ flip TFunctor [] <$> atom <* (notFollowedBy $ char '(')
       ,       spanned $ parenfunc
 	  ]
@@ -112,14 +130,14 @@ term  = lexeme $ choice
                        <*>  parens (texpr `sepBy` symbolic ',')
 
 -- XXX right now all binops are at equal precedence and left-associative; that's wrong.
-texpr :: MonadParser m => m (Spanned Term)
+texpr :: DeltaParsing m => m (Spanned Term)
 texpr = buildExpressionParser etable term <?> "Expression"
  where
-  etable = [ [ Prefix $ uf (spanned $ symbol "new") ]
-           , [ Prefix $ uf (spanned $ ident dynaOperStyle)           ]
-           , [ Infix  (bf (spanned $ ident dynaOperStyle)) AssocLeft ]
-		   , [ Infix  (bf (spanned $ dotOper)) AssocRight ]
-           , [ Infix  (bf (spanned $ symbol "is")) AssocNone ]
+  etable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
+           , [ Prefix $ uf (spanned $ bsf $ ident dynaOperStyle)           ]
+           , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
+		   , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
+           , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
            ]
 
     -- The dot operator is required to have not-a-space following (to avoid
@@ -137,12 +155,9 @@ texpr = buildExpressionParser etable term <?> "Expression"
 
 hriss = highlight ReservedOperator . spanned . symbol 
 
-dynafy :: MonadParser m => Language m a -> m a
-dynafy = flip runLanguage dynaLanguage
-
-dterm, dtexpr :: MonadParser m => m (Spanned Term)
-dterm  = dynafy term
-dtexpr = dynafy texpr
+dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
+dterm  = unDL term 
+dtexpr = unDL texpr 
 
 -- | Rules are not just terms because we want to make it very syntactically
 --   explicit about the head being a term (though that's not an expressivity
@@ -162,8 +177,9 @@ data Line = LRule (Spanned Rule)
 
 rulepfx = Rule <$> term
                <*  spaces
-               <*> (ident dynaOperStyle <?> "Aggregator")
+               <*> (bsf$ident dynaOperStyle <?> "Aggregator")
 
+rule :: DeltaParsing m => m Rule
 rule = choice [(try (liftA flip rulepfx
                            <*> texpr
                            <*  hriss "whenever"))
@@ -176,18 +192,19 @@ rule = choice [(try (liftA flip rulepfx
               , Fact   <$> term
               ]
 
+drule :: DeltaParsing m => m (Spanned Rule)
 drule = spanned rule
 
-progline :: MonadParser m => m (Spanned Line)
+progline :: DeltaParsing m => m (Spanned Line)
 progline  = spanned $ choice [ LRule <$> drule
                              , LPragma <$> (symbol ":-"
                                        *> spaces
                                        *> texpr)
                              ]
 
-dline :: MonadParser m => m (Spanned Line)
--- dline = dynafy (progline <* optional (char '.' <*  (spaces <|> eof)))
-dline = dynafy (progline <* optional (char '.') <* optional newline)
+dline :: DeltaParsing m => m (Spanned Line)
+-- dline = unDL (progline <* optional (char '.' <*  (spaces <|> eof)))
+dline = unDL (progline <* optional (char '.') <* optional newline)
 
-dlines :: MonadParser m => m [Spanned Line]
-dlines = dynafy (progline `sepEndBy` (char '.' <* spaces))
+dlines :: DeltaParsing m => m [Spanned Line]
+dlines = unDL (progline `sepEndBy` (char '.' <* spaces))

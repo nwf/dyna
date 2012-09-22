@@ -1,14 +1,14 @@
 {-# LANGUAGE Rank2Types #-}
-module Main where
+module Dyna.REPL where
 
 import           Control.Applicative ((<*))
-import qualified Data.Foldable             as F
 import           System.Console.Editline
 import           Text.Trifecta
 
 import qualified Dyna.ParserHS.Parser      as DP
 -- import qualified Dyna.NormalizeParse       as DNP
 import           Dyna.XXX.Trifecta
+
 
 main :: IO () 
 main = do
@@ -26,16 +26,18 @@ main = do
                                         failure
                                         l
 
-
+		-- Interaction interprets a ^D in nested context
+		-- as an excuse to print out parsing errors
+		-- (i.e. it why it rejected the line 
      promptCont = do
-                   setPrompt el (return "    > ")
+                   setPrompt el (return "      ")
                    elGets el
 
      success a = do
                    putStrLn $ "\nParsed: " ++ show a
                    loop
 
-     failure sd = do
-                   displayLn $ F.toList sd
+     failure td = do
+                   displayLn td
                    loop
    loop

@@ -9,8 +9,7 @@
 --   Test.Framework.TH appears not to understand comments at the
 --   moment, and parses right through them.
 
--- XXX Cabal doesn't understand Main-Is in quite the right way
--- module Dyna.ParserHS.ParserSelftest where
+module Dyna.ParserHS.ParserSelftest where
 
 import           Control.Applicative ((<*))
 import           Data.ByteString (ByteString)
@@ -18,13 +17,15 @@ import           Data.Foldable (toList)
 import           Data.Monoid (mempty)
 import qualified Data.Sequence                       as S
 import           Data.String
+import qualified Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit
 import           Test.Framework.TH
 import           Test.HUnit
 import           Text.Trifecta
+import           Text.Trifecta.Delta
 
-import           Dyna.Test.Trifecta
 import           Dyna.ParserHS.Parser
+import           Dyna.XXX.TrifectaTest
 
 
 term :: ByteString -> Spanned Term
@@ -63,15 +64,33 @@ case_nestedFunctorsWithArgs = e @=? (term st)
   st :: (IsString s) => s
   st = "foo(bar,X,bif(),baz(quux,Y))"
 
+case_basicFunctorComment = e @=? (term sfb)
+ where
+  e =  TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 8 8) sfb
+
+  sfb :: (IsString s) => s
+  sfb = "foo %xxx"
+
+case_basicFunctorNLComment = e @=? (term sfb)
+ where
+  e =  TFunctor "foo"
+         [TFunctor "1" [] :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
+         ,TFunctor "2" [] :~ Span (Lines 1 2 11 2) (Lines 2 0 13 0) "1,2\n"
+         ]
+        :~ Span (Columns 0 0) (Lines 2 1 14 1) "foo(%xxx\n"
+
+  sfb :: (IsString s) => s
+  sfb = "foo(%xxx\n1,2\n)"
+
 
 case_basicFunctorTWS = e @=? (term sfb)
  where
   e = TFunctor "foo"
-       [TFunctor "bar" [] :~ Span (Columns 5 5) (Columns 9 9) sfb
-       ] :~ Span (Columns 0 0) (Columns 10 10) sfb
+       [TFunctor "bar" [] :~ Span (Lines 1 1 5 1) (Lines 1 5 9 5) "(bar )"
+       ] :~ Span (Columns 0 0) (Columns 10 10) "foo\n"
 
   sfb :: (IsString s) => s
-  sfb = "foo (bar )"
+  sfb = "foo\n(bar )"
 
 case_basicFunctorNL = e @=? (term sfb)
  where
@@ -95,7 +114,7 @@ case_colonFunctor = e @=? (term pvv)
   pvv = "possible(Var:Val)"
 
 case_failIncompleteExpr = checkParseFail dterm "foo +"
-    [(Right (Columns 4 4), "expected: \"(\", end of input")]
+  "(interactive):1:5: error: expected: \"(\",\n    end of input\nfoo +<EOF> "
 
 progline :: ByteString -> Spanned Line
 progline = unsafeParse dline
@@ -224,6 +243,8 @@ case_rulesDotExpr = e @=? (proglines sr)
        ]
   sr = "goal += foo.bar. goal += 1."
 
+selftest :: TF.Test
+selftest = $(testGroupGenerator)
 
 main :: IO ()
 main = $(defaultMainGenerator)

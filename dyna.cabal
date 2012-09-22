@@ -33,9 +33,10 @@ Library
                         bytestring >=0.9,
                         containers >=0.4,
                         mtl >=2.1,
+                        parsers >=0.3,
                         reducers >=3.0,
                         semigroups >=0.8,
-                        trifecta >=0.53,
+                        trifecta >=0.90,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3
@@ -44,39 +45,50 @@ Executable drepl
     Default-Language:   Haskell2010
 
     ghc-options:        -Wall
+                        -main-is Dyna.REPL
 
     Hs-Source-Dirs:     src
     Build-Depends:      base >=4,
                         bytestring >=0.9,
                         containers >=0.4,
                         editline >=0.2,
+                        mtl >=2.1,
+                        parsers >=0.3,
                         reducers >=3.0,
                         semigroups >=0.8,
-                        trifecta >=0.53,
+                        trifecta >=0.90,
                         unordered-containers>=0.2,
                         utf8-string >=0.3
     
     Main-Is: Dyna/REPL.hs
 
-Test-suite dyna-selftest-parser
+Test-suite dyna-selftests
     type:               exitcode-stdio-1.0
     Default-Language:   Haskell2010
     Hs-Source-Dirs:     src
+
+    ghc-options:        -Wall
+                        -main-is Dyna.Test.Main
 
     Build-Depends:      base >=4,
                         bytestring >=0.9,
                         containers >=0.4,
                         HUnit >=1.2,
+                        mtl >=2.1,
+                        parsers >=0.3,
                         reducers >=3.0,
                         semigroups >=0.8,
                         test-framework >=0.6,
                         test-framework-hunit >=0.2,
                         test-framework-th >=0.2,
-                        trifecta >=0.53,
+                        trifecta >=0.90,
                         unordered-containers>=0.2,
-                        utf8-string >=0.3
+                        utf8-string >=0.3,
+                        wl-pprint-extras >=3.0
 
-    Main-Is: Dyna/ParserHS/ParserSelftest.hs
+    Other-Modules:      Dyna.ParserHS.ParserSelftest
+
+    Main-Is: Dyna/Test/Main.hs
 
 
 ----------------------------------------------------------------
