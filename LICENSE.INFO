@@ -1,0 +1,21 @@
+The Dyna source tree contained here is under AGPLv3 as per LICENSE.
+
+We depend upon other projects (and their licenses)
+    base                        BSD3
+    bytestring                  BSD3
+    containers                  BSD3
+    ghc                         The Glasgow Haskell Compiler License
+    HUnit                       BSD3
+    mtl                         BSD3
+    reducers                    BSD3
+    semigroups                  BSD3
+    test-framework              BSD3
+    test-framework-hunit        BSD3
+    test-framework-th           BSD3
+    trifecta                    BSD3
+    unification-fd              BSD3
+    unordered-containers        BSD3
+    utf8-string                 BSD3
+
+Code under Dyna/XXX is intended to be contributed back to upstream packages,
+and should be considered to be under the license of said upstream package.
