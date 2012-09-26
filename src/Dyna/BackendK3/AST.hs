@@ -5,6 +5,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -36,14 +37,14 @@ data Ann = Ann [String]
 -- Collections
 ------------------------------------------------------------------------{{{
 
-data CKind = CSet | CBag | CList
+data CKind = CBag | CList | CSet
 
 data CTE (c :: CKind) e
 
 data CollTy c where
-  CTSet  :: CollTy CSet
   CTBag  :: CollTy CBag
   CTList :: CollTy CList
+  CTSet  :: CollTy CSet
 
 ------------------------------------------------------------------------}}}
 -- Effectables (XXX TODO)
@@ -62,6 +63,8 @@ data VTy v where
   VTIsol :: VTy VKIsol
   VTCont :: VTy VKCont
 -}
+
+data Ref a = Ref
 
 ------------------------------------------------------------------------}}}
 -- Type System
@@ -84,29 +87,42 @@ class K3Ty (r :: * -> *) where
 {- TAddress | TTarget BaseTy -}
 
   tPair   :: r a -> r b -> r (a,b)
-
   tMaybe  :: r a -> r (Maybe a)
-
+  tRef    :: r a -> r (Ref a)
   tColl   :: CollTy c -> r a -> r (CTE c a)
-
   tFun    :: r a -> r b -> r (a -> b)
 
   -- | Existential typeclass wrapper for K3Ty
-newtype ExTyRepr (a :: *) = ETR { unETR :: forall r . (K3Ty r) => r a }
-instance K3Ty ExTyRepr where
-  tAnn   s (ETR t)               = ETR$tAnn s t
-  tBool                          = ETR tBool
-  tByte                          = ETR tByte
-  tFloat                         = ETR tFloat
-  tInt                           = ETR tInt
-  tString                        = ETR tString
-  tUnit                          = ETR tUnit
-  tUnk                           = ETR tUnk
+newtype UnivTyRepr (a :: *) = UTR { unUTR :: forall r . (K3Ty r) => r a }
+instance K3Ty UnivTyRepr where
+  tAnn   s (UTR t)               = UTR$tAnn s t
+  tBool                          = UTR tBool
+  tByte                          = UTR tByte
+  tFloat                         = UTR tFloat
+  tInt                           = UTR tInt
+  tString                        = UTR tString
+  tUnit                          = UTR tUnit
+  tUnk                           = UTR tUnk
 
-  tPair  (ETR a) (ETR b) = ETR$tPair a b
-  tMaybe (ETR a)         = ETR$tMaybe a
-  tColl  c (ETR a)       = ETR$tColl c a
-  tFun   (ETR a) (ETR b) = ETR$tFun a b
+  tColl  c (UTR a)       = UTR$tColl c a
+  tFun   (UTR a) (UTR b) = UTR$tFun a b
+  tMaybe (UTR a)         = UTR$tMaybe a
+  tPair  (UTR a) (UTR b) = UTR$tPair a b
+  tRef   (UTR a)         = UTR$tRef a
+
+  -- | A constraint for "base" types in K3.  These are the things that can
+  -- be passed to lambdas.  Essentially everything other than arrows.
+class    K3BaseTy a
+instance K3BaseTy Bool
+instance K3BaseTy Word8
+instance K3BaseTy Float
+instance K3BaseTy Int
+instance K3BaseTy String
+instance K3BaseTy ()
+instance (K3BaseTy a) => K3BaseTy (CTE c a)
+instance (K3BaseTy a) => K3BaseTy (Maybe a)
+instance (K3BaseTy a) => K3BaseTy (Ref a)
+instance (K3BaseTy a, K3BaseTy b) => K3BaseTy (a,b)
 
 ------------------------------------------------------------------------}}}
 -- Pattern System
@@ -124,36 +140,51 @@ data PKind where
   --
   --   Note that this is a closed class using the promoted
   --   data PKind.
+  --
+  --   PatDa is needed for Render's function, since every
+  --   lambda needs an explicit type signature on its variable.
+  --
+  --   Essentially, these things determine where "r"s end up
+  --   in the lambda given to eLam.  Compare and contrast:
+  --     eLam (PVar $ tMaybe tInt)            :: (r (Maybe Int)  -> _) -> _
+  --     eLam (PJust $ PVar tInt)             :: (r Int          -> _) -> _
+  --
+  --     eLam (PVar $ tPair tInt tInt)        :: (r (Int, Int)   -> _) -> _
+  --     eLam (PPair (PVar tInt) (PVar tInt)) :: ((r Int, r Int) -> _) -> _
+  --
 class Pat (w :: PKind) where
     -- | Any data this witness needs to carry around
   data PatDa w :: *
-    -- | The type this witness witnesses?
+    -- | The type this witness witnesses (i.e. the things matched against)
   type PatTy w :: *
+    -- | The type this witness binds (i.e. after matching is done)
+  type PatBTy w :: *
     -- | The type of this pattern.
   type PatReprFn w (r :: * -> *) :: *
-    -- | Produce a data-level type representation for this witness
-  patAsRepr :: PatDa w -> ExTyRepr (PatTy w)
 
-instance Pat (PKVar (a :: *)) where
-  -- | Pattern variables may be of any type, but we have to
-  --   have a representation builder for it.
-  data PatDa (PKVar a) = PVar { unPVar :: ExTyRepr a }
+    -- | Produce a data-level type representation for this witness
+  -- patAsRepr :: PatDa w -> UnivTyRepr (PatTy w)
+
+instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
+  data PatDa (PKVar a) = PVar { unPVar :: UnivTyRepr a }
   type PatTy (PKVar a) = a
+  type PatBTy (PKVar a) = a
   type PatReprFn (PKVar a) r = r a
 
-  patAsRepr = unPVar
+  --patAsRepr = unPVar
 
 instance (Pat w) => Pat (PKJust w) where
   -- | Just patterns (fail on Nothing)
   --
-  -- Note the distinction between PatTy and PatReprFn here!
+  -- Note the distinction between PatTy and (PatBTy and PatReprFn) here!
   -- This pattern witnesses a type "Maybe a" but binds a variable of type
   -- "a".  This will in general be true of any variant (i.e. sum) pattern.
   data PatDa (PKJust w)       = PJust (PatDa w)
   type PatTy (PKJust w)       = Maybe (PatTy w)
+  type PatBTy (PKJust w)      = PatBTy w
   type PatReprFn (PKJust w) r = PatReprFn w r
 
-  patAsRepr (PJust w') = ETR $ tMaybe $ unETR $ patAsRepr w'
+  --patAsRepr (PJust w') = UTR $ tMaybe $ unUTR $ patAsRepr w'
 
 instance (Pat wa, Pat wb) => Pat (PKPair wa wb) where
   -- | Pair patterns
@@ -162,10 +193,11 @@ instance (Pat wa, Pat wb) => Pat (PKPair wa wb) where
   -- producing tuples.
   data PatDa (PKPair wa wb)       = PPair (PatDa wa) (PatDa wb)
   type PatTy (PKPair wa wb)       = (PatTy wa, PatTy wb)
+  type PatBTy (PKPair wa wb)      = (PatBTy wa, PatBTy wb)
   type PatReprFn (PKPair wa wb) r = (PatReprFn wa r, PatReprFn wb r)
 
-  patAsRepr (PPair wa wb) = ETR $ tPair (unETR $ patAsRepr wa)
-                                        (unETR $ patAsRepr wb)
+  --patAsRepr (PPair wa wb) = UTR $ tPair (unUTR $ patAsRepr wa)
+  --                                      (unUTR $ patAsRepr wb)
 
 ------------------------------------------------------------------------}}}
 -- Slice System
@@ -173,36 +205,49 @@ instance (Pat wa, Pat wb) => Pat (PKPair wa wb) where
 
   -- | Kinds of slices permitted in K3
 data SKind where
-  SKVar  :: k -> SKind
+  SKVar  :: r -> k -> SKind
+  SKUnk  :: k -> SKind
   SKJust :: SKind -> SKind
   SKPair :: SKind -> SKind -> SKind
 
   -- | Witness of slice well-formedness
-class Slice (w :: SKind) where
+class Slice r (w :: SKind) where
   data SliceDa w :: *
   type SliceTy w :: *
-  sliceAsRepr :: SliceDa w -> ExTyRepr (SliceTy w)
 
-  -- Slice variables are VarIx and representation of K3 type
-instance Slice (SKVar (a :: *)) where
-  data SliceDa (SKVar a) = SVar VarIx (ExTyRepr a)
-  type SliceTy (SKVar a) = a
-  sliceAsRepr (SVar _ ea) = ea
+  -- sliceAsRepr :: SliceDa w -> UnivTyRepr (SliceTy w)
 
-instance (Slice s) => Slice (SKJust s) where
+instance (K3BaseTy a, r0 ~ r) => Slice r0 (SKVar (r :: * -> *) (a :: *)) where
+  data SliceDa (SKVar r a) = SVar (r a)
+  type SliceTy (SKVar r a) = a
+
+  -- sliceAsRepr (SVar _ ea) = ea
+
+instance (K3BaseTy a) => Slice r (SKUnk (a :: *)) where
+  data SliceDa (SKUnk a) = SUnk
+  type SliceTy (SKUnk a) = a
+
+  -- sliceAsRepr (SUnk ea) = ea
+
+instance (Slice r s) => Slice r (SKJust s) where
   data SliceDa (SKJust s) = SJust (SliceDa s)
   type SliceTy (SKJust s) = Maybe (SliceTy s)
-  sliceAsRepr (SJust a) = ETR $ tMaybe $ unETR $ sliceAsRepr a
 
-instance (Slice sa, Slice sb) => Slice (SKPair sa sb) where
+  -- sliceAsRepr (SJust a) = UTR $ tMaybe $ unUTR $ sliceAsRepr a
+
+instance (Slice r sa, Slice r sb) => Slice r (SKPair sa sb) where
   data SliceDa (SKPair sa sb) = SPair (SliceDa sa) (SliceDa sb)
   type SliceTy (SKPair sa sb) = (SliceTy sa, SliceTy sb)
-  sliceAsRepr (SPair a b) = ETR $ tPair (unETR $ sliceAsRepr a)
-                                        (unETR $ sliceAsRepr b)
+
+  -- sliceAsRepr (SPair a b) = UTR $ tPair (unUTR $ sliceAsRepr a)
+  --                                       (unUTR $ sliceAsRepr b)
 
 ------------------------------------------------------------------------}}}
 -- Numeric Autocasting
 ------------------------------------------------------------------------{{{
+
+  -- XXX should we make these be constraints in the K3 class so that
+  -- different representations can make different choices?
 
   -- | Unary numerics
 class UnNum a where unneg :: a -> a
@@ -255,7 +300,10 @@ class K3 (r :: * -> *) where
   cAnn      :: Ann -> r a -> r a
 
     -- XXX An escape hatch
-  cUnk      :: r a 
+    --
+    -- The K3 AST has this but uses it for wildcards in slices, which
+    -- we handle with SKUnk/SUnk.
+  -- cUnk      :: r a 
 
     -- XXX cAddress  :: AddrIx -> r AddrIx
   cBool     :: Bool -> r Bool
@@ -266,16 +314,14 @@ class K3 (r :: * -> *) where
   cString   :: String -> r String
   cUnit     :: r ()
 
-    -- XXX polymorphic type because the expression might be
-    -- well-formed; we'll have to resolve it later.
-  eVar      :: VarIx -> r a
+  eVar      :: VarIx -> UnivTyRepr a -> r a
 
   ePair     :: r a -> r b -> r (a,b)
   eJust     :: r a -> r (Maybe t)
 
   eEmpty    :: (K3AST_Coll_C r c) => r (CTE c e)
   eSing     :: (K3AST_Coll_C r c) => r e -> r (CTE c e)
-  eComb     :: r (CTE c e) -> r (CTE c e) -> r (CTE c e)
+  eCombine  :: r (CTE c e) -> r (CTE c e) -> r (CTE c e)
   eRange    :: r Int -> r Int -> r Int -> r (CTE c Int)
 
   eAdd      :: (BiNum a b) => r a -> r b -> r (BNTF a b)
@@ -290,7 +336,7 @@ class K3 (r :: * -> *) where
 
     -- Unlike traditional lambdas, we require a witness
     -- that the argument is admissible in K3.
-  eLam      :: (K3AST_Pat_C r w, Pat w)
+  eLam      :: (K3AST_Pat_C r w, Pat w, K3BaseTy (PatTy w))
             => PatDa w -> (PatReprFn w r -> r b) -> r (PatTy w -> b)
   eApp      :: r (a -> b) -> r a -> r b
 
@@ -307,10 +353,28 @@ class K3 (r :: * -> *) where
 
     -- | Called Aggregate in K3's AST
   eFold     :: r ((t', t) -> t') -> r t' -> r (CTE c t) -> r t'
-  eGBA      :: r (t -> t'') -> r ((t',t) -> t') -> r t' -> r (CTE c t) -> r (CTE c (t'',t'))
 
-  eSort     :: r (CTE c t) -> r ((t,t) -> Bool) -> r (CTE 'CList t)
+    -- | Group-By-Aggregate.
+    --
+    -- Note that the Fold argument is guaranteed to be called
+    -- once per partition: any partitions that would be the Zero
+    -- are not created by the Partitioner.
+  eGBA      :: r (t -> t'')       -- ^ Partitioner
+            -> r ((t',t) -> t')   -- ^ Folder
+            -> r t'               -- ^ Zero for each partition
+            -> r (CTE c t)        -- ^ Input collection
+            -> r (CTE c (t'',t'))
 
+  eSort     :: r (CTE c t)        -- ^ Input collection
+            -> r ((t,t) -> Bool)  -- ^ Less-or-equal
+            -> r (CTE 'CList t)
+
+    -- | Peek an element from a collection.
+    --
+    -- Fails on empty collections.
+    --
+    -- For lists, this returns the head; for sets and bags
+    -- it samples arbitrarily.
   ePeek     :: r (CTE c e) -> r e
 
     -- | Slice out from a collection; the slice's type and
@@ -318,15 +382,16 @@ class K3 (r :: * -> *) where
     --
     -- Rather like lambdas, except that the witness is also
     -- a mandatory part of the definition of "slice" :)
-  eSlice    :: (K3AST_Slice_C r w, Slice w, SliceTy w ~ t)
+  eSlice    :: (K3AST_Slice_C r w, Slice r w, SliceTy w ~ t)
             => SliceDa w -> r (CTE c t) -> r (CTE c t)
 
   eInsert   :: r (CTE c t) -> r t -> r ()
   eDelete   :: r (CTE c t) -> r t -> r ()
   eUpdate   :: r (CTE c t) -> r t -> r t -> r ()
 
-  -- XXX eAssign
-  -- XXX eDeref
+  eAssign   :: r (Ref t) -> r t -> r ()
+  eDeref    :: r (Ref t) -> r t
+
   -- XXX eSend
 
 ------------------------------------------------------------------------}}}

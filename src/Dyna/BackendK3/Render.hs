@@ -3,8 +3,10 @@
 ------------------------------------------------------------------------{{{
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
@@ -41,13 +43,15 @@ instance K3Ty (AsK3Ty e) where
 
   tPair (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ tupled [ ta, tb ]
 
-  tMaybe (AsK3Ty ta) = AsK3Ty$ "Maybe " <> ta
+  tMaybe (AsK3Ty ta) = AsK3Ty$ "Maybe" <+> ta
 
   tColl CTSet  (AsK3Ty ta) = AsK3Ty$ braces   ta
   tColl CTBag  (AsK3Ty ta) = AsK3Ty$ encBag   ta
   tColl CTList (AsK3Ty ta) = AsK3Ty$ brackets ta
 
-  tFun (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ ta <> " -> " <> tb
+  tFun (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ ta <+> "->" <+> tb
+
+  tRef (AsK3Ty ta) = AsK3Ty$ "ref" <+> ta
 
 ------------------------------------------------------------------------}}}
 -- Collection handling
@@ -76,10 +80,10 @@ instance K3CFn CBag where
 class (Pat w) => K3PFn w where
   k3pfn :: Int -> PatDa w -> (Int, Doc e, PatReprFn w (AsK3 e))
 
-instance K3PFn (PKVar (a :: *)) where
+instance (K3BaseTy a) => K3PFn (PKVar (a :: *)) where
   k3pfn n (PVar tr) = let sn = text $ "x" ++ show n in
                       (n+1
-                      ,sn <> colon <> unAsK3Ty (unETR tr)
+                      ,sn <> colon <> unAsK3Ty (unUTR tr)
                       ,AsK3$const$ sn)
 
 instance (K3PFn w) => K3PFn (PKJust w) where
@@ -96,17 +100,21 @@ instance (K3PFn wa, K3PFn wb) => K3PFn (PKPair wa wb) where
 -- Slice handling
 ------------------------------------------------------------------------{{{
 
-class (Slice w) => K3SFn w where
-  k3sfn :: SliceDa w -> Doc e
+class (Slice (AsK3 e) w) => K3SFn e w where
+  k3sfn :: SliceDa w -> AsK3 e (SliceTy w)
 
-instance K3SFn (SKVar (a :: *)) where
-  k3sfn (SVar (Var v) _) = text v
+instance (K3BaseTy a) => K3SFn e (SKVar (AsK3 e) (a :: *)) where
+  k3sfn (SVar r) = r
 
-instance (K3SFn s) => K3SFn (SKJust s) where
-  k3sfn (SJust s) = "Just" <> parens (k3sfn s)
+instance (K3BaseTy a) => K3SFn e (SKUnk (a :: *)) where
+  k3sfn SUnk = AsK3$ const$ text "_"
 
-instance (K3SFn sa, K3SFn sb) => K3SFn (SKPair sa sb) where
-  k3sfn (SPair sa sb) = tupled [ k3sfn sa, k3sfn sb ]
+instance (K3SFn e s) => K3SFn e (SKJust s) where
+  k3sfn (SJust s) = AsK3$ \n -> "Just" <> parens (unAsK3 (k3sfn s) n)
+
+instance (K3SFn e sa, K3SFn e sb) => K3SFn e (SKPair sa sb) where
+  k3sfn (SPair sa sb) = AsK3$ \n -> tupled [ unAsK3 (k3sfn sa) n
+                                           , unAsK3 (k3sfn sb) n ]
 
 ------------------------------------------------------------------------}}}
 -- Expression handling
@@ -117,7 +125,7 @@ newtype AsK3 e (a :: *) = AsK3 { unAsK3 :: Int -> Doc e }
 instance K3 (AsK3 e) where
   type K3AST_Coll_C (AsK3 e) c = K3CFn c
   type K3AST_Pat_C (AsK3 e) p = K3PFn p
-  type K3AST_Slice_C (AsK3 e) s = K3SFn s
+  type K3AST_Slice_C (AsK3 e) s = K3SFn e s
 
   cAnn (Ann anns) (AsK3 e) = AsK3$ \n ->
        parens (e n) <> " @ "
@@ -132,9 +140,8 @@ instance K3 (AsK3 e) where
   cString n     = AsK3$const$ text$ show n
   cNothing      = AsK3$const$ "nothing"
   cUnit         = AsK3$const$ "unit"
-  cUnk          = AsK3$const$ "_"
 
-  eVar (Var v) = AsK3$const$text v
+  eVar (Var v) _ = AsK3$const$text v
 
 
   ePair (AsK3 a) (AsK3 b) = AsK3$ \n -> tupled [a n, b n]
@@ -142,11 +149,11 @@ instance K3 (AsK3 e) where
 
   eEmpty = k3cfn_empty
   eSing  = k3cfn_sing
-  eComb (AsK3 a) (AsK3 b) = AsK3$ \n -> parens (a n) <> " ++ " <> parens (b n)
+  eCombine (AsK3 a) (AsK3 b) = AsK3$ \n -> parens (a n) <> " ++ " <> parens (b n)
   eRange (AsK3 f) (AsK3 l) (AsK3 s) = builtin "range" [ f, l, s ]
   
-  eAdd (AsK3 a) (AsK3 b) = AsK3$ \n -> a n <> "+" <> b n
-  eMul (AsK3 a) (AsK3 b) = AsK3$ \n -> a n <> "*" <> b n
+  eAdd = binop "+"
+  eMul = binop "*"
   eNeg (AsK3 b) = AsK3$ \n -> "-" <> parens (b n)
 
   eEq  = binop "=="
@@ -155,19 +162,20 @@ instance K3 (AsK3 e) where
   eNeq = binop "!="
 
   eLam w f = AsK3$ \n -> let (n', pat, arg) = k3pfn n w
-                         in "\\" <> pat <> " -> " <> (unAsK3 (f arg) n')
+                         in align ("\\" <> pat <+> "->" `above` unAsK3 (f arg) n')
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
-    parens (parens (f n) <> space <> parens (x n))
+    parens (parens (f n) `aboveBreak` parens (x n))
 
   eBlock ss (AsK3 r) = AsK3$ \n -> 
     "do" <> (semiBraces (map ($ n) ((map unAsK3 ss) ++ [r])))
 
   eIter (AsK3 f) (AsK3 c) = builtin "iterate" [ f, c ]
 
-  eITE (AsK3 b) (AsK3 t) (AsK3 e) = AsK3$ \n ->    "if "     <> parens (b n)
-                                                <> " then "  <> parens (t n)
-                                                <> " else "  <> parens (e n)
+  eITE (AsK3 b) (AsK3 t) (AsK3 e) = AsK3$ \n ->
+    "if" <+> (align $ above (parens (b n))
+                            ("then" <+> parens (t n) `aboveBreak`
+                             "else"  <+> parens (e n)))
 
   eMap     (AsK3 f) (AsK3 c)                   = builtin "map"       [ f, c    ]
   eFiltMap (AsK3 f) (AsK3 m) (AsK3 c)          = builtin "filtermap" [ f, m, c ]
@@ -177,11 +185,16 @@ instance K3 (AsK3 e) where
   eSort    (AsK3 c) (AsK3 f)                   = builtin "sort"      [ c, f ]
   ePeek    (AsK3 c)                            = builtin "peek"      [ c ]
 
-  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (k3sfn w)
+  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (unAsK3 (k3sfn w) n)
 
   eInsert (AsK3 c) (AsK3 e)          = builtin "insert" [ c, e ]
   eDelete (AsK3 c) (AsK3 e)          = builtin "delete" [ c, e ]
   eUpdate (AsK3 c) (AsK3 o) (AsK3 n) = builtin "update" [ c, o, n ]
+
+  eAssign          = binop "<-" 
+  eDeref  (AsK3 r) = builtin "deref" [ r ]
+    -- XXX that doesn't seem to actually be right!
+   
 
 ------------------------------------------------------------------------}}}
 -- Miscellany
@@ -190,19 +203,21 @@ instance K3 (AsK3 e) where
 encBag :: Doc e -> Doc e
 encBag = enclose "{|" "|}"
 
-    -- Overly polymorphic; use only when correct
-binop :: Doc e -> AsK3 e a -> AsK3 e a -> AsK3 e b
-binop o (AsK3 a) (AsK3 b) = AsK3$ \n -> parens (a n) <> o <> parens (b n)
+    -- Overly polymorphic; use only when correct!
+binop :: Doc e -> AsK3 e a -> AsK3 e b -> AsK3 e c
+binop o (AsK3 a) (AsK3 b) = AsK3$ \n ->     parens (align $ a n)
+                                        </> o
+                                        </> parens (align $ b n)
 
-    -- Overly polymorphic; use only when correct
+    -- Overly polymorphic; use only when correct!
 builtin :: Doc e -> [ Int -> Doc e ] -> AsK3 e b
 builtin fn as = AsK3$ \n -> fn <> tupled (map ($ n) as)
 
 instance Show (AsK3 e a) where
   show (AsK3 f) = show $ f 0
 
-sh :: AsK3 e a -> String
-sh = show
+sh :: AsK3 e a -> Doc e
+sh (AsK3 f) = f 0
 
 instance Show (AsK3Ty e a) where
   show (AsK3Ty f) = show f
