@@ -1,32 +1,33 @@
 ---------------------------------------------------------------------------
--- Header material
-------------------------------------------------------------------------{{{
+-- | An AST for K3.
+--
+-- To as large of an extent as possible, we wish to capture the static 
+-- semantics of K3 in the Haskell type system.
+
+-- Header material                                                      {{{
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-  -- | An AST for K3.
-  --
-  -- To as large of an extent as possible, we wish to capture the static 
-  -- semantics of K3 in the Haskell type system.
 module Dyna.BackendK3.AST where
 
 import           Data.Word
 import           GHC.Prim (Constraint)
+import           Language.Haskell.TH (varT, mkName)
+
+import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
--- Preliminaries
-------------------------------------------------------------------------{{{
+-- Preliminaries                                                        {{{
 
 newtype VarIx  = Var String
 newtype AddrIx = Addr (String,Int)
@@ -34,8 +35,7 @@ newtype AddrIx = Addr (String,Int)
 data Ann = Ann [String]
 
 ------------------------------------------------------------------------}}}
--- Collections
-------------------------------------------------------------------------{{{
+-- Collections                                                          {{{
 
 data CKind = CBag | CList | CSet
 
@@ -47,8 +47,7 @@ data CollTy c where
   CTSet  :: CollTy CSet
 
 ------------------------------------------------------------------------}}}
--- Effectables (XXX TODO)
-------------------------------------------------------------------------{{{
+-- Effectables (XXX TODO)                                               {{{
 
 {-
 data MKind = MKImmut | MKMut
@@ -67,8 +66,7 @@ data VTy v where
 data Ref a = Ref
 
 ------------------------------------------------------------------------}}}
--- Type System
-------------------------------------------------------------------------{{{
+-- Type System                                                          {{{
 
   -- | Data level representation of K3 types, indexed by equivalent type in
   -- Haskell.
@@ -86,16 +84,24 @@ class K3Ty (r :: * -> *) where
 
 {- TAddress | TTarget BaseTy -}
 
-  tPair   :: r a -> r b -> r (a,b)
+  -- tPair   :: r a -> r b -> r (a,b)
   tMaybe  :: r a -> r (Maybe a)
   tRef    :: r a -> r (Ref a)
   tColl   :: CollTy c -> r a -> r (CTE c a)
   tFun    :: r a -> r b -> r (a -> b)
 
+  -- tTuple  :: (RTupled rt, RTR rt ~ r) => rt -> r (RTE rt)
+
+    -- XXX TUPLES
+  tTuple2 :: (r a, r b) -> r (a,b)
+  tTuple3 :: (r a, r b, r c) -> r (a,b,c)
+  tTuple4 :: (r a, r b, r c, r d) -> r (a,b,c,d)
+
   -- | Existential typeclass wrapper for K3Ty
 newtype UnivTyRepr (a :: *) = UTR { unUTR :: forall r . (K3Ty r) => r a }
+
 instance K3Ty UnivTyRepr where
-  tAnn   s (UTR t)               = UTR$tAnn s t
+  tAnn   s (UTR t)               = UTR $ tAnn s t
   tBool                          = UTR tBool
   tByte                          = UTR tByte
   tFloat                         = UTR tFloat
@@ -104,11 +110,16 @@ instance K3Ty UnivTyRepr where
   tUnit                          = UTR tUnit
   tUnk                           = UTR tUnk
 
-  tColl  c (UTR a)       = UTR$tColl c a
-  tFun   (UTR a) (UTR b) = UTR$tFun a b
-  tMaybe (UTR a)         = UTR$tMaybe a
-  tPair  (UTR a) (UTR b) = UTR$tPair a b
-  tRef   (UTR a)         = UTR$tRef a
+  tColl  c (UTR a)       = UTR $ tColl c a
+  tFun   (UTR a) (UTR b) = UTR $ tFun a b
+  tMaybe (UTR a)         = UTR $ tMaybe a
+  tRef   (UTR a)         = UTR $ tRef a
+
+  -- XXX TUPLES
+  tTuple2  us              = UTR $ tTuple2 $ tupleopRS unUTR us
+  tTuple3  us              = UTR $ tTuple3 $ tupleopRS unUTR us
+  tTuple4  us              = UTR $ tTuple4 $ tupleopRS unUTR us
+
 
   -- | A constraint for "base" types in K3.  These are the things that can
   -- be passed to lambdas.  Essentially everything other than arrows.
@@ -123,16 +134,21 @@ instance (K3BaseTy a) => K3BaseTy (CTE c a)
 instance (K3BaseTy a) => K3BaseTy (Maybe a)
 instance (K3BaseTy a) => K3BaseTy (Ref a)
 instance (K3BaseTy a, K3BaseTy b) => K3BaseTy (a,b)
+instance (K3BaseTy a, K3BaseTy b, K3BaseTy c) => K3BaseTy (a,b,c)
 
 ------------------------------------------------------------------------}}}
--- Pattern System
-------------------------------------------------------------------------{{{
+-- Pattern System                                                       {{{
 
   -- | Kinds of patterns permitted in K3
 data PKind where
   PKVar  :: k -> PKind
   PKJust :: PKind -> PKind
-  PKPair :: PKind -> PKind -> PKind
+
+    -- XXX TUPLES
+  PKTuple2 :: (PKind, PKind) -> PKind
+  PKTuple3 :: (PKind, PKind, PKind) -> PKind
+  PKTuple4 :: (PKind, PKind, PKind, PKind) -> PKind
+  -- PKTup  :: [PKind] -> PKind
 
   -- | Provides witnesses that certain types may be used
   --   as arguments to K3 lambdas.  Useful when building
@@ -162,16 +178,11 @@ class Pat (w :: PKind) where
     -- | The type of this pattern.
   type PatReprFn w (r :: * -> *) :: *
 
-    -- | Produce a data-level type representation for this witness
-  -- patAsRepr :: PatDa w -> UnivTyRepr (PatTy w)
-
 instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
-  data PatDa (PKVar a) = PVar { unPVar :: UnivTyRepr a }
-  type PatTy (PKVar a) = a
-  type PatBTy (PKVar a) = a
+  data PatDa     (PKVar a)   = PVar { unPVar :: UnivTyRepr a }
+  type PatTy     (PKVar a)   =   a
+  type PatBTy    (PKVar a)   =   a
   type PatReprFn (PKVar a) r = r a
-
-  --patAsRepr = unPVar
 
 instance (Pat w) => Pat (PKJust w) where
   -- | Just patterns (fail on Nothing)
@@ -184,67 +195,99 @@ instance (Pat w) => Pat (PKJust w) where
   type PatBTy (PKJust w)      = PatBTy w
   type PatReprFn (PKJust w) r = PatReprFn w r
 
-  --patAsRepr (PJust w') = UTR $ tMaybe $ unUTR $ patAsRepr w'
-
-instance (Pat wa, Pat wb) => Pat (PKPair wa wb) where
+{-
+instance (Pat wa, Pat wb) => Pat (PKPair '(wa,wb)) where
   -- | Pair patterns
   --
   -- Product patterns, on the other hand, have PatTy and PatReprFn both
   -- producing tuples.
-  data PatDa (PKPair wa wb)       = PPair (PatDa wa) (PatDa wb)
-  type PatTy (PKPair wa wb)       = (PatTy wa, PatTy wb)
-  type PatBTy (PKPair wa wb)      = (PatBTy wa, PatBTy wb)
-  type PatReprFn (PKPair wa wb) r = (PatReprFn wa r, PatReprFn wb r)
+  data PatDa (PKPair '(wa,wb))       = PPair (PatDa wa) (PatDa wb)
+  type PatTy (PKPair '(wa,wb))       = (PatTy wa, PatTy wb)
+  type PatBTy (PKPair '(wa,wb))      = (PatBTy wa, PatBTy wb)
+  type PatReprFn (PKPair '(wa,wb)) r = (PatReprFn wa r, PatReprFn wb r)
+-}
 
-  --patAsRepr (PPair wa wb) = UTR $ tPair (unUTR $ patAsRepr wa)
-  --                                      (unUTR $ patAsRepr wb)
+  -- XXX TUPLES
+$( mapM (mkRecClass (''Pat,[]) (\n -> mkName $ "PKTuple" ++ show n)
+                         [(''PatDa,\n -> mkName $ "PTuple" ++ show n )]
+                         [''PatTy, ''PatBTy] [''PatReprFn])
+        [2..4]
+ )
+
+{-
+  -- Tragically patterns based on tuples are still represented
+  -- in Haskell as right-branching, unit-ending.
+instance Pat     (PKTup '[]) where
+  data PatDa     (PKTup '[])   = PTupN
+  type PatTy     (PKTup '[])   = ()
+  type PatBTy    (PKTup '[])   = ()
+  type PatReprFn (PKTup '[]) r = r ()
+
+instance Pat (PKTup as) => Pat (PKTup (a ': as)) where
+  data PatDa  (PKTup (a ': as))      = PTupC (PatDa  a) (PatDa  (PKTup as))
+  type PatTy  (PKTup (a ': as))      =       (PatTy  a,  PatTy  (PKTup as))
+  type PatBTy (PKTup (a ': as))      =       (PatBTy a,  PatBTy (PKTup as))
+  type PatReprFn (PKTup (a ': as)) r = (PatReprFn a r, PatReprFn (PKTup as) r)
+-}
 
 ------------------------------------------------------------------------}}}
--- Slice System
-------------------------------------------------------------------------{{{
+-- Slice System                                                         {{{
 
   -- | Kinds of slices permitted in K3
 data SKind where
   SKVar  :: r -> k -> SKind
   SKUnk  :: k -> SKind
   SKJust :: SKind -> SKind
-  SKPair :: SKind -> SKind -> SKind
+
+    -- XXX TUPLES
+  SKTuple2 :: (SKind, SKind) -> SKind
+  SKTuple3 :: (SKind, SKind, SKind) -> SKind
+  SKTuple4 :: (SKind, SKind, SKind, SKind) -> SKind
 
   -- | Witness of slice well-formedness
 class Slice r (w :: SKind) where
   data SliceDa w :: *
   type SliceTy w :: *
 
-  -- sliceAsRepr :: SliceDa w -> UnivTyRepr (SliceTy w)
-
 instance (K3BaseTy a, r0 ~ r) => Slice r0 (SKVar (r :: * -> *) (a :: *)) where
   data SliceDa (SKVar r a) = SVar (r a)
   type SliceTy (SKVar r a) = a
-
-  -- sliceAsRepr (SVar _ ea) = ea
 
 instance (K3BaseTy a) => Slice r (SKUnk (a :: *)) where
   data SliceDa (SKUnk a) = SUnk
   type SliceTy (SKUnk a) = a
 
-  -- sliceAsRepr (SUnk ea) = ea
-
 instance (Slice r s) => Slice r (SKJust s) where
   data SliceDa (SKJust s) = SJust (SliceDa s)
   type SliceTy (SKJust s) = Maybe (SliceTy s)
 
-  -- sliceAsRepr (SJust a) = UTR $ tMaybe $ unUTR $ sliceAsRepr a
+{-
+instance (Slice r sa, Slice r sb) => Slice r (SKTuple2 '(sa,sb)) where
+  data SliceDa (SKTuple2 '(sa,sb)) = STuple2 (SliceDa sa) (SliceDa sb)
+  type SliceTy (SKTuple2 '(sa,sb)) = (SliceTy sa, SliceTy sb)
+-}
 
-instance (Slice r sa, Slice r sb) => Slice r (SKPair sa sb) where
-  data SliceDa (SKPair sa sb) = SPair (SliceDa sa) (SliceDa sb)
-  type SliceTy (SKPair sa sb) = (SliceTy sa, SliceTy sb)
+  -- XXX TUPLES
+$( mapM (mkRecClass (''Slice, [varT $ mkName "r"])
+                    (\n -> mkName $ "SKTuple" ++ show n)
+                    [(''SliceDa,\n -> mkName $ "STuple" ++ show n)]
+                    [''SliceTy] [])
+        [2..4] ) 
 
-  -- sliceAsRepr (SPair a b) = UTR $ tPair (unUTR $ sliceAsRepr a)
-  --                                       (unUTR $ sliceAsRepr b)
+
+{-
+instance Slice r (SKTup '[]) where
+  data SliceDa (SKTup '[]) = STupN
+  type SliceTy (SKTup '[]) = ()
+
+instance Slice r (SKTup as) => Slice r (SKTup (a ': as)) where
+  data SliceDa (SKTup (a ': as)) = STupC (SliceDa a) (SliceDa (SKTup as))
+  type SliceTy (SKTup (a ': as)) =       (SliceTy a,  SliceTy (SKTup as))
+
+-}
 
 ------------------------------------------------------------------------}}}
--- Numeric Autocasting
-------------------------------------------------------------------------{{{
+-- Numeric Autocasting                                                  {{{
 
   -- XXX should we make these be constraints in the K3 class so that
   -- different representations can make different choices?
@@ -279,8 +322,7 @@ instance BiNum Float Float where
   -- XXX More
 
 ------------------------------------------------------------------------}}}
--- Values and Expressions
-------------------------------------------------------------------------{{{
+-- Values and Expressions                                               {{{
 
 class K3 (r :: * -> *) where
     -- | A representation-specific constraint for collections, on functions
@@ -316,8 +358,13 @@ class K3 (r :: * -> *) where
 
   eVar      :: VarIx -> UnivTyRepr a -> r a
 
-  ePair     :: r a -> r b -> r (a,b)
   eJust     :: r a -> r (Maybe t)
+
+    -- XXX TUPLES
+  eTuple2   :: (r a, r b) -> r (a,b)
+  eTuple3   :: (r a, r b, r c) -> r (a,b,c)
+  eTuple4   :: (r a, r b, r c) -> r (a,b,c)
+  -- eTuple    :: K3RTuple r a -> r a
 
   eEmpty    :: (K3AST_Coll_C r c) => r (CTE c e)
   eSing     :: (K3AST_Coll_C r c) => r e -> r (CTE c e)
@@ -395,8 +442,7 @@ class K3 (r :: * -> *) where
   -- XXX eSend
 
 ------------------------------------------------------------------------}}}
--- Miscellanious
-------------------------------------------------------------------------{{{
+-- Miscellany                                                           {{{
 
   -- XXX does not enumerate local variables
 data Decl tr r t = Decl VarIx (tr t) (Maybe (r t))
@@ -406,7 +452,4 @@ data Decl tr r t = Decl VarIx (tr t) (Maybe (r t))
   -- Use as (eEmpty `asColl` CTSet)
 asColl :: r (CTE c t) -> CollTy c -> r (CTE c t)
 asColl = const
-
 ------------------------------------------------------------------------}}}
--- fin
----------------------------------------------------------------------------

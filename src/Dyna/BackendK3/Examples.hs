@@ -42,8 +42,8 @@ test_macroCM = Decl (Var "nocase")
 
 macro_simple_join2 :: (K3 r, K3AutoTy a, K3BaseTy a, K3AST_Pat_C r (PKVar a),
                              K3AutoTy b, K3BaseTy b, K3AST_Pat_C r (PKVar b))
-                   => r (CTE c1 a) -> r (CTE c2 b) -> r (a -> b -> Bool) -> r ()
-macro_simple_join2 c1 c2 p =
+                   => r (a -> b -> Bool) -> r (CTE c1 a) -> r (CTE c2 b) -> r ()
+macro_simple_join2 p c1 c2 =
     flip eIter c1 $ eLam (PVar autoty) $ \a -> flip eIter c2
                   $ eLam (PVar autoty) $ \b -> eITE (eApp (eApp p a) b) (cUnit) (cUnit)
 
@@ -60,7 +60,7 @@ macro_emptyPeek c e l = eITE (eEq c eEmpty)
 
 
 testdecf = Decl (Var "f")
-                (tColl CTBag (tPair tInt tInt))
+                (tColl CTBag (tTuple2 (tInt,tInt)))
                 Nothing
 
 testmfn = Decl (Var "negAddOne")
@@ -77,56 +77,59 @@ testcfn = Decl (Var "cfn")
 
 
 testpairfn = Decl (Var "ibfst")
-                  (tFun (tPair tInt tBool) tInt)
-                  $Just (eLam (PPair (PVar tInt) (PVar tBool)) (\(a,b) -> a))
+                  (tFun (tTuple2 (tInt,tBool)) tInt)
+                  $Just (eLam (PTuple2 (PVar tInt) (PVar tBool)) (\(a,b) -> a))
 
 lamslice = eLam (PVar autoty) $ \a ->
-             eSlice (SPair (SVar a) (SVar (cInt 4)))
-                    (eSing (ePair (cInt 3) (cInt 4)) `asColl` CTSet)
+             eSlice (STuple2 (SVar a) (SVar (cInt 4)))
+                    (eSing (eTuple2 (cInt 3, cInt 4)) `asColl` CTSet)
 
     -- XXX Man we need better tuple handling.
-project = eLam (PPair (PVar autoty) (PVar autoty))
-               $ \(x,c) -> eMap (eLam (PPair (PVar autoty)
-                                      (PPair (PVar autoty)
-                                             (PVar autoty)))
-                                      $ \(_,(y,z)) -> ePair y z)
-                                (eSlice (SPair (SVar x) (SPair SUnk SUnk)) c)
+project = eLam (PTuple2 (PVar autoty) (PVar autoty))
+               $ \(x,c) -> eMap (eLam (PTuple3 (PVar autoty)
+                                               (PVar autoty)
+                                               (PVar autoty))
+                                      $ \(_,y,z) -> eTuple2 (y,z))
+                                (eSlice (STuple3 (SVar x) SUnk SUnk) c)
+
+proj' = eLam (PTuple3 (PVar tInt) (PVar tInt) (PVar tInt))
+           $ \(a,b,c) -> b
 
     -- Sum-Singleton case from M3ToK3 test
     -- It is safe to leave off the top-level signature
-sumsing :: (K3 r, K3AutoColl c, K3AutoColl c',
-           K3AST_Coll_C r c,
-           K3AST_Coll_C r c',
-           K3AST_Pat_C r (PKVar (Int, (Int, Int))),
-           K3AST_Pat_C r (PKVar (CTE c (Int, (Int, Int)))),
-           K3AST_Pat_C r (PKVar (CTE c' (Int, (Int, Int)))),
-           K3AST_Pat_C r (PKPair (PKVar Int) (PKPair (PKVar Int) (PKVar Int))),
-           K3AST_Slice_C r (SKPair (SKVar r Int) (SKPair (SKVar r Int) (SKUnk Int)))
-           )
-        => r Int -> r Int
-        -> r (CTE c (Int, (Int,Int))) -> r (CTE c' (Int, (Int,Int)))
-        -> r Int
-sumsing (ix :: r Int) iy c1 c2 = eAdd (v c1) (v c2)
+sumsing (ix :: r Int) (iy :: r Int) c1 c2 = eAdd (v c1) (v c2)
  where
     -- It is safe to eliminate this type signature
-  si :: SliceDa (SKPair (SKVar r Int) (SKPair (SKVar r Int) (SKUnk Int)))
-  si = SPair (SVar ix) (SPair (SVar iy) SUnk)
+  si = STuple3 (SVar ix) (SVar iy) SUnk
 
     -- XXX unfortunately, we have to be explicit about the forall c1 here;
     -- eliminating this type signature results in unified collection types
     -- for c1 and c2 above.
-  v :: (K3AST_Pat_C r ('PKVar (CTE c1 (Int, (Int, Int)))),
+  v :: (K3AST_Pat_C r ('PKVar (CTE c1 (Int, Int, Int))),
        K3AST_Coll_C r c1, K3AutoColl c1)
-    => r (CTE c1 (Int, (Int, Int))) -> r Int
+    => r (CTE c1 (Int, Int, Int)) -> r Int
   v c = eApp (eLam (PVar autoty)
                    (\cv -> macro_emptyPeek
                              cv (cInt 0)
-                             (\nec -> eApp (eLam (PPair (PVar autoty)
-                                                 (PPair (PVar autoty)
-                                                        (PVar autoty)))
-                                           (\(_,(_,proj)) -> proj))
+                             (\nec -> eApp (eLam (PTuple3 (PVar autoty)
+                                                          (PVar autoty)
+                                                          (PVar autoty))
+                                           $ \(_,_,proj) -> proj)
                                          nec)))
             (eSlice si c)
+
+    -- A very very complicated way of writing "3"
+testSumsing = sumsing (cInt 4) (cInt 5)
+                      (eSing (eTuple3 (cInt 4, cInt 5, cInt 1)) `asColl` CTSet)
+                      (eSing (eTuple3 (cInt 4, cInt 5, cInt 2)) `asColl` CTBag)
+
+testjoin2 c1 c2 =
+    macro_simple_join2 pred c1 c2
+ where p = PTuple3 (PVar tInt) (PVar tInt) (PVar tInt)
+       pred = (eLam p (\(k1a,k2a,_) ->
+               eLam p (\(k1b,k2b,_) ->
+                (eEq k1a k1b) `eAdd` (eEq k2a k2b))))
+
 
 ------------------------------------------------------------------------}}}
 -- Example cases: misc badness

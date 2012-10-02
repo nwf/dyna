@@ -1,6 +1,7 @@
 ---------------------------------------------------------------------------
--- Header material
-------------------------------------------------------------------------{{{
+--  | Various automation assists for working with K3 ASTs
+
+-- Header material                                                      {{{
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -15,6 +16,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.BackendK3.Automation where
@@ -24,6 +26,9 @@ import           Text.PrettyPrint.Free
 
 import           Dyna.BackendK3.AST
 import           Dyna.BackendK3.Render
+
+------------------------------------------------------------------------}}}
+-- Automate collection type                                             {{{
 
   -- | Demote a collection type annotation (of kind CKind) to the
   -- appropriate chunk of data for case analysis.
@@ -35,6 +40,9 @@ class K3AutoColl (c :: CKind) where autocoll :: CollTy c
 instance K3AutoColl CBag where autocoll = CTBag
 instance K3AutoColl CList where autocoll = CTList
 instance K3AutoColl CSet where autocoll = CTSet
+
+------------------------------------------------------------------------}}}
+-- Automate type                                                        {{{
 
   -- | Attempt to automatically derive a universal type representation.
   --
@@ -52,11 +60,35 @@ instance (K3AutoColl c, K3AutoTy a) => K3AutoTy (CTE c a) where
   autoty = tColl autocoll autoty
 instance (K3AutoTy a) => K3AutoTy (Maybe a) where autoty = tMaybe autoty
 instance (K3AutoTy a) => K3AutoTy (Ref a) where autoty = tRef autoty
-instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a,b) where
-  autoty = tPair autoty autoty
 instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a -> b) where
   autoty = tFun autoty autoty
 
+instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a,b)
+ where autoty = tTuple2 (autoty, autoty)
+
+instance (K3AutoTy a, K3AutoTy b, K3AutoTy c) => K3AutoTy (a,b,c)
+ where autoty = tTuple3 (autoty, autoty, autoty)
+
+{-
+class (Pat (PKTup ws), PatTy (PKTup ws) ~ a) => K3AutoTyTup ws a
+      | ws -> a, a -> ws
+ where autotytup :: K3RTuple UnivTyRepr a
+
+instance K3AutoTyTup '[] () where autotytup = K3RTNil
+
+instance (K3AutoTyTup was as, K3AutoTy a, wa ~ PKVar a, PatTy wa ~ a)
+         => K3AutoTyTup (wa ': was) (a,as)
+ where autotytup = K3RTCons autoty autotytup
+
+instance (K3AutoTyTup (wa ': w) (a,b), K3AutoTyTup w b)
+         => K3AutoTy (a,b)
+ where autoty = tTuple autotytup
+-}
+ 
+------------------------------------------------------------------------}}}
+-- Collect variables in a term (XXX TODO)                               {{{
+
+{-
 data ExVarTy = forall t . EVT VarIx (UnivTyRepr t)
 
 showEVT :: ExVarTy -> Doc e
@@ -86,3 +118,6 @@ instance K3 VarsInK3 where
   eIter (VIK f) (VIK c) = VIK $ f ++ c
 
   -- XXX etc
+-}
+
+------------------------------------------------------------------------}}}
