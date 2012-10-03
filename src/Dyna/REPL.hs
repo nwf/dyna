@@ -2,7 +2,8 @@
 module Dyna.REPL where
 
 import           Control.Applicative ((<*))
-import           System.Console.Editline
+import           Control.Monad.Trans (liftIO)
+import           System.Console.Haskeline
 import           Text.Trifecta
 
 import qualified Dyna.ParserHS.Parser      as DP
@@ -12,12 +13,10 @@ import           Dyna.XXX.Trifecta
 
 main :: IO () 
 main = do
-   el <- elInit "dyna"
-   setEditor el Emacs
-   let
+   runInputT defaultSettings loop
+ where
      loop = do
-             setPrompt el (return "Dyna> ")
-             maybeLine <- elGets el
+             maybeLine <- getInputLine "Dyna> "
              case maybeLine of
                Nothing -> return () -- ctrl-D
                Just l -> triInteract (DP.dline <* eof)
@@ -29,15 +28,12 @@ main = do
 		-- Interaction interprets a ^D in nested context
 		-- as an excuse to print out parsing errors
 		-- (i.e. it why it rejected the line 
-     promptCont = do
-                   setPrompt el (return "      ")
-                   elGets el
+     promptCont = getInputLine "      "
 
      success a = do
-                   putStrLn $ "\nParsed: " ++ show a
+                   outputStrLn $ "\nParsed: " ++ show a
                    loop
 
      failure td = do
-                   displayLn td
+                   liftIO $ displayLn td
                    loop
-   loop

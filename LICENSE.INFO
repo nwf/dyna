@@ -5,6 +5,7 @@ We depend upon other projects (and their licenses)
     bytestring                  BSD3
     containers                  BSD3
     ghc                         The Glasgow Haskell Compiler License
+    haskeline                   BSD3
     HUnit                       BSD3
     mtl                         BSD3
     reducers                    BSD3

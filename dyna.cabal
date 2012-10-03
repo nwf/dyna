@@ -51,7 +51,7 @@ Executable drepl
     Build-Depends:      base >=4,
                         bytestring >=0.9,
                         containers >=0.4,
-                        editline >=0.2,
+                        haskeline >=0.6,
                         mtl >=2.1,
                         parsers >=0.3,
                         reducers >=3.0,
