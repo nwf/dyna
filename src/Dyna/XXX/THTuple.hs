@@ -6,19 +6,46 @@
 
 -- Header material                                                      {{{
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Dyna.XXX.THTuple(Tupled(..),RTupled(..),mkRecClass
-                        ) where
+module Dyna.XXX.THTuple(
+    -- * Promoted-kind type functions for tuples and rtuples
+  MKLT(..),MKRLT(..),
+
+    -- * Classes on tuples and rtuples
+  Tupled(..),RTupled(..),
+
+    -- * Template Haskell utility functions for type-level
+  mkRecInstances, mkTyMap, mkTyMapFlat, mkTyUnMap,
+
+    -- * Template Haskell utility functions for data-level
+  mkLRecInstances
+) where
 
 import          Dyna.XXX.THTupleInternals
+
+------------------------------------------------------------------------}}}
+-- Type-level functions                                                 {{{
+
+type family   MKLT (x :: [k]) :: k
+type instance MKLT '[] = ()
+type instance MKLT (a ': '[]) = a
+$(mkMKLTs ''MKLT)
+
+type family   MKRLT (r :: k -> k') (x :: [k]) :: k'
+type instance MKRLT r '[] = ()
+type instance MKRLT r (a ': '[]) = r a
+$(mkMKRLTs ''MKRLT)
 
 ------------------------------------------------------------------------}}}
 -- Exported classes                                                     {{{
@@ -27,9 +54,13 @@ import          Dyna.XXX.THTupleInternals
   --   which is invariant over the constructor in question
   --
   --   e.g. RTER (a,b) r = (r a, r b)
-class Tupled base where
+class (MKLT (TOL base) ~ base) => Tupled base where
     -- | Apply r to each element of the tuple
   type RTER base (r :: * -> *) :: *
+
+	-- | Go from the tuple representation to a promoted list;
+	--   the inverse of MKLT (as asserted by class constraints).
+  type TOL base :: [*]
 
     -- | Shed a type constructor
   tupleopR  :: (RTupled rbase, (RTR rbase) ~ r, (RTE rbase) ~ base)
@@ -43,8 +74,13 @@ class Tupled base where
   -- | Recover the constructor and base type from r-full tuples.
   --
   -- e.g. RTR (r a, r b) = r, RTE (r a, r b) = (a, b)
+  --
+  -- This class further specifies some equivalence properties
+  -- on RTER and MKRLT.
 class (Tupled (RTE arred),
-       RTER (RTE arred) (RTR arred) ~ arred)
+       RTER (RTE arred) (RTR arred) ~ arred,
+	   MKRLT (RTR arred) (TOL (RTE arred)) ~ arred
+      )
       => RTupled arred where
   type RTR arred :: (* -> *)
   type RTE arred :: *
@@ -56,7 +92,7 @@ class (Tupled (RTE arred),
 -- Aaaand action                                                        {{{
 
   -- Generate instances for Tupled
-$(mkTupleInstances ''Tupled ''RTER 'tupleopR 'tupleopRS)
+$(mkTupleInstances ''Tupled ''RTER ''TOL 'tupleopR 'tupleopRS)
 
   -- Generate instances for RTupled
 $(mkRTupleInstances ''RTupled ''RTE ''RTR 'tupleopEL)

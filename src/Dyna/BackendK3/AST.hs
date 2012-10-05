@@ -17,6 +17,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.BackendK3.AST where
 
@@ -29,9 +31,12 @@ import           Dyna.XXX.THTuple
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
 
+  -- XXX
 newtype VarIx  = Var String
+  -- XXX (Hostname,Port)
 newtype AddrIx = Addr (String,Int)
 
+  -- XXX should really do something smarter
 data Ann = Ann [String]
 
 ------------------------------------------------------------------------}}}
@@ -90,14 +95,14 @@ class K3Ty (r :: * -> *) where
   tColl   :: CollTy c -> r a -> r (CTE c a)
   tFun    :: r a -> r b -> r (a -> b)
 
-  -- tTuple  :: (RTupled rt, RTR rt ~ r) => rt -> r (RTE rt)
 
     -- XXX TUPLES
+  -- tTuple  :: (RTupled rt, RTR rt ~ r) => rt -> r (RTE rt)
   tTuple2 :: (r a, r b) -> r (a,b)
   tTuple3 :: (r a, r b, r c) -> r (a,b,c)
   tTuple4 :: (r a, r b, r c, r d) -> r (a,b,c,d)
 
-  -- | Existential typeclass wrapper for K3Ty
+  -- | Universal typeclass wrapper for K3Ty
 newtype UnivTyRepr (a :: *) = UTR { unUTR :: forall r . (K3Ty r) => r a }
 
 instance K3Ty UnivTyRepr where
@@ -120,7 +125,6 @@ instance K3Ty UnivTyRepr where
   tTuple3  us              = UTR $ tTuple3 $ tupleopRS unUTR us
   tTuple4  us              = UTR $ tTuple4 $ tupleopRS unUTR us
 
-
   -- | A constraint for "base" types in K3.  These are the things that can
   -- be passed to lambdas.  Essentially everything other than arrows.
 class    K3BaseTy a
@@ -142,13 +146,19 @@ instance (K3BaseTy a, K3BaseTy b, K3BaseTy c) => K3BaseTy (a,b,c)
   -- | Kinds of patterns permitted in K3
 data PKind where
   PKVar  :: k -> PKind
+
+  -- | Just patterns (fail on Nothing)
+  --
+  -- Note the distinction between PatTy and (PatBTy and PatReprFn) here!
+  -- This pattern witnesses a type "Maybe a" but binds a variable of type
+  -- "a".  This will in general be true of any variant (i.e. sum) pattern.
   PKJust :: PKind -> PKind
 
-    -- XXX TUPLES
-  PKTuple2 :: (PKind, PKind) -> PKind
-  PKTuple3 :: (PKind, PKind, PKind) -> PKind
-  PKTuple4 :: (PKind, PKind, PKind, PKind) -> PKind
-  -- PKTup  :: [PKind] -> PKind
+  -- | Pair patterns
+  --
+  -- Product patterns, on the other hand, have PatTy and PatReprFn both
+  -- producing tuples.
+  PKTup  :: [PKind] -> PKind
 
   -- | Provides witnesses that certain types may be used
   --   as arguments to K3 lambdas.  Useful when building
@@ -168,7 +178,7 @@ data PKind where
   --     eLam (PVar $ tPair tInt tInt)        :: (r (Int, Int)   -> _) -> _
   --     eLam (PPair (PVar tInt) (PVar tInt)) :: ((r Int, r Int) -> _) -> _
   --
-class Pat (w :: PKind) where
+class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
     -- | Any data this witness needs to carry around
   data PatDa w :: *
     -- | The type this witness witnesses (i.e. the things matched against)
@@ -176,59 +186,44 @@ class Pat (w :: PKind) where
     -- | The type this witness binds (i.e. after matching is done)
   type PatBTy w :: *
     -- | The type of this pattern.
-  type PatReprFn w (r :: * -> *) :: *
+  type PatReprFn (r :: * -> *) w :: *
+
+type family UnPatDa (pd :: *) :: PKind
+type instance UnPatDa (PatDa w) = w
 
 instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
   data PatDa     (PKVar a)   = PVar { unPVar :: UnivTyRepr a }
   type PatTy     (PKVar a)   =   a
   type PatBTy    (PKVar a)   =   a
-  type PatReprFn (PKVar a) r = r a
+  type PatReprFn r (PKVar a) = r a
 
 instance (Pat w) => Pat (PKJust w) where
-  -- | Just patterns (fail on Nothing)
-  --
-  -- Note the distinction between PatTy and (PatBTy and PatReprFn) here!
-  -- This pattern witnesses a type "Maybe a" but binds a variable of type
-  -- "a".  This will in general be true of any variant (i.e. sum) pattern.
   data PatDa (PKJust w)       = PJust (PatDa w)
   type PatTy (PKJust w)       = Maybe (PatTy w)
   type PatBTy (PKJust w)      = PatBTy w
-  type PatReprFn (PKJust w) r = PatReprFn w r
+  type PatReprFn r (PKJust w) = PatReprFn r w
 
-{-
-instance (Pat wa, Pat wb) => Pat (PKPair '(wa,wb)) where
-  -- | Pair patterns
-  --
-  -- Product patterns, on the other hand, have PatTy and PatReprFn both
-  -- producing tuples.
-  data PatDa (PKPair '(wa,wb))       = PPair (PatDa wa) (PatDa wb)
-  type PatTy (PKPair '(wa,wb))       = (PatTy wa, PatTy wb)
-  type PatBTy (PKPair '(wa,wb))      = (PatBTy wa, PatBTy wb)
-  type PatReprFn (PKPair '(wa,wb)) r = (PatReprFn wa r, PatReprFn wb r)
--}
+type family MapPatDa (x :: [PKind]) :: *
+$(mkTyMapFlat 0 ''MapPatDa ''PatDa)
 
-  -- XXX TUPLES
-$( mapM (mkRecClass (''Pat,[]) (\n -> mkName $ "PKTuple" ++ show n)
-                         [(''PatDa,\n -> mkName $ "PTuple" ++ show n )]
-                         [''PatTy, ''PatBTy] [''PatReprFn])
-        [2..4]
- )
+type family UnMapPatDa (x :: *) :: [PKind]
+$(mkTyUnMap 0 ''UnMapPatDa ''UnPatDa)
 
-{-
-  -- Tragically patterns based on tuples are still represented
-  -- in Haskell as right-branching, unit-ending.
-instance Pat     (PKTup '[]) where
-  data PatDa     (PKTup '[])   = PTupN
-  type PatTy     (PKTup '[])   = ()
-  type PatBTy    (PKTup '[])   = ()
-  type PatReprFn (PKTup '[]) r = r ()
+type family MapPatTy (x :: [PKind]) :: *
+$(mkTyMapFlat 0 ''MapPatTy ''PatTy)
 
-instance Pat (PKTup as) => Pat (PKTup (a ': as)) where
-  data PatDa  (PKTup (a ': as))      = PTupC (PatDa  a) (PatDa  (PKTup as))
-  type PatTy  (PKTup (a ': as))      =       (PatTy  a,  PatTy  (PKTup as))
-  type PatBTy (PKTup (a ': as))      =       (PatBTy a,  PatBTy (PKTup as))
-  type PatReprFn (PKTup (a ': as)) r = (PatReprFn a r, PatReprFn (PKTup as) r)
--}
+type family MapPatBTy (x :: [PKind]) :: *
+$(mkTyMapFlat 0 ''MapPatBTy ''PatBTy)
+
+type family MapPatReprFn   (r :: * -> *) (x :: [PKind]) :: *
+$(mkTyMapFlat 1 ''MapPatReprFn ''PatReprFn)
+
+instance (ts ~ UnMapPatDa (MapPatDa ts))
+      => Pat       (PKTup (ts :: [PKind])) where
+  data PatDa       (PKTup ts)   = PTup (MapPatDa ts)
+  type PatTy       (PKTup ts)   = MapPatTy ts
+  type PatBTy      (PKTup ts)   = MapPatBTy ts
+  type PatReprFn r (PKTup ts)   = MapPatReprFn r ts
 
 ------------------------------------------------------------------------}}}
 -- Slice System                                                         {{{
@@ -239,15 +234,15 @@ data SKind where
   SKUnk  :: k -> SKind
   SKJust :: SKind -> SKind
 
-    -- XXX TUPLES
-  SKTuple2 :: (SKind, SKind) -> SKind
-  SKTuple3 :: (SKind, SKind, SKind) -> SKind
-  SKTuple4 :: (SKind, SKind, SKind, SKind) -> SKind
+  SKTup  :: [SKind] -> SKind
 
   -- | Witness of slice well-formedness
 class Slice r (w :: SKind) where
   data SliceDa w :: *
   type SliceTy w :: *
+
+type family UnSliceDa (pd :: *) :: SKind
+type instance UnSliceDa (SliceDa w) = w
 
 instance (K3BaseTy a, r0 ~ r) => Slice r0 (SKVar (r :: * -> *) (a :: *)) where
   data SliceDa (SKVar r a) = SVar (r a)
@@ -261,30 +256,27 @@ instance (Slice r s) => Slice r (SKJust s) where
   data SliceDa (SKJust s) = SJust (SliceDa s)
   type SliceTy (SKJust s) = Maybe (SliceTy s)
 
-{-
-instance (Slice r sa, Slice r sb) => Slice r (SKTuple2 '(sa,sb)) where
-  data SliceDa (SKTuple2 '(sa,sb)) = STuple2 (SliceDa sa) (SliceDa sb)
-  type SliceTy (SKTuple2 '(sa,sb)) = (SliceTy sa, SliceTy sb)
--}
+type family SliceConst (x :: SKind) (r :: * -> *) :: Constraint
+type instance SliceConst x r = Slice r x
 
-  -- XXX TUPLES
-$( mapM (mkRecClass (''Slice, [varT $ mkName "r"])
-                    (\n -> mkName $ "SKTuple" ++ show n)
-                    [(''SliceDa,\n -> mkName $ "STuple" ++ show n)]
-                    [''SliceTy] [])
-        [2..4] ) 
+type family MapSliceConst (x :: [SKind]) (r :: * -> *) :: Constraint
+type instance MapSliceConst '[] r = ()
+type instance MapSliceConst (x ': xs) r = (SliceConst x r, MapSliceConst xs r)
 
+type family MapSliceDa (x :: [SKind]) :: *
+$(mkTyMapFlat 0 ''MapSliceDa ''SliceDa)
 
-{-
-instance Slice r (SKTup '[]) where
-  data SliceDa (SKTup '[]) = STupN
-  type SliceTy (SKTup '[]) = ()
+type family UnMapSliceDa (x :: *) :: [SKind]
+$(mkTyUnMap 0 ''UnMapSliceDa ''UnSliceDa)
 
-instance Slice r (SKTup as) => Slice r (SKTup (a ': as)) where
-  data SliceDa (SKTup (a ': as)) = STupC (SliceDa a) (SliceDa (SKTup as))
-  type SliceTy (SKTup (a ': as)) =       (SliceTy a,  SliceTy (SKTup as))
+type family MapSliceTy (x :: [SKind]) :: *
+$(mkTyMapFlat 0 ''MapSliceTy ''SliceTy)
 
--}
+instance (ts ~ UnMapSliceDa (MapSliceDa ts), MapSliceConst ts r)
+      => Slice r (SKTup (ts :: [SKind])) where
+  data SliceDa   (SKTup ts)   = STup (MapSliceDa ts)
+  type SliceTy   (SKTup ts)   = MapSliceTy ts
+
 
 ------------------------------------------------------------------------}}}
 -- Numeric Autocasting                                                  {{{
@@ -384,7 +376,7 @@ class K3 (r :: * -> *) where
     -- Unlike traditional lambdas, we require a witness
     -- that the argument is admissible in K3.
   eLam      :: (K3AST_Pat_C r w, Pat w, K3BaseTy (PatTy w))
-            => PatDa w -> (PatReprFn w r -> r b) -> r (PatTy w -> b)
+            => PatDa w -> (PatReprFn r w -> r b) -> r (PatTy w -> b)
   eApp      :: r (a -> b) -> r a -> r b
 
   eBlock    :: [r ()] -> r a -> r a
@@ -452,4 +444,6 @@ data Decl tr r t = Decl VarIx (tr t) (Maybe (r t))
   -- Use as (eEmpty `asColl` CTSet)
 asColl :: r (CTE c t) -> CollTy c -> r (CTE c t)
 asColl = const
+
 ------------------------------------------------------------------------}}}
+

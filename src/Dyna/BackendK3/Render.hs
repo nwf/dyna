@@ -15,6 +15,7 @@
 
 module Dyna.BackendK3.Render where
 
+import           Control.Monad.Identity
 import           Control.Monad.State
 import           Text.PrettyPrint.Free
 
@@ -22,6 +23,7 @@ import           Dyna.BackendK3.AST
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
 
+import qualified Language.Haskell.TH as TH
 
 ------------------------------------------------------------------------}}}
 -- Type handling                                                        {{{
@@ -83,104 +85,36 @@ instance K3CFn CBag where
 -- Pattern handling                                                     {{{
 
 class (Pat w) => K3PFn w where
-  k3pfn :: Bool -> PatDa w -> State Int (Doc e, PatReprFn w (AsK3 e))
+  k3pfn :: PatDa w -> State Int (Doc e, PatReprFn (AsK3 e) w)
 
 instance (K3BaseTy a) => K3PFn (PKVar (a :: *)) where
-  k3pfn _ (PVar tr) = do
+  k3pfn (PVar tr) = do
     n <- incState
     let sn = text $ "x" ++ show n
     return (sn <> colon <> unAsK3Ty (unUTR tr)
            ,AsK3$ const$ sn)
 
 instance (K3PFn w) => K3PFn (PKJust w) where
-  k3pfn _ (PJust w) = do
-    (p, r) <- k3pfn False w
+  k3pfn (PJust w) = do
+    (p, r) <- k3pfn w
     return ("just " <> parens p, r)
-
-  -- XXX TUPLES this should be automatically generated
-instance (K3PFn wa, K3PFn wb)
-         => K3PFn (PKTuple2 '(wa,wb))
- where
-  k3pfn _ (PTuple2 wa wb) = do
-    (ba, ra) <- k3pfn False wa
-    (bb, rb) <- k3pfn False wb
-    return (tupled [ ba, bb ], (ra,rb))
-
-instance (K3PFn wa, K3PFn wb, K3PFn wc)
-         => K3PFn (PKTuple3 '(wa,wb,wc))
- where
-  k3pfn _ (PTuple3 wa wb wc) = do
-    (ba, ra) <- k3pfn False wa
-    (bb, rb) <- k3pfn False wb
-    (bc, rc) <- k3pfn False wc
-    return (tupled [ ba, bb, bc ], (ra,rb,rc))
-
-instance (K3PFn wa, K3PFn wb, K3PFn wc, K3PFn wd)
-         => K3PFn (PKTuple4 '(wa,wb,wc,wd))
- where
-  k3pfn _ (PTuple4 wa wb wc wd) = do
-    (ba, ra) <- k3pfn False wa
-    (bb, rb) <- k3pfn False wb
-    (bc, rc) <- k3pfn False wc
-    (bd, rd) <- k3pfn False wd
-    return (tupled [ ba, bb, bc, bd ], (ra,rb,rc,rd))
-
-{-
-instance K3PFn (PKTup '[]) where
-  k3pfn n _ PTupN = (n, rparen, AsK3$const$rparen)
-
-instance (Pat (PKTup as), K3PFn (PKTup as), K3PFn a) 
-      => K3PFn (PKTup (a ': as)) where
-  k3pfn n b (PTupC a as) = let (n', pa, ra)  = k3pfn n  False a
-                               (n'', ps, rs) = k3pfn n' True  as
-                           in (n'', extend pa ps, (ra,rs))
-    where
-      left           = if b then comma else lparen
-      extend   pa ps = left <> pa <> ps
--}
 
 ------------------------------------------------------------------------}}}
 -- Slice handling                                                       {{{
 
 class (Slice (AsK3 e) w) => K3SFn e w where
-  k3sfn :: Bool -> SliceDa w -> AsK3 e (SliceTy w)
+  k3sfn :: SliceDa w -> Identity (AsK3 e (SliceTy w))
 
 instance (K3BaseTy a) => K3SFn e (SKVar (AsK3 e) (a :: *)) where
-  k3sfn _ (SVar r) = r
+  k3sfn (SVar r) = return r
 
 instance (K3BaseTy a) => K3SFn e (SKUnk (a :: *)) where
-  k3sfn _ SUnk = AsK3$ const$ text "_"
+  k3sfn SUnk = return $ AsK3$ const$ text "_"
 
 instance (K3SFn e s) => K3SFn e (SKJust s) where
-  k3sfn _ (SJust s) = AsK3$ \n -> "Just" <> parens (unAsK3 (k3sfn False s) n)
+  k3sfn (SJust s) = return $ AsK3$ \n -> "Just"
+                      <> parens (unAsK3 (runIdentity $ k3sfn s) n)
 
-  -- XXX TUPLES this should be automatically generated
-instance (K3SFn e sa, K3SFn e sb)
-         => K3SFn e (SKTuple2 '(sa,sb))
- where
-  k3sfn _ (STuple2 sa sb) =
-    AsK3$ \n -> tupled [ unAsK3 (k3sfn False sa) n
-                       , unAsK3 (k3sfn False sb) n ]
-
-instance (K3SFn e sa, K3SFn e sb, K3SFn e sc)
-         => K3SFn e (SKTuple3 '(sa,sb,sc))
- where
-  k3sfn _ (STuple3 sa sb sc) =
-    AsK3$ \n -> tupled [ unAsK3 (k3sfn False sa) n
-                       , unAsK3 (k3sfn False sb) n
-                       , unAsK3 (k3sfn False sc) n ]
-
-{-
-instance K3SFn e (SKTup '[]) where
-  k3sfn _ STupN = AsK3$const$rparen
-
-instance (Slice (AsK3 e) (SKTup as), K3SFn e (SKTup as), K3SFn e a) 
-      => K3SFn e (SKTup (a ': as)) where
-  k3sfn b (STupC a as) = AsK3$ \n -> left <> unAsK3 (k3sfn False a) n
-                                          <> unAsK3 (k3sfn True as) n
-    where
-      left           = if b then comma else lparen
--}
 
 ------------------------------------------------------------------------}}}
 -- Expression handling                                                  {{{
@@ -231,7 +165,7 @@ instance K3 (AsK3 e) where
   eLeq = binop "<="
   eNeq = binop "!="
 
-  eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (k3pfn False w) n
+  eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (k3pfn w) n
                          in align ("\\" <> pat <+> "->" `above` unAsK3 (f arg) n')
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
@@ -255,7 +189,7 @@ instance K3 (AsK3 e) where
   eSort    (AsK3 c) (AsK3 f)                   = builtin "sort"      [ c, f ]
   ePeek    (AsK3 c)                            = builtin "peek"      [ c ]
 
-  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (unAsK3 (k3sfn False w) n)
+  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (unAsK3 (runIdentity $ k3sfn w) n)
 
   eInsert (AsK3 c) (AsK3 e)          = builtin "insert" [ c, e ]
   eDelete (AsK3 c) (AsK3 e)          = builtin "delete" [ c, e ]
@@ -306,4 +240,26 @@ shd (Decl (Var name) tipe body) =
   <> semi
 
 ------------------------------------------------------------------------}}}
+-- Template Haskell splices                                             {{{
 
+$(mkLRecInstances (''K3PFn,[]) 'PKTup 
+                  ('k3pfn,'PTup,\ls -> TH.tupE [
+                                          TH.appE (TH.varE 'tupled)
+                                          $ TH.listE
+                                          $ map (TH.appE (TH.varE 'fst)) ls
+                                       , TH.tupE $ map (TH.appE (TH.varE 'snd)) ls
+                                       ]
+                  ))
+
+$(do
+    e <- liftM TH.varT $ TH.newName "e"
+    n <- TH.newName "n"
+    mkLRecInstances (''K3SFn,[e]) 'SKTup 
+                  ('k3sfn,'STup,\ls ->
+                      TH.appE (TH.conE 'AsK3)
+                    $ TH.lamE [TH.varP n]
+                    $ TH.appE (TH.varE 'tupled)
+                    $ TH.listE
+                    $ map (\l -> TH.appE (TH.appE (TH.varE 'unAsK3) l) (TH.varE n))
+                    $ ls
+                  ))
