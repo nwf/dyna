@@ -1,23 +1,25 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
-
+---------------------------------------------------------------------------
+-- | A parser for some chunk of the Dyna language, using Trifecta
+-- 
 -- Based in part on
 -- https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs
 -- as well as the trifecta code itself
---
--- XXX no longer handles comments due to trifecta code upgrade
 --
 -- TODO:
 --  We might want to use T.T.Literate, too, in the end.
 --  Doesn't understand dynabase literals ("{ ... }")
 --  Doesn't handle parenthesized aggregators
 --  Doesn't handle shared subgoals ("whenever ... { ... }")
---  Doesn't understand "foo." style rules.
+
+-- Header material                                                      {{{
+
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Dyna.ParserHS.Parser (
-    Term(..), dterm, dtexpr,
+    Term(..), Annotation(..), dterm, dtexpr,
     Rule(..), drule, Line(..), dline, dlines
 ) where
 
@@ -27,6 +29,7 @@ import           Control.Monad.Trans (MonadTrans,lift)
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
 import           Data.Char (isSpace)
+import qualified Data.CharSet                     as CS
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
@@ -37,16 +40,64 @@ import           Text.Trifecta
 
 import           Dyna.XXX.Trifecta (identNL)
 
+------------------------------------------------------------------------}}}
+-- Parsed output definition                                             {{{
+
+data Annotation = AnnType !B.ByteString
+ deriving (Eq,Ord,Show)
+
 data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
+          | TAnnot   {-# UNPACK #-} !Annotation !(Spanned Term)
           | TVar     {-# UNPACK #-} !B.ByteString
            -- | TDBLit XXX
  deriving (Eq,Ord,Show)
+
+-- | Rules are not just terms because we want to make it very syntactically
+--   explicit about the head being a term (though that's not an expressivity
+--   concern -- just use the parenthesized texpr case) so that there is no
+--   risk of parsing ambiguity.
+--
+--   XXX The span on Fact is a little silly
+data Rule = Fact (Spanned Term)
+          | Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
+ deriving (Eq,Ord,Show)
+
+--   XXX The span on LRule is a little silly
+--   XXX Having one kind of Pragma is probably wrong
+data Line = LRule (Spanned Rule)
+          | LPragma !(Spanned Term)
+ deriving (Eq,Ord,Show)
+
+
+------------------------------------------------------------------------}}}
+-- Utilities                                                            {{{
+
+bsf :: Functor f => f String -> f B.ByteString
+bsf = fmap BU.fromString
+
+------------------------------------------------------------------------}}}
+-- Identifier Syles                                                     {{{
+
+usualpunct :: CS.CharSet
+usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
 
 dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
 dynaDotOperStyle = IdentifierStyle
   { styleName = "Dot Operator"
   , styleStart   = char '.'
-  , styleLetter  = oneOf "!#$%&*+/<=>?@\\^|-~:."
+  , styleLetter  = oneOfSet $ usualpunct
+  , styleReserved = mempty
+  , styleHighlight = Operator
+  , styleReservedHighlight = ReservedOperator
+  }
+
+    -- | Colon is not a permitted beginning to a prefix
+    --   operator, as it is a sigil for type annotations.
+dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
+dynaPfxOperStyle = IdentifierStyle
+  { styleName = "Prefix Operator"
+  , styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:"
+  , styleLetter  = oneOfSet $ usualpunct
   , styleReserved = mempty
   , styleHighlight = Operator
   , styleReservedHighlight = ReservedOperator
@@ -54,13 +105,23 @@ dynaDotOperStyle = IdentifierStyle
 
 dynaOperStyle :: TokenParsing m => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
-  { styleName = "Operator"
-  , styleStart   = oneOf "!#$%&*+/<=>?@\\^|-~:"
-  , styleLetter  = oneOf "!#$%&*+/<=>?@\\^|-~:."
+  { styleName = "Infix Operator"
+  , styleStart   = oneOfSet $ CS.delete '.' usualpunct
+  , styleLetter  = oneOfSet $ usualpunct
   , styleReserved = mempty
   , styleHighlight = Operator
   , styleReservedHighlight = ReservedOperator
   }
+
+dynaTypeStyle :: TokenParsing m => IdentifierStyle m
+dynaTypeStyle = IdentifierStyle
+  { styleName = "Type Annotation"
+  , styleStart = char ':'
+  , styleLetter   = (alphaNum <|> oneOf "_'")
+  , styleReserved = mempty
+  , styleHighlight = Operator
+  , styleReservedHighlight = ReservedOperator
+}
 
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
@@ -81,6 +142,10 @@ dynaVarStyle = IdentifierStyle
   , styleHighlight = Identifier
   , styleReservedHighlight = ReservedIdentifier
   }
+
+
+------------------------------------------------------------------------}}}
+-- Comment handling                                                     {{{
 
 dynaCommentStyle :: CommentStyle
 dynaCommentStyle =  CommentStyle
@@ -107,36 +172,38 @@ instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
   slicedWith f (DL m) = DL $ slicedWith f m
   rend = lift rend
   restOfLine = lift restOfLine
-  
 
-bsf = fmap BU.fromString
+------------------------------------------------------------------------}}}
+-- Atoms                                                                {{{
 
 atom :: (Monad m, TokenParsing m) => m B.ByteString
 atom =     liftA BU.fromString stringLiteral
        <|> (bsf $ ident dynaAtomStyle)
 
--- sparen :: MonadParser m => m a -> m a
--- sparen = between (char '(' *> spaces) (spaces <* char ')')
+------------------------------------------------------------------------}}}
+-- Terms and term expressions                                           {{{
 
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
       [       parens texpr
-      ,       spanned $ TVar <$> (bsf$ident dynaVarStyle)
+      ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
       , try $ spanned $ flip TFunctor [] <$> atom <* (notFollowedBy $ char '(')
+      , try $ spanned $ mkta <$> (bsf $ ident dynaTypeStyle) <* spaces <*> term
       ,       spanned $ parenfunc
-	  ]
+      ]
  where
   parenfunc = TFunctor <$> (highlight Identifier atom <?> "Functor")
                        <*>  parens (texpr `sepBy` symbolic ',')
+  mkta ty te = TAnnot (AnnType ty) te
 
 -- XXX right now all binops are at equal precedence and left-associative; that's wrong.
 texpr :: DeltaParsing m => m (Spanned Term)
 texpr = buildExpressionParser etable term <?> "Expression"
  where
   etable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
-           , [ Prefix $ uf (spanned $ bsf $ ident dynaOperStyle)           ]
+           , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
            , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
-		   , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
+           , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
            , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
            ]
 
@@ -153,47 +220,45 @@ texpr = buildExpressionParser etable term <?> "Expression"
     (x:~spx)  <- f
     pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
 
-hriss = highlight ReservedOperator . spanned . symbol 
 
 dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
 dterm  = unDL term 
 dtexpr = unDL texpr 
 
--- | Rules are not just terms because we want to make it very syntactically
---   explicit about the head being a term (though that's not an expressivity
---   concern -- just use the parenthesized texpr case) so that there is no
---   risk of parsing ambiguity.
---
---   XXX The span on Fact is a little silly
-data Rule = Fact (Spanned Term)
-          | Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
- deriving (Eq,Ord,Show)
+------------------------------------------------------------------------}}}
+-- Rules                                                                {{{
 
---   XXX The span on LRule is a little silly
---   XXX Having one kind of Pragma is probably wrong
-data Line = LRule (Spanned Rule)
-          | LPragma !(Spanned Term)
- deriving (Eq,Ord,Show)
-
+-- | Grab the head (term!) and aggregation operator from a line that
+-- we hope is a rule.  
+rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
 rulepfx = Rule <$> term
                <*  spaces
-               <*> (bsf$ident dynaOperStyle <?> "Aggregator")
+               <*> (bsf $ ident dynaOperStyle <?> "Aggregator")
 
 rule :: DeltaParsing m => m Rule
-rule = choice [(try (liftA flip rulepfx
+rule = choice [
+                -- HEAD OP= RESULT whenever EXPRS .
+               (try (liftA flip rulepfx
                            <*> texpr
-                           <*  hriss "whenever"))
+                           <*  hrss "whenever"))
                            <*> (texpr `sepBy1` symbolic ',')
 
+                -- HEAD OP= EXPRS, RESULT .
               , (try rulepfx)
                            <*> many (try (texpr <* symbolic ','))
                            <*> texpr
 
+                -- HEAD .
               , Fact   <$> term
               ]
+ where
+  hrss = highlight ReservedOperator . spanned . symbol 
 
 drule :: DeltaParsing m => m (Spanned Rule)
 drule = spanned rule
+
+------------------------------------------------------------------------}}}
+-- Lines                                                                {{{
 
 progline :: DeltaParsing m => m (Spanned Line)
 progline  = spanned $ choice [ LRule <$> drule
@@ -203,8 +268,9 @@ progline  = spanned $ choice [ LRule <$> drule
                              ]
 
 dline :: DeltaParsing m => m (Spanned Line)
--- dline = unDL (progline <* optional (char '.' <*  (spaces <|> eof)))
 dline = unDL (progline <* optional (char '.') <* optional newline)
 
 dlines :: DeltaParsing m => m [Spanned Line]
 dlines = unDL (progline `sepEndBy` (char '.' <* spaces))
+
+------------------------------------------------------------------------}}}

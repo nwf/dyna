@@ -1,7 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE OverloadedStrings #-}
-
+---------------------------------------------------------------------------
+-- | Parser self-test cases
+--
 -- TODO:
 --   Writing these is still too hard, Template Haskell and the REPL
 --     notwithstanding.
@@ -9,13 +8,19 @@
 --   Test.Framework.TH appears not to understand comments at the
 --   moment, and parses right through them.
 
+-- Header material                                                      {{{
+
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Dyna.ParserHS.ParserSelftest where
 
-import           Control.Applicative ((<*))
+-- import           Control.Applicative ((<*))
 import           Data.ByteString (ByteString)
-import           Data.Foldable (toList)
-import           Data.Monoid (mempty)
-import qualified Data.Sequence                       as S
+-- import           Data.Foldable (toList)
+-- import           Data.Monoid (mempty)
+-- import qualified Data.Sequence                       as S
 import           Data.String
 import qualified Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit
@@ -27,16 +32,21 @@ import           Text.Trifecta.Delta
 import           Dyna.ParserHS.Parser
 import           Dyna.XXX.TrifectaTest
 
+------------------------------------------------------------------------}}}
+-- Terms and basic handling                                             {{{
 
 term :: ByteString -> Spanned Term
 term = unsafeParse dterm
 
+case_basicAtom :: Assertion
 case_basicAtom = e @=? (term "foo")
  where e = TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 3 3) "foo"
 
+case_basicAtomTWS :: Assertion
 case_basicAtomTWS = e @=? (term "foo ")
  where e =  TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) "foo "
 
+case_basicFunctor :: Assertion
 case_basicFunctor = e @=? (term sfb)
  where
   e =  TFunctor "foo"
@@ -47,6 +57,7 @@ case_basicFunctor = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo(bar)"
 
+case_nestedFunctorsWithArgs :: Assertion
 case_nestedFunctorsWithArgs = e @=? (term st)
  where
   e = TFunctor "foo"
@@ -64,6 +75,7 @@ case_nestedFunctorsWithArgs = e @=? (term st)
   st :: (IsString s) => s
   st = "foo(bar,X,bif(),baz(quux,Y))"
 
+case_basicFunctorComment :: Assertion
 case_basicFunctorComment = e @=? (term sfb)
  where
   e =  TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 8 8) sfb
@@ -71,6 +83,7 @@ case_basicFunctorComment = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo %xxx"
 
+case_basicFunctorNLComment :: Assertion
 case_basicFunctorNLComment = e @=? (term sfb)
  where
   e =  TFunctor "foo"
@@ -82,7 +95,7 @@ case_basicFunctorNLComment = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo(%xxx\n1,2\n)"
 
-
+case_basicFunctorTWS :: Assertion
 case_basicFunctorTWS = e @=? (term sfb)
  where
   e = TFunctor "foo"
@@ -92,6 +105,7 @@ case_basicFunctorTWS = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo\n(bar )"
 
+case_basicFunctorNL :: Assertion
 case_basicFunctorNL = e @=? (term sfb)
  where
   e = TFunctor "foo"
@@ -101,6 +115,7 @@ case_basicFunctorNL = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo\n(bar )"
 
+case_colonFunctor :: Assertion
 case_colonFunctor = e @=? (term pvv)
  where
   e = TFunctor "possible"
@@ -110,11 +125,29 @@ case_colonFunctor = e @=? (term pvv)
            ]
           :~ Span (Columns 9 9) (Columns 16 16) pvv
         ]
-       :~ Span (Columns 0 0) (Columns 17 17) "possible(Var:Val)"
+       :~ Span (Columns 0 0) (Columns 17 17) pvv
   pvv = "possible(Var:Val)"
 
+case_failIncompleteExpr :: Assertion
 case_failIncompleteExpr = checkParseFail dterm "foo +"
   "(interactive):1:5: error: expected: \"(\",\n    end of input\nfoo +<EOF> "
+
+-- Annotations                                                          {{{
+
+case_tyAnnot :: Assertion
+case_tyAnnot = e @=? (term fintx)
+ where
+  e = TFunctor "f" [TAnnot (AnnType ":int")
+                           (TVar "X" :~ Span (Columns 7 7) (Columns 8 8) fintx)
+                     :~ Span (Columns 2 2) (Columns 8 8) fintx
+                   ]
+                  :~ Span (Columns 0 0) (Columns 9 9) fintx
+  fintx = "f(:int X)"
+
+------------------------------------------------------------------------}}}
+
+------------------------------------------------------------------------}}}
+-- Rules and lines                                                      {{{
 
 progline :: ByteString -> Spanned Line
 progline = unsafeParse dline
@@ -122,6 +155,7 @@ progline = unsafeParse dline
 proglines :: ByteString -> [Spanned Line]
 proglines = unsafeParse dlines
 
+case_ruleSimple :: Assertion
 case_ruleSimple = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
@@ -132,6 +166,7 @@ case_ruleSimple = e @=? (progline sr)
            :~ Span (Columns 0 0) (Columns 10 10) sr
   sr = "goal += 1 ."
   
+case_ruleExpr :: Assertion
 case_ruleExpr = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
@@ -147,6 +182,7 @@ case_ruleExpr = e @=? (progline sr)
                  :~ Span (Columns 0 0) (Columns 18 18) sr
   sr = "goal += foo + bar ."
 
+case_ruleDotExpr :: Assertion
 case_ruleDotExpr = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
@@ -162,6 +198,7 @@ case_ruleDotExpr = e @=? (progline sr)
                  :~ Span (Columns 0 0) (Columns 15 15) sr
   sr = "goal += foo.bar."
 
+case_ruleComma :: Assertion
 case_ruleComma = e @=? (progline sr)
  where
   e = LRule (Rule (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
@@ -178,6 +215,7 @@ case_ruleComma = e @=? (progline sr)
                 :~ Span (Columns 0 0) (Columns 24 24) sr
   sr = "foo += bar(X), baz(X), X."
 
+case_ruleKeywordsComma :: Assertion
 case_ruleKeywordsComma = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
@@ -202,7 +240,7 @@ case_ruleKeywordsComma = e @=? (progline sr)
                  :~ Span (Columns 0 0) (Columns 41 41) sr
   sr = "foo = new X whenever X is baz(Y), Y is 3 ."
 
--- XXX It takes a while to parse this one.  Why?
+case_rules :: Assertion
 case_rules = e @=? (proglines sr)
  where
   e = [ LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
@@ -220,7 +258,7 @@ case_rules = e @=? (proglines sr)
       ]
   sr = "goal += 1. goal += 2."
 
--- XXX It takes a while to parse this one.  Why?
+case_rulesDotExpr :: Assertion
 case_rulesDotExpr = e @=? (proglines sr)
  where
   e  = [ LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
@@ -243,11 +281,17 @@ case_rulesDotExpr = e @=? (proglines sr)
        ]
   sr = "goal += foo.bar. goal += 1."
 
+------------------------------------------------------------------------}}}
+-- Harness toplevel                                                     {{{
+
 selftest :: TF.Test
 selftest = $(testGroupGenerator)
 
 main :: IO ()
 main = $(defaultMainGenerator)
+
+------------------------------------------------------------------------}}}
+-- Experimental debris (XXX)                                            {{{
 
 {-
 runParser :: (Show a) => (forall r . Language (Parser r String) a) -> B.ByteString -> Result TermDoc a
@@ -263,3 +307,5 @@ cs r e = case r of
            Success w s | S.null w -> assertEqual "XXX" e s
            _ -> assertBool "XXX" False
 -}
+
+------------------------------------------------------------------------}}}

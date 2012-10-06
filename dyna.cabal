@@ -31,6 +31,7 @@ Library
 
     Build-Depends:      base >=4,
                         bytestring >=0.9,
+                        charset >=0.3,
                         containers >=0.4,
                         mtl >=2.1,
                         parsers >=0.3,
@@ -50,6 +51,7 @@ Executable drepl
     Hs-Source-Dirs:     src
     Build-Depends:      base >=4,
                         bytestring >=0.9,
+                        charset >=0.3,
                         containers >=0.4,
                         haskeline >=0.6,
                         mtl >=2.1,
@@ -58,7 +60,8 @@ Executable drepl
                         semigroups >=0.8,
                         trifecta >=0.90,
                         unordered-containers>=0.2,
-                        utf8-string >=0.3
+                        utf8-string >=0.3,
+                        wl-pprint-extras >=3.0
     
     Main-Is: Dyna/REPL.hs
 
@@ -72,6 +75,7 @@ Test-suite dyna-selftests
 
     Build-Depends:      base >=4,
                         bytestring >=0.9,
+                        charset >=0.3,
                         containers >=0.4,
                         HUnit >=1.2,
                         mtl >=2.1,
