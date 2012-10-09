@@ -19,7 +19,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Dyna.BackendK3.Automation where
+module Dyna.BackendK3.Automation (
+    -- * Automated derivation of data from types, where possible
+  K3AutoColl, autocoll, K3AutoTy, autoty,
+
+    -- * K3 macro library
+  macro_localVar, macro_caseMaybe, macro_emptyPeek
+) where
 
 import           Data.Word
 import           Text.PrettyPrint.Free
@@ -63,6 +69,7 @@ instance (K3AutoTy a) => K3AutoTy (Ref a) where autoty = tRef autoty
 instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a -> b) where
   autoty = tFun autoty autoty
 
+  -- XXX TUPLES
 instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a,b)
  where autoty = tTuple2 (autoty, autoty)
 
@@ -85,6 +92,36 @@ instance (K3AutoTyTup (wa ': w) (a,b), K3AutoTyTup w b)
  where autoty = tTuple autotytup
 -}
  
+------------------------------------------------------------------------}}}
+-- K3 Macro Library (XXX WIP)                                           {{{
+
+  -- | Let as lambda
+macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
+                => UnivTyRepr a
+                -> (r a)
+                -> (r a -> r b)
+                -> r b
+macro_localVar w a b = eApp (eLam (PVar w) b) a
+
+  -- | Case analyze a Maybe
+macro_caseMaybe :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKJust (PKVar a)))
+                => UnivTyRepr a
+                -> r (Maybe a)
+                -> r b
+                -> (r a -> r b)
+                -> r b
+macro_caseMaybe w m n b = eITE (eEq m cNothing)
+                               n
+                               (eApp (eLam (PJust (PVar w)) b) m)
+
+  -- | Case analyze a collection as either empty or a peeked element
+macro_emptyPeek :: (K3AST_Coll_C r c, K3AST_Pat_C r (PKVar a),
+                    K3 r, K3BaseTy a, K3AutoTy a)
+                => r (CTE c a) -> r b -> (r a -> r b) -> r b
+macro_emptyPeek c e l = eITE (eEq c eEmpty)
+                             e
+                             (eApp (eLam (PVar autoty) l) $ ePeek c)
+
 ------------------------------------------------------------------------}}}
 -- Collect variables in a term (XXX TODO)                               {{{
 

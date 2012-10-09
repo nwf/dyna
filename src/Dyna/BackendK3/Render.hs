@@ -43,7 +43,6 @@ instance K3Ty (AsK3Ty e) where
   tInt    = AsK3Ty$ "int"
   tString = AsK3Ty$ "string"
   tUnit   = AsK3Ty$ "unit"
-  tUnk    = AsK3Ty$ "_"
 
   -- tPair (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ tupled [ ta, tb ]
 
@@ -166,7 +165,7 @@ instance K3 (AsK3 e) where
   eNeq = binop "!="
 
   eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (k3pfn w) n
-                         in align ("\\" <> pat <+> "->" `above` unAsK3 (f arg) n')
+                         in "\\" <> pat <+> "->" <+> align (unAsK3 (f arg) n')
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
     parens (parens (f n) `aboveBreak` parens (x n))
@@ -210,7 +209,7 @@ encBag = enclose "{|" "|}"
 binop :: Doc e -> AsK3 e a -> AsK3 e b -> AsK3 e c
 binop o (AsK3 a) (AsK3 b) = AsK3$ \n ->     parens (align $ a n)
                                         </> o
-                                        </> parens (align $ b n)
+                                        <+> parens (align $ b n)
 
     -- Overly polymorphic; use only when correct!
 builtin :: Doc e -> [ Int -> Doc e ] -> AsK3 e b

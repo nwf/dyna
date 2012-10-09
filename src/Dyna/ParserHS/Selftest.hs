@@ -14,7 +14,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dyna.ParserHS.ParserSelftest where
+module Dyna.ParserHS.Selftest where
 
 -- import           Control.Applicative ((<*))
 import           Data.ByteString (ByteString)
@@ -137,7 +137,8 @@ case_failIncompleteExpr = checkParseFail dterm "foo +"
 case_tyAnnot :: Assertion
 case_tyAnnot = e @=? (term fintx)
  where
-  e = TFunctor "f" [TAnnot (AnnType ":int")
+  e = TFunctor "f" [TAnnot (AnnType $ TFunctor "int" []
+                                     :~ Span (Columns 3 3) (Columns 7 7) fintx)
                            (TVar "X" :~ Span (Columns 7 7) (Columns 8 8) fintx)
                      :~ Span (Columns 2 2) (Columns 8 8) fintx
                    ]

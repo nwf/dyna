@@ -161,11 +161,24 @@ mkRTupleInstance _tc _rte _rtr _opel n | n > 1 = do
 mkRTupleInstances a b c d = foreachTupleSize (mkRTupleInstance a b c d)
 
 ------------------------------------------------------------------------}}}
--- Make recursive type-math classes which walk tuple types              {{{
+-- Make recursive type-math classes which walk tuple types (XXX)        {{{
 
-  -- XXX TUPLES Can't yet generate the closed lifted-ADTs we use
-  -- for class heads.
+mkTupleRecInstance :: Name         -- ^ Class name
+                   -> [TypeQ]      -- ^ Threaded arguments  
+                   -> Int          -- ^ Tuple size
+                   -> Q Dec
+mkTupleRecInstance _cname _cargs n = do
+  names <- mkNames n
+  let context = cxt $ map (\na -> classP _cname $ _cargs ++ [varT na]) names
 
+  instanceD context
+            (genMap appT (conT _cname) (id) $ _cargs ++ [mkTy n names])
+            []
+
+mkTupleRecInstances a b = foreachTupleSize (mkTupleRecInstance a b)
+
+
+{-
 mkRecInstance :: (Name, [TypeQ])       -- ^ Class name and threaded arguments
               -> (Int -> Name)         -- ^ Instance argument maker
               -> [(Name,Int -> Name)]  -- ^ Datas and constructor-maker
@@ -204,6 +217,7 @@ mkRecInstance (_cname,_cargs) _ntyf _dnames _tnames _trnames n = do
           $ concat [datas,types,rtypes]
 
 mkRecInstances a b c d e = foreachTupleSize (mkRecInstance a b c d e)
+-}
 
 mkLRecInstance :: (Name, [TypeQ])              -- ^ Class name and args
                -> Name

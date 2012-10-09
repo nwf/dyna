@@ -85,7 +85,6 @@ class K3Ty (r :: * -> *) where
   tInt    :: r Int
   tString :: r String
   tUnit   :: r ()
-  tUnk    :: r a
 
 {- TAddress | TTarget BaseTy -}
 
@@ -95,9 +94,8 @@ class K3Ty (r :: * -> *) where
   tColl   :: CollTy c -> r a -> r (CTE c a)
   tFun    :: r a -> r b -> r (a -> b)
 
-
-    -- XXX TUPLES
-  -- tTuple  :: (RTupled rt, RTR rt ~ r) => rt -> r (RTE rt)
+  -- XXX TUPLES
+  -- tTuple  :: (RTupled rt, RTR rt ~ r, RTE rt ~ t) => rt -> r t
   tTuple2 :: (r a, r b) -> r (a,b)
   tTuple3 :: (r a, r b, r c) -> r (a,b,c)
   tTuple4 :: (r a, r b, r c, r d) -> r (a,b,c,d)
@@ -113,7 +111,6 @@ instance K3Ty UnivTyRepr where
   tInt                           = UTR tInt
   tString                        = UTR tString
   tUnit                          = UTR tUnit
-  tUnk                           = UTR tUnk
 
   tColl  c (UTR a)       = UTR $ tColl c a
   tFun   (UTR a) (UTR b) = UTR $ tFun a b
@@ -121,6 +118,7 @@ instance K3Ty UnivTyRepr where
   tRef   (UTR a)         = UTR $ tRef a
 
   -- XXX TUPLES
+  -- tTuple   us              = UTR $ tTuple  $ tupleopRS unUTR us
   tTuple2  us              = UTR $ tTuple2 $ tupleopRS unUTR us
   tTuple3  us              = UTR $ tTuple3 $ tupleopRS unUTR us
   tTuple4  us              = UTR $ tTuple4 $ tupleopRS unUTR us
@@ -137,8 +135,7 @@ instance K3BaseTy ()
 instance (K3BaseTy a) => K3BaseTy (CTE c a)
 instance (K3BaseTy a) => K3BaseTy (Maybe a)
 instance (K3BaseTy a) => K3BaseTy (Ref a)
-instance (K3BaseTy a, K3BaseTy b) => K3BaseTy (a,b)
-instance (K3BaseTy a, K3BaseTy b, K3BaseTy c) => K3BaseTy (a,b,c)
+$(mkTupleRecInstances ''K3BaseTy [])
 
 ------------------------------------------------------------------------}}}
 -- Pattern System                                                       {{{
@@ -154,7 +151,7 @@ data PKind where
   -- "a".  This will in general be true of any variant (i.e. sum) pattern.
   PKJust :: PKind -> PKind
 
-  -- | Pair patterns
+  -- | Product ("tuple") patterns
   --
   -- Product patterns, on the other hand, have PatTy and PatReprFn both
   -- producing tuples.

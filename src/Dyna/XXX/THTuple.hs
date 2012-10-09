@@ -25,8 +25,15 @@ module Dyna.XXX.THTuple(
     -- * Classes on tuples and rtuples
   Tupled(..),RTupled(..),
 
-    -- * Template Haskell utility functions for type-level
-  mkRecInstances, mkTyMap, mkTyMapFlat, mkTyUnMap,
+    -- * Template Haskell utility for recursive instances
+  mkTupleRecInstances,
+
+    -- * Template Haskell utility functions for type-level shifting
+  mkTyMap, mkTyMapFlat, mkTyUnMap,
+
+  {-
+  mkRecInstances, 
+  -}
 
     -- * Template Haskell utility functions for data-level
   mkLRecInstances
@@ -58,8 +65,8 @@ class (MKLT (TOL base) ~ base) => Tupled base where
     -- | Apply r to each element of the tuple
   type RTER base (r :: * -> *) :: *
 
-	-- | Go from the tuple representation to a promoted list;
-	--   the inverse of MKLT (as asserted by class constraints).
+  -- | Go from the tuple representation to a promoted list;
+  --   the inverse of MKLT (as asserted by class constraints).
   type TOL base :: [*]
 
     -- | Shed a type constructor
@@ -79,7 +86,7 @@ class (MKLT (TOL base) ~ base) => Tupled base where
   -- on RTER and MKRLT.
 class (Tupled (RTE arred),
        RTER (RTE arred) (RTR arred) ~ arred,
-	   MKRLT (RTR arred) (TOL (RTE arred)) ~ arred
+       MKRLT (RTR arred) (TOL (RTE arred)) ~ arred
       )
       => RTupled arred where
   type RTR arred :: (* -> *)

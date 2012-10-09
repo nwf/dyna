@@ -21,42 +21,26 @@ module Dyna.BackendK3.Examples where
 import           Dyna.BackendK3.AST
 import           Dyna.BackendK3.Automation
 import           Dyna.BackendK3.Render
-
-------------------------------------------------------------------------}}}
--- Example cases: macros
-------------------------------------------------------------------------{{{
-
-macro_caseMaybe :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKJust (PKVar a)))
-                => UnivTyRepr a
-                -> r (Maybe a)
-                -> r b
-                -> (r a -> r b)
-                -> r b
-macro_caseMaybe w m n b = eITE (eEq m cNothing)
-                               n
-                               (eApp (eLam (PJust (PVar w)) b) m)
-
-test_macroCM = Decl (Var "nocase")
-                    (tInt)
-                    $Just $ macro_caseMaybe tInt (eVar (Var "test") autoty) (cInt 0) (id)
-
-macro_simple_join2 :: (K3 r, K3AutoTy a, K3BaseTy a, K3AST_Pat_C r (PKVar a),
-                             K3AutoTy b, K3BaseTy b, K3AST_Pat_C r (PKVar b))
-                   => r (a -> b -> Bool) -> r (CTE c1 a) -> r (CTE c2 b) -> r ()
-macro_simple_join2 p c1 c2 =
-    flip eIter c1 $ eLam (PVar autoty) $ \a -> flip eIter c2
-                  $ eLam (PVar autoty) $ \b -> eITE (eApp (eApp p a) b) (cUnit) (cUnit)
-
-macro_emptyPeek :: (K3AST_Coll_C r c, K3AST_Pat_C r (PKVar a),
-                    K3 r, K3BaseTy a, K3AutoTy a)
-                => r (CTE c a) -> r b -> (r a -> r b) -> r b
-macro_emptyPeek c e l = eITE (eEq c eEmpty)
-                             e
-                             (eApp (eLam (PVar autoty) l) $ ePeek c)
+import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Example cases: misc
 ------------------------------------------------------------------------{{{
+
+
+  -- | Perform a simple join of two collections using a predicate and apply
+  -- some function to rows that match.
+  --
+  -- This is intended to be sufficiently simple for K3 to chew on and
+  -- do something useful with in its optimizer backend.
+macro_simple_join2 :: (K3 r, K3AutoTy a, K3BaseTy a, K3AST_Pat_C r (PKVar a),
+                             K3AutoTy b, K3BaseTy b, K3AST_Pat_C r (PKVar b))
+                   => r (a -> b -> Bool) -> r (a -> b -> ())
+                   -> r (CTE c1 a) -> r (CTE c2 b) -> r ()
+macro_simple_join2 p f c1 c2 =
+    flip eIter c1 $ eLam (PVar autoty) $ \a ->
+    flip eIter c2 $ eLam (PVar autoty) $ \b ->
+      eITE (eApp (eApp p a) b) (eApp (eApp f a) b) (cUnit)
 
 
 testdecf = Decl (Var "f")
@@ -129,12 +113,6 @@ testjoin2 c1 c2 =
                eLam p (\(k1b,k2b,_) ->
                 (eEq k1a k1b) `eAdd` (eEq k2a k2b))))
 
-macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
-                => UnivTyRepr a
-                -> (r a)
-                -> (r a -> r b)
-                -> r b
-macro_localVar w a b = eApp (eLam (PVar w) b) a
 
 testlocal = macro_localVar autoty
                            (eEmpty `asColl` CTBag)

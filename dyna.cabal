@@ -25,7 +25,8 @@ Library
 
     ghc-options:        -Wall
 
-    Exposed-Modules:    Dyna.ParserHS.Parser,
+    Exposed-Modules:    Dyna.BackendK3.AST,
+                        Dyna.ParserHS.Parser,
                         Dyna.NormalizeParse,
                         Dyna.XXX.Trifecta
 
@@ -33,10 +34,12 @@ Library
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        ghc-prim,
                         mtl >=2.1,
                         parsers >=0.3,
                         reducers >=3.0,
                         semigroups >=0.8,
+                        template-haskell,
                         trifecta >=0.90,
                         unification-fd,
                         unordered-containers>=0.2,
@@ -77,11 +80,13 @@ Test-suite dyna-selftests
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        ghc-prim,
                         HUnit >=1.2,
                         mtl >=2.1,
                         parsers >=0.3,
                         reducers >=3.0,
                         semigroups >=0.8,
+                        template-haskell,
                         test-framework >=0.6,
                         test-framework-hunit >=0.2,
                         test-framework-th >=0.2,
@@ -90,7 +95,7 @@ Test-suite dyna-selftests
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0
 
-    Other-Modules:      Dyna.ParserHS.ParserSelftest
+    Other-Modules:      Dyna.BackendK3.Examples
 
     Main-Is: Dyna/Test/Main.hs
 

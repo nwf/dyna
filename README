@@ -1,15 +1,19 @@
 An overview of the source tree
 ------------------------------
 
-src/Dyna/ParserHS -- the Haskell front-end parser and selftests
+src/Dyna/BackendK3 -- An AST and printer for K3,
+                   -- done in finally-tagless style.
+                   -- Includes some "Examples", even if not self-tests.
 
-src/Dyna/Term     -- Different representations of terms and
-                     utilities
+src/Dyna/ParserHS  -- the Haskell front-end parser and selftests
 
-src/Dyna/Test     -- code used by self-tests throughout the codebase
+src/Dyna/Term      -- Different representations of terms and
+                      utilities
 
-src/Dyna/XXX      -- code that should probably go upstream;
-                     modules here are named by the upstream package.
+src/Dyna/Test      -- code used by self-tests throughout the codebase
+
+src/Dyna/XXX       -- code that should probably go upstream;
+                      modules here are named by the upstream package.
 
 
 For those not familar with cabal

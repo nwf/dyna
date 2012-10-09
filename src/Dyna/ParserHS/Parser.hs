@@ -43,11 +43,11 @@ import           Dyna.XXX.Trifecta (identNL)
 ------------------------------------------------------------------------}}}
 -- Parsed output definition                                             {{{
 
-data Annotation = AnnType !B.ByteString
+data Annotation = AnnType (Spanned Term)
  deriving (Eq,Ord,Show)
 
 data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
-          | TAnnot   {-# UNPACK #-} !Annotation !(Spanned Term)
+          | TAnnot   Annotation !(Spanned Term)
           | TVar     {-# UNPACK #-} !B.ByteString
            -- | TDBLit XXX
  deriving (Eq,Ord,Show)
@@ -91,7 +91,10 @@ dynaDotOperStyle = IdentifierStyle
   , styleReservedHighlight = ReservedOperator
   }
 
-    -- | Colon is not a permitted beginning to a prefix
+    --   Dot is handled specially elsewhere due to its
+    --   dual purpose as an operator and rule separator.
+    --
+    --   Colon is not a permitted beginning to a prefix
     --   operator, as it is a sigil for type annotations.
 dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
 dynaPfxOperStyle = IdentifierStyle
@@ -112,16 +115,6 @@ dynaOperStyle = IdentifierStyle
   , styleHighlight = Operator
   , styleReservedHighlight = ReservedOperator
   }
-
-dynaTypeStyle :: TokenParsing m => IdentifierStyle m
-dynaTypeStyle = IdentifierStyle
-  { styleName = "Type Annotation"
-  , styleStart = char ':'
-  , styleLetter   = (alphaNum <|> oneOf "_'")
-  , styleReserved = mempty
-  , styleHighlight = Operator
-  , styleReservedHighlight = ReservedOperator
-}
 
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
@@ -188,7 +181,7 @@ term  = token $ choice
       [       parens texpr
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
       , try $ spanned $ flip TFunctor [] <$> atom <* (notFollowedBy $ char '(')
-      , try $ spanned $ mkta <$> (bsf $ ident dynaTypeStyle) <* spaces <*> term
+      , try $ spanned $ mkta <$> (colon *> term) <* spaces <*> term
       ,       spanned $ parenfunc
       ]
  where
