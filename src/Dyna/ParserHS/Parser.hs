@@ -2,14 +2,18 @@
 -- | A parser for some chunk of the Dyna language, using Trifecta
 -- 
 -- Based in part on
--- https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs
+-- <https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs>
 -- as well as the trifecta code itself
 --
 -- TODO:
---  We might want to use T.T.Literate, too, in the end.
---  Doesn't understand dynabase literals ("{ ... }")
---  Doesn't handle parenthesized aggregators
---  Doesn't handle shared subgoals ("whenever ... { ... }")
+--
+--   * We might want to use T.T.Literate, too, in the end.
+--
+--   * Doesn't understand dynabase literals ("{ ... }")
+--
+--   * Doesn't handle parenthesized aggregators
+--
+--   * Doesn't handle shared subgoals ("whenever ... { ... }")
 
 -- Header material                                                      {{{
 
@@ -41,7 +45,7 @@ import           Text.Trifecta
 import           Dyna.XXX.Trifecta (identNL)
 
 ------------------------------------------------------------------------}}}
--- Parsed output definition                                             {{{
+{- * Parsed output definition -} --                                     {{{
 
 data Annotation = AnnType (Spanned Term)
  deriving (Eq,Ord,Show)
@@ -49,7 +53,7 @@ data Annotation = AnnType (Spanned Term)
 data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
           | TAnnot   Annotation !(Spanned Term)
           | TVar     {-# UNPACK #-} !B.ByteString
-           -- | TDBLit XXX
+           -- TDBLit XXX
  deriving (Eq,Ord,Show)
 
 -- | Rules are not just terms because we want to make it very syntactically
@@ -70,13 +74,13 @@ data Line = LRule (Spanned Rule)
 
 
 ------------------------------------------------------------------------}}}
--- Utilities                                                            {{{
+{- * Utilities -} --                                                    {{{
 
 bsf :: Functor f => f String -> f B.ByteString
 bsf = fmap BU.fromString
 
 ------------------------------------------------------------------------}}}
--- Identifier Syles                                                     {{{
+{- * Identifier Syles -} --                                             {{{
 
 usualpunct :: CS.CharSet
 usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
@@ -138,7 +142,7 @@ dynaVarStyle = IdentifierStyle
 
 
 ------------------------------------------------------------------------}}}
--- Comment handling                                                     {{{
+{- * Comment handling -} --                                             {{{
 
 dynaCommentStyle :: CommentStyle
 dynaCommentStyle =  CommentStyle
@@ -167,14 +171,14 @@ instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
   restOfLine = lift restOfLine
 
 ------------------------------------------------------------------------}}}
--- Atoms                                                                {{{
+{- * Atoms -} --                                                        {{{
 
 atom :: (Monad m, TokenParsing m) => m B.ByteString
 atom =     liftA BU.fromString stringLiteral
        <|> (bsf $ ident dynaAtomStyle)
 
 ------------------------------------------------------------------------}}}
--- Terms and term expressions                                           {{{
+{- * Terms and term expressions -} --                                   {{{
 
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
@@ -219,7 +223,7 @@ dterm  = unDL term
 dtexpr = unDL texpr 
 
 ------------------------------------------------------------------------}}}
--- Rules                                                                {{{
+{- * Rules -} --                                                        {{{
 
 -- | Grab the head (term!) and aggregation operator from a line that
 -- we hope is a rule.  
@@ -251,7 +255,7 @@ drule :: DeltaParsing m => m (Spanned Rule)
 drule = spanned rule
 
 ------------------------------------------------------------------------}}}
--- Lines                                                                {{{
+{- * Lines -} --                                                        {{{
 
 progline :: DeltaParsing m => m (Spanned Line)
 progline  = spanned $ choice [ LRule <$> drule

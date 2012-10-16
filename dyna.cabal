@@ -25,7 +25,10 @@ Library
 
     ghc-options:        -Wall
 
+
     Exposed-Modules:    Dyna.BackendK3.AST,
+                        Dyna.BackendK3.Automation,
+                        Dyna.BackendK3.Render
                         Dyna.ParserHS.Parser,
                         Dyna.NormalizeParse,
                         Dyna.XXX.Trifecta
@@ -43,7 +46,8 @@ Library
                         trifecta >=0.90,
                         unification-fd,
                         unordered-containers>=0.2,
-                        utf8-string >=0.3
+                        utf8-string >=0.3,
+                        wl-pprint-extras >=3.0
 
 Executable drepl
     Default-Language:   Haskell2010

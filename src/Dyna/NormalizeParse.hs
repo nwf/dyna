@@ -66,7 +66,7 @@ newEval pfx t = do
     put $ AS (vn + 1) (S.insert (n,t) evs)
     return $ TVar n
 
-    -- | Convert a syntactic term into ANF.
+-- | Convert a syntactic term into ANF.
 normalizeTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
                => Bool          -- ^ In an evaluation context?
                -> [T.Span]      -- ^ List of spans traversed

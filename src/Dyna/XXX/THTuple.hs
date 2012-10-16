@@ -20,7 +20,7 @@
 
 module Dyna.XXX.THTuple(
     -- * Promoted-kind type functions for tuples and rtuples
-  MKLT(..),MKRLT(..),
+  MKLT,MKRLT,
 
     -- * Classes on tuples and rtuples
   Tupled(..),RTupled(..),
@@ -57,33 +57,33 @@ $(mkMKRLTs ''MKRLT)
 ------------------------------------------------------------------------}}}
 -- Exported classes                                                     {{{
 
-  -- | Some type algebra on tuples full of constructed types
-  --   which is invariant over the constructor in question
-  --
-  --   e.g. RTER (a,b) r = (r a, r b)
+-- | Some type algebra on tuples full of constructed types
+--   which is invariant over the constructor in question
+--
+--   e.g. RTER (a,b) r = (r a, r b)
 class (MKLT (TOL base) ~ base) => Tupled base where
-    -- | Apply r to each element of the tuple
+  -- | Apply r to each element of the tuple
   type RTER base (r :: * -> *) :: *
 
   -- | Go from the tuple representation to a promoted list;
   --   the inverse of MKLT (as asserted by class constraints).
   type TOL base :: [*]
 
-    -- | Shed a type constructor
+  -- | Shed a type constructor
   tupleopR  :: (RTupled rbase, (RTR rbase) ~ r, (RTE rbase) ~ base)
             => (forall x . r x -> x) -> rbase -> base
 
-    -- | Remap a type constructor
+  -- | Remap a type constructor
   tupleopRS :: (RTupled rbase, (RTR rbase) ~ r, (RTE rbase) ~ base,
                 RTupled sbase, (RTR sbase) ~ s, (RTE sbase) ~ base)
             => (forall x . r x -> s x) -> rbase -> sbase
 
-  -- | Recover the constructor and base type from r-full tuples.
-  --
-  -- e.g. RTR (r a, r b) = r, RTE (r a, r b) = (a, b)
-  --
-  -- This class further specifies some equivalence properties
-  -- on RTER and MKRLT.
+-- | Recover the constructor and base type from r-full tuples.
+--
+-- e.g. RTR (r a, r b) = r, RTE (r a, r b) = (a, b)
+--
+-- This class further specifies some equivalence properties
+-- on RTER and MKRLT.
 class (Tupled (RTE arred),
        RTER (RTE arred) (RTR arred) ~ arred,
        MKRLT (RTR arred) (TOL (RTE arred)) ~ arred
@@ -92,7 +92,7 @@ class (Tupled (RTE arred),
   type RTR arred :: (* -> *)
   type RTE arred :: *
 
-    -- | Eliminate an rtuple out to a list.
+  -- | Eliminate an rtuple out to a list.
   tupleopEL :: (RTR arred ~ r) => (forall x . r x -> a) -> arred -> [a]
 
 ------------------------------------------------------------------------}}}

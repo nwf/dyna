@@ -29,7 +29,7 @@ import           Language.Haskell.TH (varT, mkName)
 import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
--- Preliminaries                                                        {{{
+{- * Preliminaries -} --                                                {{{
 
   -- XXX
 newtype VarIx  = Var String
@@ -40,7 +40,7 @@ newtype AddrIx = Addr (String,Int)
 data Ann = Ann [String]
 
 ------------------------------------------------------------------------}}}
--- Collections                                                          {{{
+{- * Collections -} --                                                  {{{
 
 data CKind = CBag | CList | CSet
 
@@ -52,7 +52,7 @@ data CollTy c where
   CTSet  :: CollTy CSet
 
 ------------------------------------------------------------------------}}}
--- Effectables (XXX TODO)                                               {{{
+{- * Effectables (XXX TODO) -} --                                       {{{
 
 {-
 data MKind = MKImmut | MKMut
@@ -71,7 +71,7 @@ data VTy v where
 data Ref a = Ref
 
 ------------------------------------------------------------------------}}}
--- Type System                                                          {{{
+{- * Type System -} --                                                  {{{
 
   -- | Data level representation of K3 types, indexed by equivalent type in
   -- Haskell.
@@ -138,11 +138,15 @@ instance (K3BaseTy a) => K3BaseTy (Ref a)
 $(mkTupleRecInstances ''K3BaseTy [])
 
 ------------------------------------------------------------------------}}}
--- Pattern System                                                       {{{
+{- * Pattern System -} --                                               {{{
 
-  -- | Kinds of patterns permitted in K3
+-- | Kinds of patterns permitted in K3
 data PKind where
+  -- | Variables in patterns
   PKVar  :: k -> PKind
+
+  -- | Wildcards in patterns
+  PKUnk  :: k -> PKind
 
   -- | Just patterns (fail on Nothing)
   --
@@ -157,32 +161,32 @@ data PKind where
   -- producing tuples.
   PKTup  :: [PKind] -> PKind
 
-  -- | Provides witnesses that certain types may be used
-  --   as arguments to K3 lambdas.  Useful when building
-  --   up type signatures and pattern matches in lambdas.
-  --
-  --   Note that this is a closed class using the promoted
-  --   data PKind.
-  --
-  --   PatDa is needed for Render's function, since every
-  --   lambda needs an explicit type signature on its variable.
-  --
-  --   Essentially, these things determine where "r"s end up
-  --   in the lambda given to eLam.  Compare and contrast:
-  --     eLam (PVar $ tMaybe tInt)            :: (r (Maybe Int)  -> _) -> _
-  --     eLam (PJust $ PVar tInt)             :: (r Int          -> _) -> _
-  --
-  --     eLam (PVar $ tPair tInt tInt)        :: (r (Int, Int)   -> _) -> _
-  --     eLam (PPair (PVar tInt) (PVar tInt)) :: ((r Int, r Int) -> _) -> _
-  --
+-- | Provides witnesses that certain types may be used
+--   as arguments to K3 lambdas.  Useful when building
+--   up type signatures and pattern matches in lambdas.
+--
+--   Note that this is a closed class using the promoted
+--   data PKind.
+--
+--   PatDa is needed for Render's function, since every
+--   lambda needs an explicit type signature on its variable.
+--
+--   Essentially, these things determine where "r"s end up
+--   in the lambda given to eLam.  Compare and contrast:
+--     eLam (PVar $ tMaybe tInt)            :: (r (Maybe Int)  -> _) -> _
+--     eLam (PJust $ PVar tInt)             :: (r Int          -> _) -> _
+--
+--     eLam (PVar $ tPair tInt tInt)        :: (r (Int, Int)   -> _) -> _
+--     eLam (PPair (PVar tInt) (PVar tInt)) :: ((r Int, r Int) -> _) -> _
+--
 class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
-    -- | Any data this witness needs to carry around
+  -- | Any data this witness needs to carry around
   data PatDa w :: *
-    -- | The type this witness witnesses (i.e. the things matched against)
+  -- | The type this witness witnesses (i.e. the things matched against)
   type PatTy w :: *
-    -- | The type this witness binds (i.e. after matching is done)
+  -- | The type this witness binds (i.e. after matching is done)
   type PatBTy w :: *
-    -- | The type of this pattern.
+  -- | The type of this pattern.
   type PatReprFn (r :: * -> *) w :: *
 
 type family UnPatDa (pd :: *) :: PKind
@@ -193,6 +197,12 @@ instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
   type PatTy     (PKVar a)   =   a
   type PatBTy    (PKVar a)   =   a
   type PatReprFn r (PKVar a) = r a
+
+instance (K3BaseTy a) => Pat (PKUnk (a :: *)) where
+  data PatDa     (PKUnk a)   = PUnk
+  type PatTy     (PKUnk a)   =   a
+  type PatBTy    (PKUnk a)   =   ()
+  type PatReprFn r (PKUnk a) = r ()
 
 instance (Pat w) => Pat (PKJust w) where
   data PatDa (PKJust w)       = PJust (PatDa w)
@@ -223,9 +233,9 @@ instance (ts ~ UnMapPatDa (MapPatDa ts))
   type PatReprFn r (PKTup ts)   = MapPatReprFn r ts
 
 ------------------------------------------------------------------------}}}
--- Slice System                                                         {{{
+{- * Slice System -} --                                                 {{{
 
-  -- | Kinds of slices permitted in K3
+-- | Kinds of slices permitted in K3
 data SKind where
   SKVar  :: r -> k -> SKind
   SKUnk  :: k -> SKind
@@ -233,7 +243,7 @@ data SKind where
 
   SKTup  :: [SKind] -> SKind
 
-  -- | Witness of slice well-formedness
+-- | Witness of slice well-formedness
 class Slice r (w :: SKind) where
   data SliceDa w :: *
   type SliceTy w :: *
@@ -274,20 +284,19 @@ instance (ts ~ UnMapSliceDa (MapSliceDa ts), MapSliceConst ts r)
   data SliceDa   (SKTup ts)   = STup (MapSliceDa ts)
   type SliceTy   (SKTup ts)   = MapSliceTy ts
 
-
 ------------------------------------------------------------------------}}}
--- Numeric Autocasting                                                  {{{
+{- * Numeric Autocasting -} --                                          {{{
 
   -- XXX should we make these be constraints in the K3 class so that
   -- different representations can make different choices?
 
-  -- | Unary numerics
+-- | Unary numerics
 class UnNum a where unneg :: a -> a
 instance UnNum Bool  where unneg = not
 instance UnNum Int   where unneg x = (-x)
 instance UnNum Float where unneg x = (-x)
 
-  -- | Binary numerics
+-- | Binary numerics
 class BiNum a b where 
   type BNTF a b :: *
   biadd :: a -> b -> BNTF a b
@@ -311,23 +320,23 @@ instance BiNum Float Float where
   -- XXX More
 
 ------------------------------------------------------------------------}}}
--- Values and Expressions                                               {{{
+{- * Values and Expressions -} --                                       {{{
 
 class K3 (r :: * -> *) where
-    -- | A representation-specific constraint for collections, on functions
-    -- which need to dispatch on a type-tag in the output.
+  -- | A representation-specific constraint for collections, on functions
+  -- which need to dispatch on a type-tag in the output.
   type K3AST_Coll_C r (c :: CKind) :: Constraint
 
-    -- | A representation-specific constraint on handling patterns, on any
-    -- function which uses patterns.
+  -- | A representation-specific constraint on handling patterns, on any
+  -- function which uses patterns.
   type K3AST_Pat_C r (w :: PKind) :: Constraint
 
-    -- | A representation-specific constraint for slices, on eSlice.
+  -- | A representation-specific constraint for slices, on eSlice.
   type K3AST_Slice_C r (w :: SKind) :: Constraint
 
-    -- | Add a comment to some part of the AST
+  -- | Add a comment to some part of the AST
   cComment  :: String -> r a -> r a
-    -- | Add some annotations to some part of the AST
+  -- | Add some annotations to some part of the AST
   cAnn      :: Ann -> r a -> r a
 
     -- XXX An escape hatch
@@ -347,12 +356,12 @@ class K3 (r :: * -> *) where
 
   eVar      :: VarIx -> UnivTyRepr a -> r a
 
-  eJust     :: r a -> r (Maybe t)
+  eJust     :: r a -> r (Maybe a)
 
     -- XXX TUPLES
   eTuple2   :: (r a, r b) -> r (a,b)
   eTuple3   :: (r a, r b, r c) -> r (a,b,c)
-  eTuple4   :: (r a, r b, r c) -> r (a,b,c)
+  eTuple4   :: (r a, r b, r c,r d) -> r (a,b,c,d)
   -- eTuple    :: K3RTuple r a -> r a
 
   eEmpty    :: (K3AST_Coll_C r c) => r (CTE c e)
@@ -370,8 +379,13 @@ class K3 (r :: * -> *) where
   eLeq      :: r a -> r a -> r Bool
   eNeq      :: r a -> r a -> r Bool
 
-    -- Unlike traditional lambdas, we require a witness
-    -- that the argument is admissible in K3.
+  -- | A lambda application in K3.
+  --
+  -- Unlike traditional lambdas, we require some hints as to how to
+  -- destructure the argument (PatTy w) for the lambda; consider (\x -> x)
+  -- (1,2) vs (\(x,y) -> eTuple2 (x,y)) (1,2): the former has a HOAS lambda
+  -- of type (r (a,b) -> r (a,b)) while the latter has ((r a, r b) -> r
+  -- (a,b)).
   eLam      :: (K3AST_Pat_C r w, Pat w, K3BaseTy (PatTy w))
             => PatDa w -> (PatReprFn r w -> r b) -> r (PatTy w -> b)
   eApp      :: r (a -> b) -> r a -> r b
@@ -387,14 +401,14 @@ class K3 (r :: * -> *) where
 
   eFlatten  :: r (CTE c (CTE c' t)) -> r (CTE c' t)
 
-    -- | Called Aggregate in K3's AST
+  -- | Called Aggregate in K3's AST
   eFold     :: r ((t', t) -> t') -> r t' -> r (CTE c t) -> r t'
 
-    -- | Group-By-Aggregate.
-    --
-    -- Note that the Fold argument is guaranteed to be called
-    -- once per partition: any partitions that would be the Zero
-    -- are not created by the Partitioner.
+  -- | Group-By-Aggregate.
+  --
+  -- Note that the Fold argument is guaranteed to be called
+  -- once per partition: any partitions that would be the Zero
+  -- are not created by the Partitioner.
   eGBA      :: r (t -> t'')       -- ^ Partitioner
             -> r ((t',t) -> t')   -- ^ Folder
             -> r t'               -- ^ Zero for each partition
@@ -405,19 +419,19 @@ class K3 (r :: * -> *) where
             -> r ((t,t) -> Bool)  -- ^ Less-or-equal
             -> r (CTE 'CList t)
 
-    -- | Peek an element from a collection.
-    --
-    -- Fails on empty collections.
-    --
-    -- For lists, this returns the head; for sets and bags
-    -- it samples arbitrarily.
+  -- | Peek an element from a collection.
+  --
+  -- Fails on empty collections.
+  --
+  -- For lists, this returns the head; for sets and bags
+  -- it samples arbitrarily.
   ePeek     :: r (CTE c e) -> r e
 
-    -- | Slice out from a collection; the slice's type and
-    -- the type of elements of the collection must match.
-    --
-    -- Rather like lambdas, except that the witness is also
-    -- a mandatory part of the definition of "slice" :)
+  -- | Slice out from a collection; the slice's type and
+  -- the type of elements of the collection must match.
+  --
+  -- Rather like lambdas, except that the witness is also
+  -- a mandatory part of the definition of "slice" :)
   eSlice    :: (K3AST_Slice_C r w, Slice r w, SliceTy w ~ t)
             => SliceDa w -> r (CTE c t) -> r (CTE c t)
 
@@ -431,15 +445,15 @@ class K3 (r :: * -> *) where
   -- XXX eSend
 
 ------------------------------------------------------------------------}}}
--- Miscellany                                                           {{{
+{- * Miscellany -} --                                                   {{{
 
   -- XXX does not enumerate local variables
 data Decl tr r t = Decl VarIx (tr t) (Maybe (r t))
 
-  -- | A convenience function for setting the type of a collection.
-  --
-  -- Use as (eEmpty `asColl` CTSet)
-asColl :: r (CTE c t) -> CollTy c -> r (CTE c t)
+-- | A convenience function for setting the type of a collection.
+--
+-- Use as (eEmpty `asColl` CTSet)
+asColl :: r (CTE r c t) -> CollTy c -> r (CTE r c t)
 asColl = const
 
 ------------------------------------------------------------------------}}}

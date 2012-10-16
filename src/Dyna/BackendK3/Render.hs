@@ -28,8 +28,11 @@ import qualified Language.Haskell.TH as TH
 ------------------------------------------------------------------------}}}
 -- Type handling                                                        {{{
 
-    -- | Unlike AsK3 below, we don't need to thread a variable counter
-    --   around since K3 doesn't have tyvars
+------------------------------------------------------------------------}}}
+{- * Type handling -} --                                                {{{
+
+-- | Unlike AsK3 below, we don't need to thread a variable counter
+--   around since K3 doesn't have tyvars
 newtype AsK3Ty e (a :: *) = AsK3Ty { unAsK3Ty :: Doc e }
 
 instance K3Ty (AsK3Ty e) where

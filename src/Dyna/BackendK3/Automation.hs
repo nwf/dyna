@@ -28,20 +28,17 @@ module Dyna.BackendK3.Automation (
 ) where
 
 import           Data.Word
-import           Text.PrettyPrint.Free
-
 import           Dyna.BackendK3.AST
-import           Dyna.BackendK3.Render
 
 ------------------------------------------------------------------------}}}
 -- Automate collection type                                             {{{
 
-  -- | Demote a collection type annotation (of kind CKind) to the
-  -- appropriate chunk of data for case analysis.
-  --
-  -- Note that this only works once the type has become monomorphic;
-  -- otherwise it imposes a constraint on the haskell tyvar.
-  -- (This is a total function)
+-- | Demote a collection type annotation (of kind CKind) to the
+-- appropriate chunk of data for case analysis.
+--
+-- Note that this only works once the type has become monomorphic;
+-- otherwise it imposes a constraint on the haskell tyvar.
+-- (This is a total function)
 class K3AutoColl (c :: CKind) where autocoll :: CollTy c
 instance K3AutoColl CBag where autocoll = CTBag
 instance K3AutoColl CList where autocoll = CTList
@@ -50,11 +47,11 @@ instance K3AutoColl CSet where autocoll = CTSet
 ------------------------------------------------------------------------}}}
 -- Automate type                                                        {{{
 
-  -- | Attempt to automatically derive a universal type representation.
-  --
-  -- Note that this only works once the type has become monomorphic;
-  -- otherwise it imposes a constraint on the haskell tyvar.
-  -- (This is a total function)
+-- | Attempt to automatically derive a universal type representation.
+--
+-- Note that this only works once the type has become monomorphic;
+-- otherwise it imposes a constraint on the haskell tyvar.
+-- (This is a total function)
 class    K3AutoTy a      where autoty :: UnivTyRepr a
 instance K3AutoTy Bool   where autoty = tBool
 instance K3AutoTy Word8  where autoty = tByte
@@ -95,7 +92,7 @@ instance (K3AutoTyTup (wa ': w) (a,b), K3AutoTyTup w b)
 ------------------------------------------------------------------------}}}
 -- K3 Macro Library (XXX WIP)                                           {{{
 
-  -- | Let as lambda
+-- | Let as lambda
 macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
                 => UnivTyRepr a
                 -> (r a)
@@ -103,7 +100,7 @@ macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
                 -> r b
 macro_localVar w a b = eApp (eLam (PVar w) b) a
 
-  -- | Case analyze a Maybe
+-- | Case analyze a Maybe
 macro_caseMaybe :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKJust (PKVar a)))
                 => UnivTyRepr a
                 -> r (Maybe a)
@@ -114,7 +111,7 @@ macro_caseMaybe w m n b = eITE (eEq m cNothing)
                                n
                                (eApp (eLam (PJust (PVar w)) b) m)
 
-  -- | Case analyze a collection as either empty or a peeked element
+-- | Case analyze a collection as either empty or a peeked element
 macro_emptyPeek :: (K3AST_Coll_C r c, K3AST_Pat_C r (PKVar a),
                     K3 r, K3BaseTy a, K3AutoTy a)
                 => r (CTE c a) -> r b -> (r a -> r b) -> r b

@@ -90,7 +90,7 @@ mkTyMapFlatN nargs _ty _fn size = do
                  (appT afn . varT)
                  names
 
-  -- | The composition of MKLT a mkTyMap result.
+-- | The composition mkTyMap (MKLT a)
 mkTyMapFlat a b c = foreachTupleSize (mkTyMapFlatN a b c)
 
 mkTyUnMapN :: Int -> Name -> Name -> Int -> Q Dec
