@@ -35,16 +35,36 @@ import           Dyna.XXX.THTuple
 newtype VarIx  = Var String
   -- XXX (Hostname,Port)
 newtype AddrIx = Addr (String,Int)
+ deriving (Eq,Show)
+
+    -- XXX This has a phantom type only so that we can use it as an r
+    -- in RTupled.  We'd rather not (see .Render's need to use fdscast)
+data FunDepSpec a = FDIrr | FDDom | FDCod
+ deriving (Eq,Show)
 
   -- XXX should really do something smarter
-data Ann = Ann [String]
+data Ann a where
+
+  -- | Decorate an expression as atomic.
+  AAtomic :: Ann a
+
+  -- | A functional dependency among elements of a collection.
+  AFunDep :: (RTupled fs, RTE fs ~ a, RTR fs ~ FunDepSpec)
+          => fs -> Ann (CTE r t a)
+
+  -- | An "Exactly-One-Of" annotation, used to convey variants (i.e. sums)
+  --   to K3.
+  AOneOf  :: (RTupled mv, RTR mv ~ Maybe) => Ann mv
+
+  -- | An escape hatch! (XXX)
+  AMisc :: String -> Ann a
 
 ------------------------------------------------------------------------}}}
 {- * Collections -} --                                                  {{{
 
 data CKind = CBag | CList | CSet
 
-data CTE (c :: CKind) e
+data family CTE (r :: * -> *) (c :: CKind) e
 
 data CollTy c where
   CTBag  :: CollTy CBag
@@ -68,30 +88,43 @@ data VTy v where
   VTCont :: VTy VKCont
 -}
 
-data Ref a = Ref
+data family Ref (r :: * -> *) a
 
 ------------------------------------------------------------------------}}}
 {- * Type System -} --                                                  {{{
 
-  -- | Data level representation of K3 types, indexed by equivalent type in
-  -- Haskell.
+-- | A constraint for "base" types in K3.  These are the things that can
+-- be passed to lambdas.  Essentially everything other than arrows.
+class    K3BaseTy a
+instance K3BaseTy Bool
+instance K3BaseTy Word8
+instance K3BaseTy Float
+instance K3BaseTy Int
+instance K3BaseTy String
+instance K3BaseTy ()
+instance (K3BaseTy a) => K3BaseTy (CTE r c a)
+instance (K3BaseTy a) => K3BaseTy (Maybe a)
+instance (K3BaseTy a) => K3BaseTy (Ref r a)
+$(mkTupleRecInstances ''K3BaseTy [])
+
+-- | Data level representation of K3 types, indexed by equivalent type in
+-- Haskell.
 class K3Ty (r :: * -> *) where
-    -- | Attach an annotation to a type
-  tAnn    :: Ann -> r a -> r a
+  -- | Attach an annotation to a type
+  tAnn    :: r a -> [Ann a] -> r a
 
-  tBool   :: r Bool
-  tByte   :: r Word8
-  tFloat  :: r Float
-  tInt    :: r Int
-  tString :: r String
-  tUnit   :: r ()
-
-{- TAddress | TTarget BaseTy -}
+  tAddress :: r AddrIx
+  tBool    :: r Bool
+  tByte    :: r Word8
+  tFloat   :: r Float
+  tInt     :: r Int
+  tString  :: r String
+  tUnit    :: r ()
 
   -- tPair   :: r a -> r b -> r (a,b)
   tMaybe  :: r a -> r (Maybe a)
-  tRef    :: r a -> r (Ref a)
-  tColl   :: CollTy c -> r a -> r (CTE c a)
+  tRef    :: r a -> r (Ref r' a)
+  tColl   :: (K3BaseTy a) => CollTy c -> r a -> r (CTE r' c a)
   tFun    :: r a -> r b -> r (a -> b)
 
   -- XXX TUPLES
@@ -99,12 +132,15 @@ class K3Ty (r :: * -> *) where
   tTuple2 :: (r a, r b) -> r (a,b)
   tTuple3 :: (r a, r b, r c) -> r (a,b,c)
   tTuple4 :: (r a, r b, r c, r d) -> r (a,b,c,d)
+  tTuple5 :: (r a, r b, r c, r d, r e) -> r (a,b,c,d,e)
 
-  -- | Universal typeclass wrapper for K3Ty
+-- | Universal typeclass wrapper for K3Ty
 newtype UnivTyRepr (a :: *) = UTR { unUTR :: forall r . (K3Ty r) => r a }
 
 instance K3Ty UnivTyRepr where
-  tAnn   s (UTR t)               = UTR $ tAnn s t
+  tAnn   (UTR t) s               = UTR $ tAnn t s
+
+  tAddress                       = UTR tAddress
   tBool                          = UTR tBool
   tByte                          = UTR tByte
   tFloat                         = UTR tFloat
@@ -122,20 +158,8 @@ instance K3Ty UnivTyRepr where
   tTuple2  us              = UTR $ tTuple2 $ tupleopRS unUTR us
   tTuple3  us              = UTR $ tTuple3 $ tupleopRS unUTR us
   tTuple4  us              = UTR $ tTuple4 $ tupleopRS unUTR us
+  tTuple5  us              = UTR $ tTuple5 $ tupleopRS unUTR us
 
-  -- | A constraint for "base" types in K3.  These are the things that can
-  -- be passed to lambdas.  Essentially everything other than arrows.
-class    K3BaseTy a
-instance K3BaseTy Bool
-instance K3BaseTy Word8
-instance K3BaseTy Float
-instance K3BaseTy Int
-instance K3BaseTy String
-instance K3BaseTy ()
-instance (K3BaseTy a) => K3BaseTy (CTE c a)
-instance (K3BaseTy a) => K3BaseTy (Maybe a)
-instance (K3BaseTy a) => K3BaseTy (Ref a)
-$(mkTupleRecInstances ''K3BaseTy [])
 
 ------------------------------------------------------------------------}}}
 {- * Pattern System -} --                                               {{{
@@ -337,7 +361,7 @@ class K3 (r :: * -> *) where
   -- | Add a comment to some part of the AST
   cComment  :: String -> r a -> r a
   -- | Add some annotations to some part of the AST
-  cAnn      :: Ann -> r a -> r a
+  cAnn      :: r a -> [Ann a] -> r a
 
     -- XXX An escape hatch
     --
@@ -345,7 +369,7 @@ class K3 (r :: * -> *) where
     -- we handle with SKUnk/SUnk.
   -- cUnk      :: r a 
 
-    -- XXX cAddress  :: AddrIx -> r AddrIx
+  cAddress  :: AddrIx -> r AddrIx
   cBool     :: Bool -> r Bool
   cByte     :: Word8 -> r Word8
   cFloat    :: Float -> r Float
@@ -364,20 +388,20 @@ class K3 (r :: * -> *) where
   eTuple4   :: (r a, r b, r c,r d) -> r (a,b,c,d)
   -- eTuple    :: K3RTuple r a -> r a
 
-  eEmpty    :: (K3AST_Coll_C r c) => r (CTE c e)
-  eSing     :: (K3AST_Coll_C r c) => r e -> r (CTE c e)
-  eCombine  :: r (CTE c e) -> r (CTE c e) -> r (CTE c e)
-  eRange    :: r Int -> r Int -> r Int -> r (CTE c Int)
+  eEmpty    :: (K3AST_Coll_C r c) => r (CTE r c e)
+  eSing     :: (K3AST_Coll_C r c) => r e -> r (CTE r c e)
+  eCombine  :: r (CTE r c e) -> r (CTE r c e) -> r (CTE r c e)
+  eRange    :: r Int -> r Int -> r Int -> r (CTE r c Int)
 
   eAdd      :: (BiNum a b) => r a -> r b -> r (BNTF a b)
   eMul      :: (BiNum a b) => r a -> r b -> r (BNTF a b)
   eNeg      :: (UnNum a)   => r a -> r a 
 
     -- XXX Constraints?
-  eEq       :: r a -> r a -> r Bool
-  eLt       :: r a -> r a -> r Bool
-  eLeq      :: r a -> r a -> r Bool
-  eNeq      :: r a -> r a -> r Bool
+  eEq       :: (K3BaseTy a) => r a -> r a -> r Bool
+  eLt       :: (K3BaseTy a) => r a -> r a -> r Bool
+  eLeq      :: (K3BaseTy a) => r a -> r a -> r Bool
+  eNeq      :: (K3BaseTy a) => r a -> r a -> r Bool
 
   -- | A lambda application in K3.
   --
@@ -392,17 +416,17 @@ class K3 (r :: * -> *) where
 
   eBlock    :: [r ()] -> r a -> r a
 
-  eIter     :: r (t -> ()) -> r (CTE c t) -> r ()
+  eIter     :: r (t -> ()) -> r (CTE r c t) -> r ()
 
   eITE      :: r Bool -> r a -> r a -> r a
 
-  eMap      :: r (t -> t') -> r (CTE c t) -> r (CTE c t')
-  eFiltMap  :: r (t -> Bool) -> r (t -> t') -> r (CTE c t) -> r (CTE c t')
+  eMap      :: r (t -> t') -> r (CTE r c t) -> r (CTE r c t')
+  eFiltMap  :: r (t -> Bool) -> r (t -> t') -> r (CTE r c t) -> r (CTE r c t')
 
-  eFlatten  :: r (CTE c (CTE c' t)) -> r (CTE c' t)
+  eFlatten  :: r (CTE r c (CTE r c' t)) -> r (CTE r c' t)
 
   -- | Called Aggregate in K3's AST
-  eFold     :: r ((t', t) -> t') -> r t' -> r (CTE c t) -> r t'
+  eFold     :: r ((t', t) -> t') -> r t' -> r (CTE r c t) -> r t'
 
   -- | Group-By-Aggregate.
   --
@@ -412,12 +436,12 @@ class K3 (r :: * -> *) where
   eGBA      :: r (t -> t'')       -- ^ Partitioner
             -> r ((t',t) -> t')   -- ^ Folder
             -> r t'               -- ^ Zero for each partition
-            -> r (CTE c t)        -- ^ Input collection
-            -> r (CTE c (t'',t'))
+            -> r (CTE r c t)        -- ^ Input collection
+            -> r (CTE r c (t'',t'))
 
-  eSort     :: r (CTE c t)        -- ^ Input collection
+  eSort     :: r (CTE r c t)        -- ^ Input collection
             -> r ((t,t) -> Bool)  -- ^ Less-or-equal
-            -> r (CTE 'CList t)
+            -> r (CTE r 'CList t)
 
   -- | Peek an element from a collection.
   --
@@ -425,7 +449,7 @@ class K3 (r :: * -> *) where
   --
   -- For lists, this returns the head; for sets and bags
   -- it samples arbitrarily.
-  ePeek     :: r (CTE c e) -> r e
+  ePeek     :: r (CTE r c e) -> r e
 
   -- | Slice out from a collection; the slice's type and
   -- the type of elements of the collection must match.
@@ -433,16 +457,18 @@ class K3 (r :: * -> *) where
   -- Rather like lambdas, except that the witness is also
   -- a mandatory part of the definition of "slice" :)
   eSlice    :: (K3AST_Slice_C r w, Slice r w, SliceTy w ~ t)
-            => SliceDa w -> r (CTE c t) -> r (CTE c t)
+            => SliceDa w     -- ^ Slice specification
+            -> r (CTE r c t) -- ^ Input collection
+            -> r (CTE r c t)
 
-  eInsert   :: r (CTE c t) -> r t -> r ()
-  eDelete   :: r (CTE c t) -> r t -> r ()
-  eUpdate   :: r (CTE c t) -> r t -> r t -> r ()
+  eInsert   :: r (CTE r c t) -> r t -> r ()
+  eDelete   :: r (CTE r c t) -> r t -> r ()
+  eUpdate   :: r (CTE r c t) -> r t -> r t -> r ()
 
-  eAssign   :: r (Ref t) -> r t -> r ()
-  eDeref    :: r (Ref t) -> r t
+  eAssign   :: r (Ref r t) -> r t -> r ()
+  eDeref    :: r (Ref r t) -> r t
 
-  -- XXX eSend
+  eSend     :: r AddrIx -> r (a -> ()) -> r a -> r ()
 
 ------------------------------------------------------------------------}}}
 {- * Miscellany -} --                                                   {{{

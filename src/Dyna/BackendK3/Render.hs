@@ -17,16 +17,32 @@ module Dyna.BackendK3.Render where
 
 import           Control.Monad.Identity
 import           Control.Monad.State
+import qualified Data.List              as DL
 import           Text.PrettyPrint.Free
 
 import           Dyna.BackendK3.AST
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
 
-import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH    as TH
 
 ------------------------------------------------------------------------}}}
--- Type handling                                                        {{{
+{- * Annotations -} --                                                  {{{
+
+annText :: Ann a -> Doc e
+annText  AAtomic     = "atomic"
+annText  AOneOf      = "oneof"
+annText (AMisc s)    = text s
+annText (AFunDep fs) = let x = tupleopEL (fdscast) fs
+                        in let (dom,cod) = (DL.elemIndices FDDom x 
+                                           ,DL.elemIndices FDCod x)
+                        in     (tupled $ map pretty dom)
+                           <+> "->"
+                           <+> (tupled $ map pretty cod)
+ where
+  fdscast FDIrr = FDIrr
+  fdscast FDDom = FDDom
+  fdscast FDCod = FDCod
 
 ------------------------------------------------------------------------}}}
 {- * Type handling -} --                                                {{{
@@ -36,16 +52,16 @@ import qualified Language.Haskell.TH as TH
 newtype AsK3Ty e (a :: *) = AsK3Ty { unAsK3Ty :: Doc e }
 
 instance K3Ty (AsK3Ty e) where
-  tAnn (Ann anns) (AsK3Ty e) = AsK3Ty$ 
-       parens e <> " @ "
-    <> (encloseSep lbrace rbrace comma $ map text anns)
+  tAnn (AsK3Ty e) anns = AsK3Ty$ align $
+       e </> "@" <+> (encloseSep lbrace rbrace comma $ map annText anns)
 
-  tBool   = AsK3Ty$ "bool"
-  tByte   = AsK3Ty$ "byte"
-  tFloat  = AsK3Ty$ "float"
-  tInt    = AsK3Ty$ "int"
-  tString = AsK3Ty$ "string"
-  tUnit   = AsK3Ty$ "unit"
+  tAddress = AsK3Ty$ "address"
+  tBool    = AsK3Ty$ "bool"
+  tByte    = AsK3Ty$ "byte"
+  tFloat   = AsK3Ty$ "float"
+  tInt     = AsK3Ty$ "int"
+  tString  = AsK3Ty$ "string"
+  tUnit    = AsK3Ty$ "unit"
 
   -- tPair (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ tupled [ ta, tb ]
 
@@ -63,13 +79,14 @@ instance K3Ty (AsK3Ty e) where
   tTuple2 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
   tTuple3 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
   tTuple4 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
+  tTuple5 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
 
 ------------------------------------------------------------------------}}}
 -- Collection handling                                                  {{{
 
 class K3CFn (c :: CKind) where
-  k3cfn_empty :: AsK3 e (CTE c a)
-  k3cfn_sing  :: AsK3 e vma -> AsK3 e (CTE c vma)
+  k3cfn_empty :: AsK3 e (CTE (AsK3 e) c a)
+  k3cfn_sing  :: AsK3 e vma -> AsK3 e (CTE (AsK3 e) c vma)
 
 instance K3CFn CSet where
   k3cfn_empty = AsK3$ const$ "{ }"
@@ -101,6 +118,9 @@ instance (K3PFn w) => K3PFn (PKJust w) where
     (p, r) <- k3pfn w
     return ("just " <> parens p, r)
 
+instance (K3BaseTy a) => K3PFn (PKUnk (a :: *)) where
+  k3pfn PUnk = return ("_", cUnit)
+
 ------------------------------------------------------------------------}}}
 -- Slice handling                                                       {{{
 
@@ -128,17 +148,19 @@ instance K3 (AsK3 e) where
   type K3AST_Pat_C (AsK3 e) p = K3PFn p
   type K3AST_Slice_C (AsK3 e) s = K3SFn e s
 
-  cAnn (Ann anns) (AsK3 e) = AsK3$ \n ->
+  cAnn (AsK3 e) anns = AsK3$ \n -> align $
        parens (e n) <> " @ "
-    <> (encloseSep lbrace rbrace comma $ map text anns)
+    <> (encloseSep lbrace rbrace comma $ map annText anns)
 
   cComment str (AsK3 a) = AsK3$ \n -> "\n// " <> text str <> "\n" <> a n
 
-  cBool   n      = AsK3$ const$ text$ show n
-  cByte   n      = AsK3$ const$ text$ show n
-  cFloat  n      = AsK3$ const$ text$ show n
-  cInt    n      = AsK3$ const$ text$ show n
-  cString n      = AsK3$ const$ text$ show n
+  cAddress (Addr (h,p)) = AsK3$ const$ (text h <> ":" <> pretty p)
+
+  cBool    n     = AsK3$ const$ text$ show n
+  cByte    n     = AsK3$ const$ text$ show n
+  cFloat   n     = AsK3$ const$ text$ show n
+  cInt     n     = AsK3$ const$ text$ show n
+  cString  n     = AsK3$ const$ text$ show n
   cNothing       = AsK3$ const$ "nothing"
   cUnit          = AsK3$ const$ "unit"
 
@@ -168,7 +190,7 @@ instance K3 (AsK3 e) where
   eNeq = binop "!="
 
   eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (k3pfn w) n
-                         in "\\" <> pat <+> "->" <+> align (unAsK3 (f arg) n')
+                         in "\\" <> pat <+> "->" `above` indent 2 (unAsK3 (f arg) n')
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
     parens (parens (f n) `aboveBreak` parens (x n))
@@ -200,7 +222,8 @@ instance K3 (AsK3 e) where
   eAssign          = binop "<-" 
   eDeref  (AsK3 r) = builtin "deref" [ r ]
     -- XXX that doesn't seem to actually be right!
-   
+  
+  eSend (AsK3 a) (AsK3 f) (AsK3 x) = builtin "send" [ a, f, x ] 
 
 ------------------------------------------------------------------------}}}
 -- Miscellany                                                           {{{
@@ -238,7 +261,7 @@ shd (Decl (Var name) tipe body) =
   <> unAsK3Ty tipe
   <> case body of
        Nothing -> empty
-       Just b  -> space <> equals <> space <> unAsK3 b 0
+       Just b  -> space <> equals `aboveBreak` (indent 2 $ unAsK3 b 0)
   <> semi
 
 ------------------------------------------------------------------------}}}

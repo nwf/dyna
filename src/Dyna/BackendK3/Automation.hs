@@ -59,10 +59,10 @@ instance K3AutoTy Float  where autoty = tFloat
 instance K3AutoTy Int    where autoty = tInt
 instance K3AutoTy String where autoty = tString
 instance K3AutoTy ()     where autoty = tUnit
-instance (K3AutoColl c, K3AutoTy a) => K3AutoTy (CTE c a) where
+instance (K3AutoColl c, K3AutoTy a, K3BaseTy a) => K3AutoTy (CTE r c a) where
   autoty = tColl autocoll autoty
 instance (K3AutoTy a) => K3AutoTy (Maybe a) where autoty = tMaybe autoty
-instance (K3AutoTy a) => K3AutoTy (Ref a) where autoty = tRef autoty
+instance (K3AutoTy a) => K3AutoTy (Ref r a) where autoty = tRef autoty
 instance (K3AutoTy a, K3AutoTy b) => K3AutoTy (a -> b) where
   autoty = tFun autoty autoty
 
@@ -114,7 +114,7 @@ macro_caseMaybe w m n b = eITE (eEq m cNothing)
 -- | Case analyze a collection as either empty or a peeked element
 macro_emptyPeek :: (K3AST_Coll_C r c, K3AST_Pat_C r (PKVar a),
                     K3 r, K3BaseTy a, K3AutoTy a)
-                => r (CTE c a) -> r b -> (r a -> r b) -> r b
+                => r (CTE r c a) -> r b -> (r a -> r b) -> r b
 macro_emptyPeek c e l = eITE (eEq c eEmpty)
                              e
                              (eApp (eLam (PVar autoty) l) $ ePeek c)
