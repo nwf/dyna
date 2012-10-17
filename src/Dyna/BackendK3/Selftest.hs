@@ -27,7 +27,13 @@ displaySimple (SLine _   d) = showChar ' ' . displaySimple d
 displaySimple (SEffect _ d) =                displaySimple d
 
 render :: AsK3 e a -> String
-render = flip displaySimple [] . renderCompact . sh
+render = despace . flip displaySimple [] . renderCompact . sh
+ where
+  despace [] = []
+  despace [x] = [x]
+  despace (' ':xs@(' ':_)) = despace xs
+  despace (' ':xs) = ' ' : despace xs
+  despace (x  :xs) = x : despace xs
 
 ------------------------------------------------------------------------}}}
 -- Basic handling                                                       {{{
