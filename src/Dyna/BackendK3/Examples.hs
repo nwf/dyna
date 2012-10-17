@@ -49,11 +49,11 @@ testdecf = Decl (Var "f")
 
 testmfn = Decl (Var "negAddOne")
                (tFun tInt tInt)
-               $Just (eLam (PVar $ UTR tInt) (\a -> eNeg $ eAdd a $ cInt 1))
+               $Just (eLam (PVar tInt) (\a -> eNeg $ eAdd a $ cInt 1))
 
 booli = Decl (Var "booli")
              (tFun tBool tInt)
-             $ Just (eLam (PVar (UTR tBool)) (\b -> eITE b (cInt 1) (cInt 0)))
+             $ Just (eLam (PVar tBool) (\b -> eITE b (cInt 1) (cInt 0)))
 
 testcfn = Decl (Var "cfn")
                (tFun tInt $ tColl CTSet tInt)

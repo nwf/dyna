@@ -205,7 +205,7 @@ data PKind where
 --
 class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
   -- | Any data this witness needs to carry around
-  data PatDa w :: *
+  type PatDa w :: *
   -- | The type this witness witnesses (i.e. the things matched against)
   type PatTy w :: *
   -- | The type this witness binds (i.e. after matching is done)
@@ -214,22 +214,27 @@ class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
   type PatReprFn (r :: * -> *) w :: *
 
 type family UnPatDa (pd :: *) :: PKind
-type instance UnPatDa (PatDa w) = w
 
+data PVar a = PVar (UnivTyRepr a)
+type instance UnPatDa (PVar a) = PKVar a
 instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
-  data PatDa     (PKVar a)   = PVar { unPVar :: UnivTyRepr a }
+  type PatDa     (PKVar a)   = PVar a
   type PatTy     (PKVar a)   =   a
   type PatBTy    (PKVar a)   =   a
   type PatReprFn r (PKVar a) = r a
 
+data PUnk a = PUnk
+type instance UnPatDa (PUnk a)       = PKUnk a
 instance (K3BaseTy a) => Pat (PKUnk (a :: *)) where
-  data PatDa     (PKUnk a)   = PUnk
+  type PatDa     (PKUnk a)   = PUnk a
   type PatTy     (PKUnk a)   =   a
   type PatBTy    (PKUnk a)   =   ()
   type PatReprFn r (PKUnk a) = r ()
 
+data PJust a = PJust { unPJust :: a }
+type instance UnPatDa (PJust a)      = PKJust (UnPatDa a)
 instance (Pat w) => Pat (PKJust w) where
-  data PatDa (PKJust w)       = PJust (PatDa w)
+  type PatDa (PKJust w)       = PJust (PatDa w)
   type PatTy (PKJust w)       = Maybe (PatTy w)
   type PatBTy (PKJust w)      = PatBTy w
   type PatReprFn r (PKJust w) = PatReprFn r w
@@ -238,7 +243,7 @@ type family MapPatDa (x :: [PKind]) :: *
 $(mkTyMapFlat 0 ''MapPatDa ''PatDa)
 
 type family UnMapPatDa (x :: *) :: [PKind]
-$(mkTyUnMap 0 ''UnMapPatDa ''UnPatDa)
+$(mkTyUnMap Nothing 0 ''UnMapPatDa ''UnPatDa)
 
 type family MapPatTy (x :: [PKind]) :: *
 $(mkTyMapFlat 0 ''MapPatTy ''PatTy)
@@ -249,9 +254,11 @@ $(mkTyMapFlat 0 ''MapPatBTy ''PatBTy)
 type family MapPatReprFn   (r :: * -> *) (x :: [PKind]) :: *
 $(mkTyMapFlat 1 ''MapPatReprFn ''PatReprFn)
 
-instance (ts ~ UnMapPatDa (MapPatDa ts))
+$(mkTyUnMap (Just 'PKTup) 0 ''UnPatDa ''UnPatDa)
+
+instance (UnPatDa (MapPatDa ts) ~ 'PKTup ts)
       => Pat       (PKTup (ts :: [PKind])) where
-  data PatDa       (PKTup ts)   = PTup (MapPatDa ts)
+  type PatDa       (PKTup ts)   = MapPatDa ts
   type PatTy       (PKTup ts)   = MapPatTy ts
   type PatBTy      (PKTup ts)   = MapPatBTy ts
   type PatReprFn r (PKTup ts)   = MapPatReprFn r ts
@@ -268,23 +275,28 @@ data SKind where
   SKTup  :: [SKind] -> SKind
 
 -- | Witness of slice well-formedness
-class Slice r (w :: SKind) where
-  data SliceDa w :: *
+class (UnSliceDa (SliceDa w) ~ w) => Slice r (w :: SKind) where
+  type SliceDa w :: *
   type SliceTy w :: *
 
 type family UnSliceDa (pd :: *) :: SKind
-type instance UnSliceDa (SliceDa w) = w
 
+data SVar r a = SVar (r a)
+type instance UnSliceDa (SVar r a) = SKVar r a
 instance (K3BaseTy a, r0 ~ r) => Slice r0 (SKVar (r :: * -> *) (a :: *)) where
-  data SliceDa (SKVar r a) = SVar (r a)
+  type SliceDa (SKVar r a) = SVar r a
   type SliceTy (SKVar r a) = a
 
+data SUnk a = SUnk
+type instance UnSliceDa (SUnk a)       = SKUnk a
 instance (K3BaseTy a) => Slice r (SKUnk (a :: *)) where
-  data SliceDa (SKUnk a) = SUnk
+  type SliceDa (SKUnk a) = SUnk a
   type SliceTy (SKUnk a) = a
 
+data SJust a = SJust { unSJust :: a }
+type instance UnSliceDa (SJust a)      = SKJust (UnSliceDa a)
 instance (Slice r s) => Slice r (SKJust s) where
-  data SliceDa (SKJust s) = SJust (SliceDa s)
+  type SliceDa (SKJust s) = SJust (SliceDa s)
   type SliceTy (SKJust s) = Maybe (SliceTy s)
 
 type family SliceConst (x :: SKind) (r :: * -> *) :: Constraint
@@ -298,14 +310,16 @@ type family MapSliceDa (x :: [SKind]) :: *
 $(mkTyMapFlat 0 ''MapSliceDa ''SliceDa)
 
 type family UnMapSliceDa (x :: *) :: [SKind]
-$(mkTyUnMap 0 ''UnMapSliceDa ''UnSliceDa)
+$(mkTyUnMap Nothing 0 ''UnMapSliceDa ''UnSliceDa)
 
 type family MapSliceTy (x :: [SKind]) :: *
 $(mkTyMapFlat 0 ''MapSliceTy ''SliceTy)
 
-instance (ts ~ UnMapSliceDa (MapSliceDa ts), MapSliceConst ts r)
+$(mkTyUnMap (Just 'SKTup) 0 ''UnSliceDa ''UnSliceDa)
+
+instance (UnSliceDa (MapSliceDa ts) ~ 'SKTup ts, MapSliceConst ts r)
       => Slice r (SKTup (ts :: [SKind])) where
-  data SliceDa   (SKTup ts)   = STup (MapSliceDa ts)
+  type SliceDa   (SKTup ts)   = MapSliceDa ts
   type SliceTy   (SKTup ts)   = MapSliceTy ts
 
 ------------------------------------------------------------------------}}}
@@ -483,4 +497,3 @@ asColl :: r (CTE r c t) -> CollTy c -> r (CTE r c t)
 asColl = const
 
 ------------------------------------------------------------------------}}}
-

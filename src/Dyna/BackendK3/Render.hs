@@ -268,7 +268,7 @@ shd (Decl (Var name) tipe body) =
 -- Template Haskell splices                                             {{{
 
 $(mkLRecInstances (''K3PFn,[]) 'PKTup 
-                  ('k3pfn,'PTup,\ls -> TH.tupE [
+                  ('k3pfn,Nothing,\ls -> TH.tupE [
                                           TH.appE (TH.varE 'tupled)
                                           $ TH.listE
                                           $ map (TH.appE (TH.varE 'fst)) ls
@@ -280,7 +280,7 @@ $(do
     e <- liftM TH.varT $ TH.newName "e"
     n <- TH.newName "n"
     mkLRecInstances (''K3SFn,[e]) 'SKTup 
-                  ('k3sfn,'STup,\ls ->
+                  ('k3sfn,Nothing,\ls ->
                       TH.appE (TH.conE 'AsK3)
                     $ TH.lamE [TH.varP n]
                     $ TH.appE (TH.varE 'tupled)

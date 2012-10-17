@@ -51,7 +51,7 @@ case_pairfn :: Assertion
 case_pairfn = e @=? render k3
  where
   e  = "\\(x0:int ,x1:bool) -> x0"
-  k3 = eLam (PTup (PVar tInt, PVar tBool)) (\(a,_) -> a)
+  k3 = eLam (PVar tInt, PVar tBool) (\(a,_) -> a)
 
 ------------------------------------------------------------------------}}}
 -- Macro expansion test cases                                           {{{

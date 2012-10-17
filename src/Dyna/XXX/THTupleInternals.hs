@@ -93,8 +93,8 @@ mkTyMapFlatN nargs _ty _fn size = do
 -- | The composition mkTyMap (MKLT a)
 mkTyMapFlat a b c = foreachTupleSize (mkTyMapFlatN a b c)
 
-mkTyUnMapN :: Int -> Name -> Name -> Int -> Q Dec
-mkTyUnMapN nargs _ty _fn size = do
+mkTyUnMapN :: Maybe Name -> Int -> Name -> Name -> Int -> Q Dec
+mkTyUnMapN _mwr nargs _ty _fn size = do
   let ty = conT _ty
   let fn = conT _fn
   names <- mkNames size 
@@ -103,9 +103,10 @@ mkTyUnMapN nargs _ty _fn size = do
   let afn = genMap appT fn id args
 
   tySynInstD _ty (args++[mkTy size names])
+                 $ maybe id (\_wr -> appT (conT _wr)) _mwr
                  $ promoteList $ map (appT afn . varT) names
 
-mkTyUnMap a b c = foreachTupleSize (mkTyUnMapN a b c)
+mkTyUnMap a b c d = foreachTupleSize (mkTyUnMapN a b c d)
 
 ------------------------------------------------------------------------}}}
 -- Make Tuple                                                           {{{
@@ -221,10 +222,11 @@ mkRecInstances a b c d e = foreachTupleSize (mkRecInstance a b c d e)
 
 mkLRecInstance :: (Name, [TypeQ])              -- ^ Class name and args
                -> Name
-               -> (Name, Name, [ExpQ] -> ExpQ) -- ^ Function, data, and body
+               -> (Name, Maybe Name, [ExpQ] -> ExpQ)
+                                               -- ^ Function, data, and body
                -> Int                          -- ^ Tuple size
                -> Q Dec
-mkLRecInstance (_cname,_cargs) _tyf (_fn,_fpn,fm) n = do
+mkLRecInstance (_cname,_cargs) _tyf (_fn,_mfpn,fm) n = do
   names <- mkNames n
   let context = cxt $ map (\na -> classP _cname $ _cargs ++ [varT na]) names
   let conarg = (appT (conT _tyf) $ promoteList $ map varT names)
@@ -236,7 +238,7 @@ mkLRecInstance (_cname,_cargs) _tyf (_fn,_fpn,fm) n = do
   let res = noBindS $ appE (varE $ mkName "return") $ fm $ map varE resnames
 
   instanceD context (genMap appT (conT _cname) (id) $ _cargs ++ [conarg])
-            [funD _fn [clause [conP _fpn [tupP $ map varP names]]
+            [funD _fn [clause [maybe tupP conP _mfpn $ [tupP $ map varP names]]
                               (normalB $ doE $ stmts++[res])
                               []
                       ]
