@@ -71,7 +71,7 @@ instance K3Ty (AsK3Ty e) where
   tColl CTBag  (AsK3Ty ta) = AsK3Ty$ encBag   ta
   tColl CTList (AsK3Ty ta) = AsK3Ty$ brackets ta
 
-  tFun (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ ta <+> "->" <+> tb
+  tFun (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ ta `above` ("->" <+> tb)
 
   tRef (AsK3Ty ta) = AsK3Ty$ "ref" <+> ta
 
@@ -257,8 +257,7 @@ shd :: Decl (AsK3Ty e) (AsK3 e) t -> Doc e
 shd (Decl (Var name) tipe body) =
      "declare "
   <> text name
-  <> space <> colon <> space
-  <> unAsK3Ty tipe
+  <+> align (colon <+> unAsK3Ty tipe)
   <> case body of
        Nothing -> empty
        Just b  -> space <> equals `aboveBreak` (indent 2 $ unAsK3 b 0)

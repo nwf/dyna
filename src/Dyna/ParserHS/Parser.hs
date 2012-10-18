@@ -15,7 +15,7 @@
 --
 --   * Doesn't handle shared subgoals ("whenever ... { ... }")
 
--- Header material                                                      {{{
+{-   Header material -} --                                              {{{
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}

@@ -52,6 +52,10 @@ data Ann a where
   AFunDep :: (RTupled fs, RTE fs ~ a, RTR fs ~ FunDepSpec)
           => fs -> Ann (CTE r t a)
 
+  -- XXX Declare an additional index
+  -- AIndex :: (RTupled fs, RTE fs ~ a, RTR fs ~ FunDepSpec)
+  --        => fs -> Ann (CTE r t a)
+
   -- | An "Exactly-One-Of" annotation, used to convey variants (i.e. sums)
   --   to K3.
   AOneOf  :: (RTupled mv, RTR mv ~ Maybe) => Ann mv
@@ -350,10 +354,21 @@ instance BiNum Int Int where
   biadd = (+)
   bimul = (*)
 
+instance BiNum Int Float where 
+  type BNTF Int Float = Float
+  biadd a b = ((fromIntegral a) + b)
+  bimul a b = ((fromIntegral a) * b)
+
 instance BiNum Float Float where
   type BNTF Float Float = Float
   biadd = (+)
   bimul = (*)
+
+instance BiNum Float Int where 
+  type BNTF Float Int = Float
+  biadd a b = (a + (fromIntegral b))
+  bimul a b = (a * (fromIntegral b))
+
 
   -- XXX More
 
