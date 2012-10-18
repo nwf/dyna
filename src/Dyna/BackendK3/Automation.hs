@@ -93,7 +93,7 @@ instance (K3AutoTyTup (wa ': w) (a,b), K3AutoTyTup w b)
 -- K3 Macro Library (XXX WIP)                                           {{{
 
 -- | Let as lambda
-macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
+macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar UnivTyRepr a))
                 => UnivTyRepr a
                 -> (r a)
                 -> (r a -> r b)
@@ -101,7 +101,8 @@ macro_localVar :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKVar a))
 macro_localVar w a b = eApp (eLam (PVar w) b) a
 
 -- | Case analyze a Maybe
-macro_caseMaybe :: (K3 r, K3BaseTy a, K3AST_Pat_C r (PKJust (PKVar a)))
+macro_caseMaybe :: (K3 r, K3BaseTy a,
+                    K3AST_Pat_C r (PKJust (PKVar UnivTyRepr a)))
                 => UnivTyRepr a
                 -> r (Maybe a)
                 -> r b
@@ -112,7 +113,8 @@ macro_caseMaybe w m n b = eITE (eEq m cNothing)
                                (eApp (eLam (PJust (PVar w)) b) m)
 
 -- | Case analyze a collection as either empty or a peeked element
-macro_emptyPeek :: (K3AST_Coll_C r c, K3AST_Pat_C r (PKVar a),
+macro_emptyPeek :: (K3AST_Coll_C r c,
+                    K3AST_Pat_C r (PKVar UnivTyRepr a),
                     K3 r, K3BaseTy a, K3AutoTy a)
                 => r (CTE r c a) -> r b -> (r a -> r b) -> r b
 macro_emptyPeek c e l = eITE (eEq c eEmpty)

@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -103,11 +104,11 @@ instance K3CFn CBag where
 ------------------------------------------------------------------------}}}
 -- Pattern handling                                                     {{{
 
-class (Pat w) => K3PFn w where
+class (Pat UnivTyRepr w) => K3PFn w where
   k3pfn :: PatDa w -> State Int (Doc e, PatReprFn (AsK3 e) w)
 
-instance (K3BaseTy a) => K3PFn (PKVar (a :: *)) where
-  k3pfn (PVar tr) = do
+instance (K3BaseTy a) => K3PFn (PKVar UnivTyRepr (a :: *)) where
+  k3pfn (PVar (tr :: UnivTyRepr a)) = do
     n <- incState
     let sn = text $ "x" ++ show n
     return (sn <> colon <> unAsK3Ty (unUTR tr)
@@ -124,17 +125,17 @@ instance (K3BaseTy a) => K3PFn (PKUnk (a :: *)) where
 ------------------------------------------------------------------------}}}
 -- Slice handling                                                       {{{
 
-class (Slice (AsK3 e) w) => K3SFn e w where
-  k3sfn :: SliceDa w -> Identity (AsK3 e (SliceTy w))
+class (Pat (AsK3 e) w) => K3SFn e w where
+  k3sfn :: PatDa w -> Identity (AsK3 e (PatTy w))
 
-instance (K3BaseTy a) => K3SFn e (SKVar (AsK3 e) (a :: *)) where
-  k3sfn (SVar r) = return r
+instance (K3BaseTy a) => K3SFn e (PKVar (AsK3 e) (a :: *)) where
+  k3sfn (PVar r) = return r
 
-instance (K3BaseTy a) => K3SFn e (SKUnk (a :: *)) where
-  k3sfn SUnk = return $ AsK3$ const$ text "_"
+instance (K3BaseTy a) => K3SFn e (PKUnk (a :: *)) where
+  k3sfn PUnk = return $ AsK3$ const$ text "_"
 
-instance (K3SFn e s) => K3SFn e (SKJust s) where
-  k3sfn (SJust s) = return $ AsK3$ \n -> "Just"
+instance (K3SFn e s) => K3SFn e (PKJust s) where
+  k3sfn (PJust s) = return $ AsK3$ \n -> "Just"
                       <> parens (unAsK3 (runIdentity $ k3sfn s) n)
 
 
@@ -278,7 +279,7 @@ $(mkLRecInstances (''K3PFn,[]) 'PKTup
 $(do
     e <- liftM TH.varT $ TH.newName "e"
     n <- TH.newName "n"
-    mkLRecInstances (''K3SFn,[e]) 'SKTup 
+    mkLRecInstances (''K3SFn,[e]) 'PKTup 
                   ('k3sfn,Nothing,\ls ->
                       TH.appE (TH.conE 'AsK3)
                     $ TH.lamE [TH.varP n]

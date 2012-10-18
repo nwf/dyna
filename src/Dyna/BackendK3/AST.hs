@@ -171,7 +171,7 @@ instance K3Ty UnivTyRepr where
 -- | Kinds of patterns permitted in K3
 data PKind where
   -- | Variables in patterns
-  PKVar  :: k -> PKind
+  PKVar  :: r -> k -> PKind
 
   -- | Wildcards in patterns
   PKUnk  :: k -> PKind
@@ -207,7 +207,7 @@ data PKind where
 --     eLam (PVar $ tPair tInt tInt)        :: (r (Int, Int)   -> _) -> _
 --     eLam (PPair (PVar tInt) (PVar tInt)) :: ((r Int, r Int) -> _) -> _
 --
-class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
+class (UnPatDa (PatDa w) ~ w) => Pat (r :: * -> *) (w :: PKind) where
   -- | Any data this witness needs to carry around
   type PatDa w :: *
   -- | The type this witness witnesses (i.e. the things matched against)
@@ -215,33 +215,33 @@ class (UnPatDa (PatDa w) ~ w) => Pat (w :: PKind) where
   -- | The type this witness binds (i.e. after matching is done)
   type PatBTy w :: *
   -- | The type of this pattern.
-  type PatReprFn (r :: * -> *) w :: *
+  type PatReprFn (s :: * -> *) w :: *
 
 type family UnPatDa (pd :: *) :: PKind
 
-data PVar a = PVar (UnivTyRepr a)
-type instance UnPatDa (PVar a) = PKVar a
-instance (K3BaseTy a) => Pat (PKVar (a :: *)) where
-  type PatDa     (PKVar a)   = PVar a
-  type PatTy     (PKVar a)   =   a
-  type PatBTy    (PKVar a)   =   a
-  type PatReprFn r (PKVar a) = r a
+data PVar r a = PVar (r a)
+type instance UnPatDa (PVar r a) = PKVar r a
+instance (K3BaseTy a, r ~ r') => Pat r' (PKVar (r :: * -> *) (a :: *)) where
+  type PatDa     (PKVar r a)   = PVar r a
+  type PatTy     (PKVar r a)   =   a
+  type PatBTy    (PKVar r a)   =   a
+  type PatReprFn s (PKVar r a) = s a
 
 data PUnk a = PUnk
 type instance UnPatDa (PUnk a)       = PKUnk a
-instance (K3BaseTy a) => Pat (PKUnk (a :: *)) where
+instance (K3BaseTy a) => Pat r (PKUnk (a :: *)) where
   type PatDa     (PKUnk a)   = PUnk a
   type PatTy     (PKUnk a)   =   a
   type PatBTy    (PKUnk a)   =   ()
-  type PatReprFn r (PKUnk a) = r ()
+  type PatReprFn s (PKUnk a) = s ()
 
 data PJust a = PJust { unPJust :: a }
 type instance UnPatDa (PJust a)      = PKJust (UnPatDa a)
-instance (Pat w) => Pat (PKJust w) where
+instance (Pat r w) => Pat r (PKJust w) where
   type PatDa (PKJust w)       = PJust (PatDa w)
   type PatTy (PKJust w)       = Maybe (PatTy w)
   type PatBTy (PKJust w)      = PatBTy w
-  type PatReprFn r (PKJust w) = PatReprFn r w
+  type PatReprFn s (PKJust w) = PatReprFn s w
 
 type family MapPatDa (x :: [PKind]) :: *
 $(mkTyMapFlat 0 ''MapPatDa ''PatDa)
@@ -260,71 +260,16 @@ $(mkTyMapFlat 1 ''MapPatReprFn ''PatReprFn)
 
 $(mkTyUnMap (Just 'PKTup) 0 ''UnPatDa ''UnPatDa)
 
-instance (UnPatDa (MapPatDa ts) ~ 'PKTup ts)
-      => Pat       (PKTup (ts :: [PKind])) where
+type family MapPatConst (x :: [PKind]) (r :: * -> *) :: Constraint
+type instance MapPatConst '[] r = ()
+type instance MapPatConst (x ': xs) r = (Pat r x, MapPatConst xs r)
+
+instance (UnPatDa (MapPatDa ts) ~ 'PKTup ts, MapPatConst ts r)
+      => Pat     r (PKTup (ts :: [PKind])) where
   type PatDa       (PKTup ts)   = MapPatDa ts
   type PatTy       (PKTup ts)   = MapPatTy ts
   type PatBTy      (PKTup ts)   = MapPatBTy ts
-  type PatReprFn r (PKTup ts)   = MapPatReprFn r ts
-
-------------------------------------------------------------------------}}}
-{- * Slice System -} --                                                 {{{
-
--- | Kinds of slices permitted in K3
-data SKind where
-  SKVar  :: r -> k -> SKind
-  SKUnk  :: k -> SKind
-  SKJust :: SKind -> SKind
-
-  SKTup  :: [SKind] -> SKind
-
--- | Witness of slice well-formedness
-class (UnSliceDa (SliceDa w) ~ w) => Slice r (w :: SKind) where
-  type SliceDa w :: *
-  type SliceTy w :: *
-
-type family UnSliceDa (pd :: *) :: SKind
-
-data SVar r a = SVar (r a)
-type instance UnSliceDa (SVar r a) = SKVar r a
-instance (K3BaseTy a, r0 ~ r) => Slice r0 (SKVar (r :: * -> *) (a :: *)) where
-  type SliceDa (SKVar r a) = SVar r a
-  type SliceTy (SKVar r a) = a
-
-data SUnk a = SUnk
-type instance UnSliceDa (SUnk a)       = SKUnk a
-instance (K3BaseTy a) => Slice r (SKUnk (a :: *)) where
-  type SliceDa (SKUnk a) = SUnk a
-  type SliceTy (SKUnk a) = a
-
-data SJust a = SJust { unSJust :: a }
-type instance UnSliceDa (SJust a)      = SKJust (UnSliceDa a)
-instance (Slice r s) => Slice r (SKJust s) where
-  type SliceDa (SKJust s) = SJust (SliceDa s)
-  type SliceTy (SKJust s) = Maybe (SliceTy s)
-
-type family SliceConst (x :: SKind) (r :: * -> *) :: Constraint
-type instance SliceConst x r = Slice r x
-
-type family MapSliceConst (x :: [SKind]) (r :: * -> *) :: Constraint
-type instance MapSliceConst '[] r = ()
-type instance MapSliceConst (x ': xs) r = (SliceConst x r, MapSliceConst xs r)
-
-type family MapSliceDa (x :: [SKind]) :: *
-$(mkTyMapFlat 0 ''MapSliceDa ''SliceDa)
-
-type family UnMapSliceDa (x :: *) :: [SKind]
-$(mkTyUnMap Nothing 0 ''UnMapSliceDa ''UnSliceDa)
-
-type family MapSliceTy (x :: [SKind]) :: *
-$(mkTyMapFlat 0 ''MapSliceTy ''SliceTy)
-
-$(mkTyUnMap (Just 'SKTup) 0 ''UnSliceDa ''UnSliceDa)
-
-instance (UnSliceDa (MapSliceDa ts) ~ 'SKTup ts, MapSliceConst ts r)
-      => Slice r (SKTup (ts :: [SKind])) where
-  type SliceDa   (SKTup ts)   = MapSliceDa ts
-  type SliceTy   (SKTup ts)   = MapSliceTy ts
+  type PatReprFn s (PKTup ts)   = MapPatReprFn s ts
 
 ------------------------------------------------------------------------}}}
 {- * Numeric Autocasting -} --                                          {{{
@@ -385,7 +330,7 @@ class K3 (r :: * -> *) where
   type K3AST_Pat_C r (w :: PKind) :: Constraint
 
   -- | A representation-specific constraint for slices, on eSlice.
-  type K3AST_Slice_C r (w :: SKind) :: Constraint
+  type K3AST_Slice_C r (w :: PKind) :: Constraint
 
   -- | Add a comment to some part of the AST
   cComment  :: String -> r a -> r a
@@ -439,7 +384,7 @@ class K3 (r :: * -> *) where
   -- (1,2) vs (\(x,y) -> eTuple2 (x,y)) (1,2): the former has a HOAS lambda
   -- of type (r (a,b) -> r (a,b)) while the latter has ((r a, r b) -> r
   -- (a,b)).
-  eLam      :: (K3AST_Pat_C r w, Pat w, K3BaseTy (PatTy w))
+  eLam      :: (K3AST_Pat_C r w, Pat UnivTyRepr w, K3BaseTy (PatTy w))
             => PatDa w -> (PatReprFn r w -> r b) -> r (PatTy w -> b)
   eApp      :: r (a -> b) -> r a -> r b
 
@@ -485,8 +430,8 @@ class K3 (r :: * -> *) where
   --
   -- Rather like lambdas, except that the witness is also
   -- a mandatory part of the definition of "slice" :)
-  eSlice    :: (K3AST_Slice_C r w, Slice r w, SliceTy w ~ t)
-            => SliceDa w     -- ^ Slice specification
+  eSlice    :: (K3AST_Slice_C r w, Pat r w, PatTy w ~ t)
+            => PatDa w       -- ^ Slice specification
             -> r (CTE r c t) -- ^ Input collection
             -> r (CTE r c t)
 
