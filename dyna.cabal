@@ -31,6 +31,8 @@ Library
                         Dyna.BackendK3.Render
                         Dyna.ParserHS.Parser,
                         Dyna.NormalizeParse,
+                        Dyna.XXX.HList,
+                        Dyna.XXX.THTuple,
                         Dyna.XXX.Trifecta
 
     Build-Depends:      base >=4,

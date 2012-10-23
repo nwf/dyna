@@ -111,8 +111,7 @@ mkTyUnMap a b c d = foreachTupleSize (mkTyUnMapN a b c d)
 ------------------------------------------------------------------------}}}
 -- Make Tuple                                                           {{{
 
-mkTupleInstance :: Name -> Name -> Name -> Name -> Name -> Int -> Q Dec
-mkTupleInstance _tc _rter _tol _opr _oprs n | n > 1 = do
+mkTupleInstance _tc _rter _tol _hc _hn _thl _lth _opr _oprs n | n > 1 = do
     -- Build polymorphic variables
   names <- mkNames n
 
@@ -127,15 +126,24 @@ mkTupleInstance _tc _rter _tol _opr _oprs n | n > 1 = do
   let fnames = map (appE (varE f) . varE) names
   let rpa = tupP $ map varP names
   let frpa = foldl appE (conE $ tupleDataName n) fnames
+  let lrpa = foldr (\e l -> (conE _hc) `appE` e `appE` l)
+                   (conE _hn)
+                   $ map varE names
+  let plpa = foldr (\e l -> conP _hc [e,l])
+                   (conP _hn [])
+                   $ map varP names
 
   instanceD (cxt []) (appT (conT _tc) ty) -- where
             [tySynInstD _rter [ty, vr] $ mkRTy n vr names
             ,tySynInstD _tol [ty] $ promoteList $ map varT names
+            ,funD _thl  [clause [rpa] (normalB $ lrpa) [] ]
+            ,funD _lth  [clause [plpa] (normalB $ tupE $ map varE names) [] ]
             ,funD _opr  [clause [varP f, rpa] (normalB $ frpa) [] ]
             ,funD _oprs [clause [varP f, rpa] (normalB $ frpa) [] ]
             ]
 
-mkTupleInstances a b c d e = foreachTupleSize (mkTupleInstance a b c d e)
+mkTupleInstances a b c d e f g h i =
+  foreachTupleSize (mkTupleInstance a b c d e f g h i)
 
 ------------------------------------------------------------------------}}}
 -- Make RTuple                                                          {{{
@@ -222,11 +230,12 @@ mkRecInstances a b c d e = foreachTupleSize (mkRecInstance a b c d e)
 
 mkLRecInstance :: (Name, [TypeQ])              -- ^ Class name and args
                -> Name
-               -> (Name, Maybe Name, [ExpQ] -> ExpQ)
-                                               -- ^ Function, data, and body
+               -> (Name, Name, Maybe Name, [ExpQ] -> ExpQ)
+                                               -- ^ Function, recursive
+                                               -- function, data, and body
                -> Int                          -- ^ Tuple size
                -> Q Dec
-mkLRecInstance (_cname,_cargs) _tyf (_fn,_mfpn,fm) n = do
+mkLRecInstance (_cname,_cargs) _tyf (_fn,_rfn,_mfpn,fm) n = do
   names <- mkNames n
   let context = cxt $ map (\na -> classP _cname $ _cargs ++ [varT na]) names
   let conarg = (appT (conT _tyf) $ promoteList $ map varT names)

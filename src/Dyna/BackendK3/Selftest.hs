@@ -61,7 +61,7 @@ case_mcm = e @=? render k3
  where
   e  =    "if ((test) == (nothing)) then (0) "
        <> "else (((\\just (x0:int) -> x0) (test)))"
-  k3 = macro_caseMaybe tInt (eVar (Var "test") autoty) (cInt 0) (id)
+  k3 = caseMaybe tInt (unsafeVar (Var "test") autoty) (cInt 0) (id)
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{

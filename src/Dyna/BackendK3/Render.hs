@@ -2,6 +2,7 @@
 --   | Provides the "AsK3" type and instances for the K3 AST.
 
 -- Header material                                                      {{{
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -13,42 +14,173 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module Dyna.BackendK3.Render where
+module Dyna.BackendK3.Render (
+    -- * K3 implementations
+    AsK3Ty(..), AsK3(..),
+
+    -- * Utility functions
+    sh, sht, shd
+) where
 
 import           Control.Monad.Identity
+import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.List              as DL
 import           Text.PrettyPrint.Free
 
 import           Dyna.BackendK3.AST
+import           Dyna.XXX.HList
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
 
 import qualified Language.Haskell.TH    as TH
 
+
+------------------------------------------------------------------------}}}
+-- Collection handling                                                  {{{
+
+class K3CFn (c :: CKind) where
+  k3cfn_empty :: AsK3 e (CTE (AsK3 e) c a)
+  k3cfn_sing  :: AsK3 e vma -> AsK3 e (CTE (AsK3 e) c vma)
+
+instance K3CFn CSet where
+  k3cfn_empty = AsK3$ const$ "{ }"
+  k3cfn_sing (AsK3 e) = AsK3$ braces . e
+
+instance K3CFn CList where
+  k3cfn_empty = AsK3$ const$ "[ ]"
+  k3cfn_sing (AsK3 e) = AsK3$ brackets . e
+
+instance K3CFn CBag where
+  k3cfn_empty = AsK3$ const$ "{| |}"
+  k3cfn_sing (AsK3 e) = AsK3$ encBag . e
+
+------------------------------------------------------------------------}}}
+-- Pattern handling                                                     {{{
+
+class (Pat UnivTyRepr w) => K3PFn w where
+  -- | Turn a pattern into two parts: the string to be placed after the
+  -- \ in the K3 code and the constitutent pieces to be passed into the
+  -- HOAS function given to eLam
+  k3pfn :: PatDa w -> ReaderT Bool (State Int) (Doc e, PatReprFn (AsK3 e) w)
+
+rec_k3pfn :: (K3PFn w)
+          => PatDa w
+          -> ReaderT Bool (State Int) (Doc e, PatReprFn (AsK3 e) w)
+rec_k3pfn = local (const False) . k3pfn
+
+instance (K3BaseTy a) => K3PFn (PKVar UnivTyRepr (a :: *)) where
+  k3pfn (PVar (tr :: UnivTyRepr a)) = do
+    n <- lift incState
+    let sn = text $ "x" ++ show n
+    return (sn <> colon <> unAsK3Ty (unUTR tr)
+           ,AsK3$ const$ sn)
+
+instance (K3BaseTy a) => K3PFn (PKUnk (a :: *)) where
+  k3pfn PUnk = return ("_", ())
+
+instance (K3PFn w) => K3PFn (PKJust w) where
+  k3pfn (PJust w) = do
+    (p,r) <- rec_k3pfn w
+    return ("just" <+> parens p, r)
+
+instance (K3PFn w) => K3PFn (PKRef w) where
+  k3pfn (PRef w) = rec_k3pfn w
+
+instance K3PFn (PKHL '[]) where
+  k3pfn HN = ask >>= \f -> return (if f then "" else "()", HN)
+
+instance (K3PFn w, K3PFn (PKHL ws), MapPatConst ws UnivTyRepr)
+      => K3PFn (PKHL (w ': ws)) where
+  k3pfn (w :+ ws) = do
+        (pw,rw) <- k3pfn w
+        (ps,rs) <- local (const True) $ k3pfn ws
+        p <- asks (\f -> (if f then (comma <>) else parens) (pw <> ps))
+        let r = rw :+ rs
+        return (p,r)
+
+
+------------------------------------------------------------------------}}}
+-- Slice handling                                                       {{{
+
+class (Pat (AsK3 e) w) => K3SFn e w where
+  -- | Print a pattern
+  k3sfn :: PatDa w -> Reader Bool (AsK3 e (PatTy (AsK3 e) w))
+
+rec_k3sfn :: (K3SFn e w)
+          => PatDa w
+          -> Reader Bool (AsK3 e (PatTy (AsK3 e) w))
+rec_k3sfn = local (const False) . k3sfn
+
+instance (K3BaseTy a) => K3SFn e (PKVar (AsK3 e) (a :: *)) where
+  k3sfn (PVar r) = return r
+
+instance (K3BaseTy a) => K3SFn e (PKUnk (a :: *)) where
+  k3sfn PUnk = return $ AsK3$ const$ text "_"
+
+instance (K3SFn e s) => K3SFn e (PKJust s) where
+  k3sfn (PJust s) = do
+    p <- rec_k3sfn s
+    return $ AsK3$ \n -> "just" <> parens (unAsK3 p n)
+
+instance K3SFn e (PKHL '[]) where
+  k3sfn HN = asks (\f -> AsK3$ const$ if f then "" else "()")
+
+instance (K3SFn e w, K3SFn e (PKHL ws), MapPatConst ws (AsK3 e))
+      => K3SFn e (PKHL (w ': ws)) where
+  k3sfn (w :+ ws) = do
+        pw <- k3sfn w
+        ps <- local (const True) $ k3sfn ws
+        fn <- asks (\f -> (if f then (comma <>) else parens))
+        return$ AsK3$ \n -> fn $ (unAsK3 pw n) <> (unAsK3 ps n)
+
 ------------------------------------------------------------------------}}}
 {- * Annotations -} --                                                  {{{
 
+fdscast :: FunDepSpec a -> FunDepSpec b
+fdscast FDIrr = FDIrr
+fdscast FDDom = FDDom
+fdscast FDCod = FDCod
+
+annfds :: (RTupled fs, RTR fs ~ FunDepSpec)
+       => Doc e -> fs -> Doc e
+annfds op fs =
+  let x = tupleopEL (fdscast) fs
+      (dom,cod) = (DL.elemIndices FDDom x 
+                  ,DL.elemIndices FDCod x)
+  in     (tupled $ map pretty dom)
+     <+> op
+     <+> (tupled $ map pretty cod)
+
+annfdshl :: Doc e -> HRList FunDepSpec a -> Doc e
+annfdshl op fs =
+  let x = hrlproj (fdscast) fs
+      (dom,cod) = (DL.elemIndices FDDom x 
+                  ,DL.elemIndices FDCod x)
+  in     (tupled $ map pretty dom)
+     <+> op
+     <+> (tupled $ map pretty cod)
+
+
 annText :: Ann a -> Doc e
-annText  AAtomic     = "atomic"
-annText  AOneOf      = "oneof"
-annText (AMisc s)    = text s
-annText (AFunDep fs) = let x = tupleopEL (fdscast) fs
-                        in let (dom,cod) = (DL.elemIndices FDDom x 
-                                           ,DL.elemIndices FDCod x)
-                        in     (tupled $ map pretty dom)
-                           <+> "->"
-                           <+> (tupled $ map pretty cod)
- where
-  fdscast FDIrr = FDIrr
-  fdscast FDDom = FDDom
-  fdscast FDCod = FDCod
+annText  AAtomic       = "atomic"
+annText (AFunDep fs)   = annfds   "->" fs
+annText (AFunDepHL fs) = annfdshl "->" fs
+annText (AIndex fs)    = annfds   "=>" fs
+annText (AIndexHL fs)  = annfdshl "=>" fs
+annText  AOneOf        = "oneof"
+annText  AOneOfHL      = "oneof"
+annText (AMisc s)      = text s
 
 ------------------------------------------------------------------------}}}
 {- * Type handling -} --                                                {{{
 
--- | Unlike AsK3 below, we don't need to thread a variable counter
+-- | Produce a textual representation of a K3 type
+--
+--   Unlike AsK3 below, we don't need to thread a variable counter
 --   around since K3 doesn't have tyvars
 newtype AsK3Ty e (a :: *) = AsK3Ty { unAsK3Ty :: Doc e }
 
@@ -82,72 +214,19 @@ instance K3Ty (AsK3Ty e) where
   tTuple4 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
   tTuple5 us = AsK3Ty $ tupled $ tupleopEL unAsK3Ty us
 
-------------------------------------------------------------------------}}}
--- Collection handling                                                  {{{
-
-class K3CFn (c :: CKind) where
-  k3cfn_empty :: AsK3 e (CTE (AsK3 e) c a)
-  k3cfn_sing  :: AsK3 e vma -> AsK3 e (CTE (AsK3 e) c vma)
-
-instance K3CFn CSet where
-  k3cfn_empty = AsK3$ const$ "{ }"
-  k3cfn_sing (AsK3 e) = AsK3$ braces . e
-
-instance K3CFn CList where
-  k3cfn_empty = AsK3$ const$ "[ ]"
-  k3cfn_sing (AsK3 e) = AsK3$ brackets . e
-
-instance K3CFn CBag where
-  k3cfn_empty = AsK3$ const$ "{| |}"
-  k3cfn_sing (AsK3 e) = AsK3$ encBag . e
-
-------------------------------------------------------------------------}}}
--- Pattern handling                                                     {{{
-
-class (Pat UnivTyRepr w) => K3PFn w where
-  k3pfn :: PatDa w -> State Int (Doc e, PatReprFn (AsK3 e) w)
-
-instance (K3BaseTy a) => K3PFn (PKVar UnivTyRepr (a :: *)) where
-  k3pfn (PVar (tr :: UnivTyRepr a)) = do
-    n <- incState
-    let sn = text $ "x" ++ show n
-    return (sn <> colon <> unAsK3Ty (unUTR tr)
-           ,AsK3$ const$ sn)
-
-instance (K3PFn w) => K3PFn (PKJust w) where
-  k3pfn (PJust w) = do
-    (p, r) <- k3pfn w
-    return ("just " <> parens p, r)
-
-instance (K3BaseTy a) => K3PFn (PKUnk (a :: *)) where
-  k3pfn PUnk = return ("_", cUnit)
-
-------------------------------------------------------------------------}}}
--- Slice handling                                                       {{{
-
-class (Pat (AsK3 e) w) => K3SFn e w where
-  k3sfn :: PatDa w -> Identity (AsK3 e (PatTy w))
-
-instance (K3BaseTy a) => K3SFn e (PKVar (AsK3 e) (a :: *)) where
-  k3sfn (PVar r) = return r
-
-instance (K3BaseTy a) => K3SFn e (PKUnk (a :: *)) where
-  k3sfn PUnk = return $ AsK3$ const$ text "_"
-
-instance (K3SFn e s) => K3SFn e (PKJust s) where
-  k3sfn (PJust s) = return $ AsK3$ \n -> "Just"
-                      <> parens (unAsK3 (runIdentity $ k3sfn s) n)
-
+  tHL     us = AsK3Ty $ tupled $ hrlproj unAsK3Ty us
 
 ------------------------------------------------------------------------}}}
 -- Expression handling                                                  {{{
 
+-- | Produce a textual representation of a K3 expression
 newtype AsK3 e (a :: *) = AsK3 { unAsK3 :: Int -> Doc e }
 
+type instance K3_Coll_C (AsK3 e) c = K3CFn c
+type instance K3_Pat_C (AsK3 e) p = K3PFn p
+type instance K3_Slice_C (AsK3 e) s = K3SFn e s
+
 instance K3 (AsK3 e) where
-  type K3AST_Coll_C (AsK3 e) c = K3CFn c
-  type K3AST_Pat_C (AsK3 e) p = K3PFn p
-  type K3AST_Slice_C (AsK3 e) s = K3SFn e s
 
   cAnn (AsK3 e) anns = AsK3$ \n -> align $
        parens (e n) <> " @ "
@@ -165,16 +244,19 @@ instance K3 (AsK3 e) where
   cNothing       = AsK3$ const$ "nothing"
   cUnit          = AsK3$ const$ "unit"
 
-  eVar (Var v) _ = AsK3$ const$ text v
+  unsafeVar (Var v) _ = AsK3$ const$ text v
 
 
-  eJust (AsK3 a)          = builtin "Just " [ a ]
-  -- ePair (AsK3 a) (AsK3 b) = AsK3$ \n -> tupled [a n, b n]
+  eJust (AsK3 a)          = builtin "just" [ a ]
+  eRef  (AsK3 a)          = builtin "ref" [ a ]
 
     -- XXX TUPLES Note the similarity of these!
   eTuple2 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
   eTuple3 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
   eTuple4 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
+  eTuple5 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
+
+  eHL     t = AsK3 $ \n -> tupled $ hrlproj   (flip unAsK3 n) t
 
   eEmpty = k3cfn_empty
   eSing  = k3cfn_sing
@@ -190,7 +272,7 @@ instance K3 (AsK3 e) where
   eLeq = binop "<="
   eNeq = binop "!="
 
-  eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (k3pfn w) n
+  eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (runReaderT (k3pfn w) False) n
                          in "\\" <> pat <+> "->" `above` indent 2 (unAsK3 (f arg) n')
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
@@ -214,15 +296,13 @@ instance K3 (AsK3 e) where
   eSort    (AsK3 c) (AsK3 f)                   = builtin "sort"      [ c, f ]
   ePeek    (AsK3 c)                            = builtin "peek"      [ c ]
 
-  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (unAsK3 (runIdentity $ k3sfn w) n)
+  eSlice w (AsK3 c) = AsK3$ \n -> c n <> brackets (unAsK3 (runReader (k3sfn w) False) n)
 
   eInsert (AsK3 c) (AsK3 e)          = builtin "insert" [ c, e ]
   eDelete (AsK3 c) (AsK3 e)          = builtin "delete" [ c, e ]
   eUpdate (AsK3 c) (AsK3 o) (AsK3 n) = builtin "update" [ c, o, n ]
 
   eAssign          = binop "<-" 
-  eDeref  (AsK3 r) = builtin "deref" [ r ]
-    -- XXX that doesn't seem to actually be right!
   
   eSend (AsK3 a) (AsK3 f) (AsK3 x) = builtin "send" [ a, f, x ] 
 
@@ -246,13 +326,13 @@ instance Show (AsK3 e a) where
   show (AsK3 f) = show $ f 0
 
 sh :: AsK3 e a -> Doc e
-sh (AsK3 f) = f 0
+sh f = unAsK3 f 0
 
 instance Show (AsK3Ty e a) where
   show (AsK3Ty f) = show f
 
-sht :: AsK3Ty e a -> String
-sht = show
+sht :: AsK3Ty e a -> Doc e
+sht = unAsK3Ty
 
 shd :: Decl (AsK3Ty e) (AsK3 e) t -> Doc e
 shd (Decl (Var name) tipe body) =
@@ -268,7 +348,7 @@ shd (Decl (Var name) tipe body) =
 -- Template Haskell splices                                             {{{
 
 $(mkLRecInstances (''K3PFn,[]) 'PKTup 
-                  ('k3pfn,Nothing,\ls -> TH.tupE [
+                  ('k3pfn,'rec_k3pfn,Nothing,\ls -> TH.tupE [
                                           TH.appE (TH.varE 'tupled)
                                           $ TH.listE
                                           $ map (TH.appE (TH.varE 'fst)) ls
@@ -280,7 +360,7 @@ $(do
     e <- liftM TH.varT $ TH.newName "e"
     n <- TH.newName "n"
     mkLRecInstances (''K3SFn,[e]) 'PKTup 
-                  ('k3sfn,Nothing,\ls ->
+                  ('k3sfn,'rec_k3sfn,Nothing,\ls ->
                       TH.appE (TH.conE 'AsK3)
                     $ TH.lamE [TH.varP n]
                     $ TH.appE (TH.varE 'tupled)

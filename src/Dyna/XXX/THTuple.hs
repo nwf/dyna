@@ -6,10 +6,12 @@
 
 -- Header material                                                      {{{
 
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
@@ -39,7 +41,9 @@ module Dyna.XXX.THTuple(
   mkLRecInstances
 ) where
 
-import          Dyna.XXX.THTupleInternals
+import           Dyna.XXX.HList
+import           Dyna.XXX.THTupleInternals
+import           GHC.Prim (Constraint)
 
 ------------------------------------------------------------------------}}}
 -- Type-level functions                                                 {{{
@@ -68,6 +72,12 @@ class (MKLT (TOL base) ~ base) => Tupled base where
   -- | Go from the tuple representation to a promoted list;
   --   the inverse of MKLT (as asserted by class constraints).
   type TOL base :: [*]
+
+  -- | Send a tuple to an HList
+  tupleHL   :: base -> HList (TOL base)
+
+  -- | Send a HList to a Tuple
+  hlTuple   :: HList (TOL base) -> base
 
   -- | Shed a type constructor
   tupleopR  :: (RTupled rbase, (RTR rbase) ~ r, (RTE rbase) ~ base)
@@ -99,7 +109,10 @@ class (Tupled (RTE arred),
 -- Aaaand action                                                        {{{
 
   -- Generate instances for Tupled
-$(mkTupleInstances ''Tupled ''RTER ''TOL 'tupleopR 'tupleopRS)
+$(mkTupleInstances
+  ''Tupled ''RTER
+  ''TOL '(:+) 'HN 'tupleHL 'hlTuple
+  'tupleopR 'tupleopRS)
 
   -- Generate instances for RTupled
 $(mkRTupleInstances ''RTupled ''RTE ''RTR 'tupleopEL)
