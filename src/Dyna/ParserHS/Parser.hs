@@ -15,7 +15,7 @@
 --
 --   * Doesn't handle shared subgoals ("whenever ... { ... }")
 
-{-   Header material -} --                                              {{{
+--   Header material                                                      {{{
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -45,7 +45,7 @@ import           Text.Trifecta
 import           Dyna.XXX.Trifecta (identNL)
 
 ------------------------------------------------------------------------}}}
-{- * Parsed output definition -} --                                     {{{
+-- Parsed output definition                                             {{{
 
 data Annotation = AnnType (Spanned Term)
  deriving (Eq,Ord,Show)
@@ -74,13 +74,13 @@ data Line = LRule (Spanned Rule)
 
 
 ------------------------------------------------------------------------}}}
-{- * Utilities -} --                                                    {{{
+-- Utilities                                                            {{{
 
 bsf :: Functor f => f String -> f B.ByteString
 bsf = fmap BU.fromString
 
 ------------------------------------------------------------------------}}}
-{- * Identifier Syles -} --                                             {{{
+-- Identifier Syles                                                     {{{
 
 usualpunct :: CS.CharSet
 usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
@@ -142,7 +142,7 @@ dynaVarStyle = IdentifierStyle
 
 
 ------------------------------------------------------------------------}}}
-{- * Comment handling -} --                                             {{{
+-- Comment handling                                                     {{{
 
 dynaCommentStyle :: CommentStyle
 dynaCommentStyle =  CommentStyle
@@ -171,14 +171,14 @@ instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
   restOfLine = lift restOfLine
 
 ------------------------------------------------------------------------}}}
-{- * Atoms -} --                                                        {{{
+-- Atoms                                                                {{{
 
 atom :: (Monad m, TokenParsing m) => m B.ByteString
 atom =     liftA BU.fromString stringLiteral
        <|> (bsf $ ident dynaAtomStyle)
 
 ------------------------------------------------------------------------}}}
-{- * Terms and term expressions -} --                                   {{{
+-- Terms and term expressions                                           {{{
 
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
@@ -223,7 +223,7 @@ dterm  = unDL term
 dtexpr = unDL texpr 
 
 ------------------------------------------------------------------------}}}
-{- * Rules -} --                                                        {{{
+-- Rules                                                                {{{
 
 -- | Grab the head (term!) and aggregation operator from a line that
 -- we hope is a rule.  
@@ -255,7 +255,7 @@ drule :: DeltaParsing m => m (Spanned Rule)
 drule = spanned rule
 
 ------------------------------------------------------------------------}}}
-{- * Lines -} --                                                        {{{
+-- Lines                                                                {{{
 
 progline :: DeltaParsing m => m (Spanned Line)
 progline  = spanned $ choice [ LRule <$> drule
