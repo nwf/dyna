@@ -28,7 +28,8 @@ Library
 
     Exposed-Modules:    Dyna.BackendK3.AST,
                         Dyna.BackendK3.Automation,
-                        Dyna.BackendK3.Render
+                        Dyna.BackendK3.Render,
+                        Dyna.BackendK3.Stdlib,
                         Dyna.ParserHS.Parser,
                         Dyna.NormalizeParse,
                         Dyna.XXX.HList,
