@@ -41,7 +41,7 @@ render = despace . flip displaySimple [] . renderCompact . sh
 case_mfn :: Assertion
 case_mfn = e @=? render k3
  where
-  e  = "\\x0:int -> -((x0) + (1))"
+  e  = "\\x0:int -> -(x0 + 1)"
     -- Note that we cannot automate the tInt here, since K3's math
     -- operators are overloaded, so there's no way to conclude
     -- the type of a from the occurrance of "a + Int".
@@ -59,7 +59,7 @@ case_pairfn = e @=? render k3
 case_mcm :: Assertion
 case_mcm = e @=? render k3
  where
-  e  =    "if ((test) == (nothing)) then (0) "
+  e  =    "if (test == nothing) then (0) "
        <> "else (((\\just (x0:int) -> x0) (test)))"
   k3 = caseMaybe tInt (unsafeVar (Var "test") autoty) (cInt 0) (id)
 

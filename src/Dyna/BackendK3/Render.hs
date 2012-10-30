@@ -1,5 +1,8 @@
 ---------------------------------------------------------------------------
---   | Provides the "AsK3" type and instances for the K3 AST.
+--   | Print a K3 AST or Type in a way that the K3 compiler understands.
+--
+--   XXX Note that the output is currently hideously ugly.  We really should
+--   fix that.
 
 -- Header material                                                      {{{
 {-# LANGUAGE ConstraintKinds #-}
@@ -32,6 +35,7 @@ import qualified Data.List              as DL
 import           Text.PrettyPrint.Free
 
 import           Dyna.BackendK3.AST
+import           Dyna.BackendK3.Automation
 import           Dyna.XXX.HList
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
@@ -138,7 +142,7 @@ instance (K3SFn e w, K3SFn e (PKHL ws), MapPatConst ws (AsK3 e))
         return$ AsK3$ \n -> fn $ (unAsK3 pw n) <> (unAsK3 ps n)
 
 ------------------------------------------------------------------------}}}
-{- * Annotations -} --                                                  {{{
+-- Annotations                                                          {{{
 
 fdscast :: FunDepSpec a -> FunDepSpec b
 fdscast FDIrr = FDIrr
@@ -164,19 +168,64 @@ annfdshl op fs =
      <+> op
      <+> (tupled $ map pretty cod)
 
+{-
+newtype K3RXref a = K3RXR { unK3RXR :: String }
+class (UnPatDa (PatDa w) ~ w) => RXref (w :: PKind) where
+  rxref_mk :: PatDa w -> ReaderT String (State Int) (PatReprFn K3RXref w)
 
-annText :: Ann a -> Doc e
-annText  AAtomic       = "atomic"
-annText (AFunDep fs)   = annfds   "->" fs
-annText (AFunDepHL fs) = annfdshl "->" fs
-annText (AIndex fs)    = annfds   "=>" fs
-annText (AIndexHL fs)  = annfdshl "=>" fs
-annText  AOneOf        = "oneof"
-annText  AOneOfHL      = "oneof"
-annText (AMisc s)      = text s
+instance (K3BaseTy a) => RXref (PKVar (K3RXref :: * -> *) (a :: *)) where
+  rxref_mk _ = do
+    pfx <- ask
+    ix  <- get
+    return $ K3RXR (pfx <> show ix)
+
+instance (K3BaseTy a) => RXref (PKUnk (a :: *)) where
+  rxref_mk _ = return ()
+
+instance (RXref w) => RXref (PKRef w) where
+  rxref_mk w = do
+    pfx <- ask
+    ix  <- get
+    (r,_) <- local (const $ pfx <> show ix) $ bracketState 0 $ rxref_mk w
+    return r
+
+instance (UnMapPatDa (HList (MapPatDa ws)) ~ ws,
+          MapPatConst ws K3RXref,
+          MapConstraint RXref ws)
+      => RXref (PKHL '[]) where
+  rxref_mk HN = return HN
+
+instance (RXref w, RXref (PKHL ws),
+          MapPatConst ws K3RXref)
+      => RXref (PKHL (w ': ws)) where
+  rxref_mk (w :+ ws) = do
+    pfx <- ask
+    ix  <- incState
+    (rw,_) <- local (const $ pfx <> show ix) $ bracketState 0 $ rxref_mk w
+    rs <- rxref_mk ws
+    return (rw :+ rs)
+
+type instance K3_Xref_C K3RXref w = RXref w
+-}
+
+annTText :: AnnT a -> Doc e
+annTText (AFunDep fs)   = annfds   "->" fs
+annTText (AFunDepHL fs) = annfdshl "->" fs
+annTText (AIndex fs)    = annfds   "=>" fs
+annTText (AIndexHL fs)  = annfdshl "=>" fs
+annTText  AOneOf        = "oneof"
+annTText  AOneOfHL      = "oneof"
+annTText (AXref _ _ _ _) = "" -- XXX
+annTText (AXrefF _ _ _ _ _) = "" -- XXX
+annTText (ATMisc s)     = text s
+
+annEText :: AnnE a -> Doc e
+annEText  AAtomic       = "atomic"
+annEText  ASingleton    = "singleton"
+annEText (AEMisc s)     = text s
 
 ------------------------------------------------------------------------}}}
-{- * Type handling -} --                                                {{{
+-- Type handling                                                        {{{
 
 -- | Produce a textual representation of a K3 type
 --
@@ -186,7 +235,7 @@ newtype AsK3Ty e (a :: *) = AsK3Ty { unAsK3Ty :: Doc e }
 
 instance K3Ty (AsK3Ty e) where
   tAnn (AsK3Ty e) anns = AsK3Ty$ align $
-       e </> "@" <+> (encloseSep lbrace rbrace comma $ map annText anns)
+       e </> "@" <+> (encloseSep lbrace rbrace comma $ map annTText anns)
 
   tAddress = AsK3Ty$ "address"
   tBool    = AsK3Ty$ "bool"
@@ -195,6 +244,9 @@ instance K3Ty (AsK3Ty e) where
   tInt     = AsK3Ty$ "int"
   tString  = AsK3Ty$ "string"
   tUnit    = AsK3Ty$ "unit"
+
+  -- XXX is that right?
+  tTarget _ = AsK3Ty$ "target"
 
   -- tPair (AsK3Ty ta) (AsK3Ty tb) = AsK3Ty$ tupled [ ta, tb ]
 
@@ -219,8 +271,17 @@ instance K3Ty (AsK3Ty e) where
 ------------------------------------------------------------------------}}}
 -- Expression handling                                                  {{{
 
+data Prec = PrecLowest
+          | PrecITE
+          | PrecBOComp
+          | PrecBOAdd
+          | PrecBOMul
+          | PrecNeg
+          | PrecApp
+ deriving (Enum,Eq,Ord,Show)
+
 -- | Produce a textual representation of a K3 expression
-newtype AsK3 e (a :: *) = AsK3 { unAsK3 :: Int -> Doc e }
+newtype AsK3 e (a :: *) = AsK3 { unAsK3 :: (Int,Prec) -> Doc e }
 
 type instance K3_Coll_C (AsK3 e) c = K3CFn c
 type instance K3_Pat_C (AsK3 e) p = K3PFn p
@@ -230,7 +291,7 @@ instance K3 (AsK3 e) where
 
   cAnn (AsK3 e) anns = AsK3$ \n -> align $
        parens (e n) <> " @ "
-    <> (encloseSep lbrace rbrace comma $ map annText anns)
+    <> (encloseSep lbrace rbrace comma $ map annEText anns)
 
   cComment str (AsK3 a) = AsK3$ \n -> "\n// " <> text str <> "\n" <> a n
 
@@ -244,49 +305,49 @@ instance K3 (AsK3 e) where
   cNothing       = AsK3$ const$ "nothing"
   cUnit          = AsK3$ const$ "unit"
 
-  unsafeVar (Var v) _ = AsK3$ const$ text v
-
+  unsafeVar (Var v) _        = AsK3$ const$ text v
+  declVar (Decl (Var v) _ _) = AsK3$ const$ text v
 
   eJust (AsK3 a)          = builtin "just" [ a ]
   eRef  (AsK3 a)          = builtin "ref" [ a ]
 
     -- XXX TUPLES Note the similarity of these!
-  eTuple2 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
-  eTuple3 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
-  eTuple4 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
-  eTuple5 t = AsK3 $ \n -> tupled $ tupleopEL (flip unAsK3 n) t
+  eTuple2 t = AsK3 $ \(n,_) -> tupled $ tupleopEL (flip unAsK3 (n,PrecLowest)) t
+  eTuple3 t = AsK3 $ \(n,_) -> tupled $ tupleopEL (flip unAsK3 (n,PrecLowest)) t
+  eTuple4 t = AsK3 $ \(n,_) -> tupled $ tupleopEL (flip unAsK3 (n,PrecLowest)) t
+  eTuple5 t = AsK3 $ \(n,_) -> tupled $ tupleopEL (flip unAsK3 (n,PrecLowest)) t
 
-  eHL     t = AsK3 $ \n -> tupled $ hrlproj   (flip unAsK3 n) t
+  eHL     t = AsK3 $ \(n,_) -> tupled $ hrlproj   (flip unAsK3 (n,PrecLowest)) t
 
   eEmpty = k3cfn_empty
   eSing  = k3cfn_sing
   eCombine (AsK3 a) (AsK3 b) = AsK3$ \n -> parens (a n) <> " ++ " <> parens (b n)
   eRange (AsK3 f) (AsK3 l) (AsK3 s) = builtin "range" [ f, l, s ]
   
-  eAdd = binop "+"
-  eMul = binop "*"
-  eNeg (AsK3 b) = AsK3$ \n -> "-" <> parens (b n)
+  eAdd = binop PrecBOAdd "+"
+  eMul = binop PrecBOMul "*"
+  eNeg (AsK3 b) = AsK3$ \(n,p) -> np p PrecNeg $ "-" <> (b (n,PrecNeg))
 
-  eEq  = binop "=="
-  eLt  = binop "<"
-  eLeq = binop "<="
-  eNeq = binop "!="
+  eEq  = binop PrecBOComp "=="
+  eLt  = binop PrecBOComp "<"
+  eLeq = binop PrecBOComp "<="
+  eNeq = binop PrecBOComp "!="
 
-  eLam w f = AsK3$ \n -> let ((pat, arg),n') = runState (runReaderT (k3pfn w) False) n
-                         in "\\" <> pat <+> "->" `above` indent 2 (unAsK3 (f arg) n')
+  eLam w f = AsK3$ \(n,p) -> let ((pat, arg),n') = runState (runReaderT (k3pfn w) False) n
+                             in "\\" <> pat <+> "->" `above` indent 2 (unAsK3 (f arg) (n',p))
 
   eApp (AsK3 f) (AsK3 x) = AsK3$ \n ->
-    parens (parens (f n) `aboveBreak` parens (x n))
+    parens (parens (f n) </> parens (x n))
 
-  eBlock ss (AsK3 r) = AsK3$ \n -> 
-    "do" <> (semiBraces (map ($ n) ((map unAsK3 ss) ++ [r])))
+  eBlock ss (AsK3 r) = AsK3$ \(n,_) -> 
+    "do" <> (semiBraces (map ($ (n,PrecLowest)) ((map unAsK3 ss) ++ [r])))
 
   eIter (AsK3 f) (AsK3 c) = builtin "iterate" [ f, c ]
 
-  eITE (AsK3 b) (AsK3 t) (AsK3 e) = AsK3$ \n ->
-    "if" <+> (align $ above (parens (b n))
-                            ("then" <+> parens (t n) `aboveBreak`
-                             "else"  <+> parens (e n)))
+  eITE (AsK3 b) (AsK3 t) (AsK3 e) = AsK3$ \(n,p) -> np p PrecITE $
+    "if" <+> (align $ above (parens (b (n,PrecLowest)))
+                            ("then" <+> t (n,PrecLowest) `aboveBreak`
+                             "else"  <+> e (n,PrecLowest)))
 
   eMap     (AsK3 f) (AsK3 c)                   = builtin "map"       [ f, c    ]
   eFiltMap (AsK3 f) (AsK3 m) (AsK3 c)          = builtin "filtermap" [ f, m, c ]
@@ -302,31 +363,36 @@ instance K3 (AsK3 e) where
   eDelete (AsK3 c) (AsK3 e)          = builtin "delete" [ c, e ]
   eUpdate (AsK3 c) (AsK3 o) (AsK3 n) = builtin "update" [ c, o, n ]
 
-  eAssign          = binop "<-" 
+  eAssign          = binop PrecBOComp "<-" 
   
   eSend (AsK3 a) (AsK3 f) (AsK3 x) = builtin "send" [ a, f, x ] 
 
 ------------------------------------------------------------------------}}}
 -- Miscellany                                                           {{{
 
+inist :: (Int,Prec)
+inist = (0,PrecLowest)
+
 encBag :: Doc e -> Doc e
 encBag = enclose "{|" "|}"
 
-    -- Overly polymorphic; use only when correct!
-binop :: Doc e -> AsK3 e a -> AsK3 e b -> AsK3 e c
-binop o (AsK3 a) (AsK3 b) = AsK3$ \n ->     parens (align $ a n)
-                                        </> o
-                                        <+> parens (align $ b n)
+np :: forall a e. Ord a => a -> a -> Doc e -> Doc e
+np p p' = (if p > p' then parens else id)
 
     -- Overly polymorphic; use only when correct!
-builtin :: Doc e -> [ Int -> Doc e ] -> AsK3 e b
-builtin fn as = AsK3$ \n -> fn <> tupled (map ($ n) as)
+binop :: Prec -> Doc e -> AsK3 e a -> AsK3 e b -> AsK3 e c
+binop p' o (AsK3 a) (AsK3 b) =
+  AsK3$ \(n,p) -> np p p' $ (align $ a (n,p')) </> o <+> (align $ b (n,succ p'))
+
+    -- Overly polymorphic; use only when correct!
+builtin :: Doc e -> [ (Int,Prec) -> Doc e ] -> AsK3 e b
+builtin fn as = AsK3$ \(n,_) -> fn <> tupled (map ($ (n,PrecLowest)) as)
 
 instance Show (AsK3 e a) where
-  show (AsK3 f) = show $ f 0
+  show (AsK3 f) = show $ f inist
 
 sh :: AsK3 e a -> Doc e
-sh f = unAsK3 f 0
+sh f = unAsK3 f inist
 
 instance Show (AsK3Ty e a) where
   show (AsK3Ty f) = show f
@@ -336,13 +402,23 @@ sht = unAsK3Ty
 
 shd :: Decl (AsK3Ty e) (AsK3 e) t -> Doc e
 shd (Decl (Var name) tipe body) =
-     "declare "
-  <> text name
+      keyword
+  <+> text name
   <+> align (colon <+> unAsK3Ty tipe)
   <> case body of
-       Nothing -> empty
-       Just b  -> space <> equals `aboveBreak` (indent 2 $ unAsK3 b 0)
+       DKColl     -> empty
+       DKRef      -> empty
+       (DKFunc b) -> renderBody b
+       (DKTrig b) -> renderBody b
   <> semi
+ where
+  keyword = case body of
+    DKColl     -> "declare"
+    DKRef      -> "declare"
+    (DKFunc _) -> "declare"
+    (DKTrig _) -> "trigger"
+
+  renderBody b = space <> equals `aboveBreak` (indent 2 $ unAsK3 b inist)
 
 ------------------------------------------------------------------------}}}
 -- Template Haskell splices                                             {{{

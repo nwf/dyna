@@ -29,31 +29,39 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.BackendK3.AST (
-    HList(..), HRList(..),
+    -- * Preliminaries
+    VarIx(..), AddrIx(..), Target,
 
-    VarIx(..), AddrIx(..), 
-
+    -- * Numeric Autocasting
     BiNum(..), UnNum(..),
 
-    CTE, CKind(..), CollTy(..),
+    -- * Collections
+    CTE, CKind(..), CollTy(..), K3_Coll_C, asColl,
 
+    -- * References
     Ref, 
 
+    -- * Pattern System
     PKind(..), Pat(..),
     PVar(..), PUnk(..), PJust(..), PRef(..),
-    MapPatConst,
+    UnPatDa,
+    MapPatDa, UnMapPatDa, MapPatTy,
+    MapPatConst, K3_Pat_C, K3_Slice_C,
 
-    Ann(..), FunDepSpec(..),
+    -- * Annotations
+    AnnT(..), AnnE(..), FunDepSpec(..), K3_Xref_C,
 
+    -- * Type System: Base constraints
     K3BaseTy,
 
+    -- * Type System: Representations
     K3Ty(..), UnivTyRepr(..),
 
-    K3(..), K3_Pat_C, K3_Coll_C, K3_Slice_C,
+    -- * Expressions
+    K3(..), 
 
-    asColl,
-
-    Decl(..), mkdecl, mkfdecl, asCollR, asRefR
+    -- * Declarations
+    Decl(..), DKind(..), mkdecl, mkfdecl, asCollR, asRefR
 ) where
 
 import           Data.Word
@@ -64,7 +72,7 @@ import           Dyna.XXX.HList
 import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
-{- * Preliminaries -} --                                                {{{
+-- Preliminaries                                                        {{{
 
   -- XXX
 newtype VarIx  = Var String
@@ -73,7 +81,7 @@ newtype AddrIx = Addr (String,Int)
  deriving (Eq,Show)
 
 ------------------------------------------------------------------------}}}
-{- * Type System: Base Constraints -} --                                {{{
+-- Type System: Base Constraints                                        {{{
 
 -- | A constraint for /base/ types in K3.  These are the things that can
 -- be passed to lambdas.  Essentially everything other than arrows.
@@ -90,7 +98,20 @@ instance (K3BaseTy a, K3BaseTy (HList as)) => K3BaseTy (HList (a ': as))
 $(mkTupleRecInstances ''K3BaseTy [])
 
 ------------------------------------------------------------------------}}}
-{- * Collections -} --                                                  {{{
+-- Targets                                                              {{{
+
+-- | The 'r' representation of a target taking argument type 't'.
+--
+-- This is similar to @t -> ()@ except that it executes in a different
+-- transaction and must be named.  The only safe source of Targets is a
+-- 'Decl', but being first class, they can be stored in collections for
+-- dynamic dispatch.
+data family Target (r :: * -> *) t :: *
+
+instance (K3BaseTy a) => K3BaseTy (Target r a)
+
+------------------------------------------------------------------------}}}
+-- Collections                                                          {{{
 
 -- | Reflect 'CollTy' at the type level.
 data CKind = CBag | CList | CSet
@@ -110,8 +131,14 @@ instance (K3BaseTy a) => K3BaseTy (CTE r c a)
 -- which need to dispatch on a type-tag in the output.
 type family K3_Coll_C (r :: * -> *) (c :: CKind) :: Constraint
 
+-- | A convenience function for setting the type of a collection.
+--
+-- Use as (eEmpty `asColl` CTSet)
+asColl :: r (CTE r c t) -> CollTy c -> r (CTE r c t)
+asColl = const
+
 ------------------------------------------------------------------------}}}
-{- * References -} --                                                   {{{
+-- References                                                           {{{
 
 -- | The 'r' representation of references of elements of type 'a'
 data family Ref (r :: * -> *) a
@@ -119,7 +146,7 @@ data family Ref (r :: * -> *) a
 instance (K3BaseTy a) => K3BaseTy (Ref r a)
 
 ------------------------------------------------------------------------}}}
-{- * Pattern System -} --                                               {{{
+-- Pattern System                                                       {{{
 
 -- | Kinds of patterns permitted in K3
 data PKind where
@@ -185,6 +212,9 @@ class (UnPatDa (PatDa w) ~ w) => Pat (r :: * -> *) (w :: PKind) where
 -- | Given a chunk of pattern data, recover the PKind.
 type family UnPatDa (pd :: *) :: PKind
 
+-- | Given a PatReprFn output and type constructor input, recover the PKind
+type family UnPatReprFn (s :: * -> *) (prf :: *) :: PKind
+
 -- | A variable used literally in a pattern
 newtype PVar r a = PVar (r a)
 type instance UnPatDa (PVar r a) = PKVar r a
@@ -198,7 +228,7 @@ instance (K3BaseTy a, r ~ r') => Pat r' (PKVar (r :: * -> *) (a :: *)) where
 --
 -- Note that 'PatReprFn s (PUnk a) ~ ()', which should prohibit even
 -- accidental use as part of a 'K3' expression or type.
-data PUnk a = PUnk
+data PUnk (a :: *) = PUnk
 type instance UnPatDa (PUnk a)       = PKUnk a
 instance (K3BaseTy a) => Pat r (PKUnk (a :: *)) where
   type PatDa       (PKUnk a) = PUnk a
@@ -295,7 +325,7 @@ type family K3_Pat_C (r :: * -> *) (w :: PKind) :: Constraint
 type family K3_Slice_C (r :: * -> *) (w :: PKind) :: Constraint
 
 ------------------------------------------------------------------------}}}
-{- * Annotations -} --                                                  {{{
+-- Annotations                                                          {{{
 
 -- | Specification for functional dependencies within a collection.
 --
@@ -307,56 +337,79 @@ data FunDepSpec a = FDIrr -- ^ /Irr/elevant to a fundep
                   | FDCod -- ^ In the /Cod/omain of a fundep
  deriving (Eq,Show)
 
--- | Annotations on 'K3' expressions or 'K3Ty' types.
---
--- XXX should really do something smarter
-data Ann a where
+-- | A representation-specific constraint for cross-references
+type family K3_Xref_C (r :: * -> *) (w :: PKind) :: Constraint
 
-  -- | Decorate an expression as atomic.
-  AAtomic :: Ann a
+-- | Annotations on 'K3Ty' types
+data AnnT a where
 
   -- | A functional dependency among elements of a collection.
   AFunDep :: (RTupled fs, RTR fs ~ FunDepSpec, RTE fs ~ a)
-          => fs -> Ann (CTE r t a)
+          => fs -> AnnT (CTE r t a)
 
   -- | Request an additional index on a collection
   AIndex :: (RTupled fs, RTR fs ~ FunDepSpec, RTE fs ~ a)
-         => fs -> Ann (CTE r t a)
+         => fs -> AnnT (CTE r t a)
 
   -- | An Exactly-One-Of annotation, used to convey variants (i.e. sums)
   --   to K3.
-  AOneOf  :: (RTupled mv, RTR mv ~ Maybe) => Ann mv
+  AOneOf  :: (RTupled mv, RTR mv ~ Maybe) => AnnT mv
 
   -- | 'AFunDep' for HList representations
-  AFunDepHL :: HRList FunDepSpec a -> Ann (CTE r t (HList a))
+  AFunDepHL :: HRList FunDepSpec a -> AnnT (CTE r t (HList a))
 
   -- | 'AIndex' for HList representations
-  AIndexHL :: HRList FunDepSpec a -> Ann (CTE r t (HList a))
+  AIndexHL :: HRList FunDepSpec a -> AnnT (CTE r t (HList a))
 
   -- | 'AOneOf' for HList representations
-  --
-  -- XXX Constraints by analogy to AOneOf
-  AOneOfHL :: Ann (HList mv)
+  AOneOfHL :: (HLR Maybe v mv) => AnnT (HList mv)
 
-{-
- - XXX 
-  -- | A cross-reference between collections
-  AXref :: r'  (CTE rf tf af)
-        -> ???
-        -> Ann (CTE rt tt at)
--}
+  -- | A cross-reference within this collection
+  --
+  -- XXX this is not actually implemented anywhere and has yet to be
+  -- demonstrated as being implementable
+  AXref :: (PatTy r w ~ t, w ~ UnPatDa (PatDa w))
+        => PatDa w -> (forall p . PatReprFn p w -> p x)
+             -- Foreign projection
+        -> PatDa w -> (forall p . PatReprFn p w -> p x)
+        -> AnnT (CTE r c' t)
+
+  -- | A cross-reference to a declared collection.
+  --
+  -- XXX this is not actually implemented anywhere and has yet to be
+  -- demonstrated as being implementable
+  AXrefF :: (Pat p w, Pat p w', PatTy p w ~ t, PatTy p w' ~ t')
+         => Decl UnivTyRepr r' (CTE r' c t) -- Foreign collection
+         -> PatDa w
+         -> (PatReprFn p w  -> p x)         -- Foreign projection
+         -> PatDa w'
+         -> (PatReprFn p w' -> p x)         -- Local projection
+         -> AnnT (CTE r c' t')
 
   -- | An escape hatch! (XXX)
-  AMisc :: String -> Ann a
+  ATMisc :: String -> AnnT a
+
+
+-- | Annotations on 'K3' expressions
+data AnnE a where
+
+  -- | Decorate an expression as atomic.
+  AAtomic :: AnnE a
+
+  -- |
+  ASingleton :: AnnE (CTE r t a)
+
+  -- | An escape hatch! (XXX)
+  AEMisc :: String -> AnnE a
 
 ------------------------------------------------------------------------}}}
-{- * Type System -} --                                                  {{{
+-- Type System                                                          {{{
 
 -- | Data level representation of K3 types, indexed by equivalent type in
 -- Haskell.
 class K3Ty (r :: * -> *) where
   -- | Attach an annotation to a type
-  tAnn     :: r a -> [Ann a] -> r a
+  tAnn     :: r a -> [AnnT a] -> r a
 
   tAddress :: r AddrIx
   tBool    :: r Bool
@@ -364,6 +417,7 @@ class K3Ty (r :: * -> *) where
   tFloat   :: r Float
   tInt     :: r Int
   tString  :: r String
+  tTarget  :: r t -> r (Target r' t)
   tUnit    :: r ()
 
   -- tPair   :: r a -> r b -> r (a,b)
@@ -396,6 +450,7 @@ instance K3Ty UnivTyRepr where
   tFloat                 = UTR tFloat
   tInt                   = UTR tInt
   tString                = UTR tString
+  tTarget (UTR t)        = UTR $ tTarget t
   tUnit                  = UTR tUnit
 
   tColl   c      (UTR a) = UTR $ tColl c a
@@ -413,7 +468,7 @@ instance K3Ty UnivTyRepr where
   tHL      us            = UTR $ tHL     $ hrlmap unUTR us
 
 ------------------------------------------------------------------------}}}
-{- * Numeric Autocasting -} --                                          {{{
+-- Numeric Autocasting                                                  {{{
 
   -- XXX should we make these be constraints in the K3 class so that
   -- different representations can make different choices?
@@ -430,6 +485,7 @@ class BiNum a b where
   biadd :: a -> b -> BNTF a b
   bimul :: a -> b -> BNTF a b
 
+-- | And and Or are captured as binary numerics
 instance BiNum Bool Bool where 
   type BNTF Bool Bool = Bool
   biadd = (||)
@@ -459,7 +515,7 @@ instance BiNum Float Int where
   -- XXX More
 
 ------------------------------------------------------------------------}}}
-{- * Values and Expressions -} --                                       {{{
+-- Expressions                                                          {{{
 
 -- | Data level representation of K3 expression, indexed by equivalent
 -- type in Haskell.
@@ -468,7 +524,7 @@ class K3 (r :: * -> *) where
   -- | Add a comment to some part of the AST
   cComment  :: String -> r a -> r a
   -- | Add some annotations to some part of the AST
-  cAnn      :: r a -> [Ann a] -> r a
+  cAnn      :: r a -> [AnnE a] -> r a
 
   cAddress  :: AddrIx -> r AddrIx
   cBool     :: Bool -> r Bool
@@ -481,12 +537,16 @@ class K3 (r :: * -> *) where
 
   -- | Reference the given variable (and promise that it has type 'a')
   --
+  -- Note that this is, for example, the only way of producing Targets.
+  --
   -- XXX replace with something more like declvar so that, in theory, a
   -- sufficiently smart "r" might know what to do about it?
   --
   -- We might also want an eLocalVar :: VarIx -> UnivTyRepr a -> r (Ref a)
   -- to get something like "The K3 Way" of doing local variables?
   unsafeVar :: VarIx -> UnivTyRepr a -> r a
+
+  declVar   :: Decl UnivTyRepr r a -> r a
 
   eJust     :: r a -> r (Maybe a)
   eRef      :: r a -> r (Ref r a)
@@ -599,34 +659,37 @@ class K3 (r :: * -> *) where
   -- | Send a function and data to another node.
   --
   -- XXX Is there any way to refer to "self" as an addrix?
-  --
-  -- XXX Are there restrictions on the functions that can be sent (do they
-  -- have to be declarations)?  If so, can we expose that by the type
-  -- system?
-  eSend     :: r AddrIx -> r (a -> ()) -> r a -> r ()
+  eSend     :: r AddrIx -> r (Target r a) -> r a -> r ()
 
 ------------------------------------------------------------------------}}}
-{- * Miscellany -} --                                                   {{{
+-- Declarations                                                         {{{
 
--- | A convenience function for setting the type of a collection.
---
--- Use as (eEmpty `asColl` CTSet)
-asColl :: r (CTE r c t) -> CollTy c -> r (CTE r c t)
-asColl = const
+-- | K3 supports a few kinds of delcarations at the top level:
+data DKind r dt where
+  -- | Collections
+  --
+  -- XXX No initializers? [t] ->
+  DKColl :: DKind r (CTE r (c :: CKind) t)
+
+  -- | Global References
+  DKRef  :: DKind r (Ref r t)
+
+  -- | Functions, which execute in the same transaction as the caller
+  DKFunc :: r (a -> b) -> DKind r (a -> b)
+
+  -- | Triggers, which execute in a different transaction than the caller
+  DKTrig :: r (t -> ()) -> DKind r (Target r t)
 
 -- | A top-level declaration.
 --
 -- XXX does not enumerate local variables
-data Decl tr r t = Decl VarIx (tr t) (Maybe (r t))
-
--- | Capture a type-constructor as data.
-data RCons (r :: * -> *) = RCons
+data Decl tr r t = Decl VarIx (tr t) (DKind r t)
 
 -- | A utility for setting the type of sub-components of a declaration, by
 -- constraining polymorphism.  Use the 'asCollR' and 'asRefR' combinators
--- to avail yourself of the RCons passed in.
-mkdecl :: (RCons r -> Decl tr r t) -> Decl tr r t
-mkdecl f = f RCons
+-- to avail yourself of the Proxy passed in.
+mkdecl :: (Proxy r -> Decl tr r t) -> Decl tr r t
+mkdecl f = f Proxy
 
 -- | Define a fixed-point declaration.  Like mkdecl, it continues to assist
 -- in constraining polymorphism, but also yields a representation of the
@@ -636,20 +699,20 @@ mkdecl f = f RCons
 -- type fields of the Decl being built to construct a K3 AST variable to
 -- refer to the current definition.
 mkfdecl :: (K3 r, K3Ty trx)
-        => (RCons r -> r t -> (forall tr . (K3Ty tr) => Decl tr r t))
+        => (Proxy r -> r t -> (forall tr . (K3Ty tr) => Decl tr r t))
         -> Decl trx r t
-mkfdecl f = let self = (\(Decl n tr _) -> unsafeVar n tr) (f RCons self)
-            in f RCons self
+mkfdecl f = let self = (\(Decl n tr _) -> unsafeVar n tr) (f Proxy self)
+            in f Proxy self
 
 -- | Ensure that the representation type of a collection matches
 --
 -- This is probably most useful when s is a K3Ty and r is a K3, but this may
 -- be more generally applicable.
-asCollR :: s (CTE r c t) -> RCons r -> s (CTE r c t)
+asCollR :: s (CTE r c t) -> Proxy r -> s (CTE r c t)
 asCollR = const
 
 -- | Ensure that the representation type of a ref matches
-asRefR :: r' (Ref r t) -> RCons r -> r' (Ref r t)
+asRefR :: r' (Ref r t) -> Proxy r -> r' (Ref r t)
 asRefR = const
 
 ------------------------------------------------------------------------}}}

@@ -32,6 +32,7 @@ module Dyna.BackendK3.Automation (
 
 import           Data.Word
 import           Dyna.BackendK3.AST
+import           Dyna.XXX.HList
 import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
@@ -67,6 +68,7 @@ instance (K3AutoColl c, K3AutoTy a, K3BaseTy a) => K3AutoTy (CTE r c a) where
   autoty = tColl autocoll autoty
 instance (K3AutoTy a) => K3AutoTy (Maybe a) where autoty = tMaybe autoty
 instance (K3AutoTy a) => K3AutoTy (Ref r a) where autoty = tRef autoty
+instance (K3AutoTy a) => K3AutoTy (Target r a) where autoty = tTarget autoty
 instance (K3AutoTy a, K3BaseTy a, K3AutoTy b, K3BaseTy b)
       => K3AutoTy (a -> b) where
   autoty = tFun autoty autoty
@@ -105,18 +107,32 @@ instance (K3AutoTyTup (wa ': w) (a,b), K3AutoTyTup w b)
 -}
 
 ------------------------------------------------------------------------}}}
-{- * Automate pattern -} -- XXX                                         {{{
+-- Automate pattern (XXX)                                               {{{
+
+-- | Automatically derive a pattern, for use with eLam.
+-- Note that this is only useful for the (common) case of not using
+-- elimination patterns.
 
 {-
--- | Automatically derive a pattern, for use with eLam.
--- Note that this is only useful for the (common) case of not using Just
--- patterns.
+
+type family   UnPatReprFn (s :: * -> *) (pr :: *) :: PKind
+type instance UnPatReprFn s (s a) = PKVar UnivTyRepr a
+type instance UnPatReprFn s (HList '[]) = PKHL '[]
 
 class (Pat UnivTyRepr w) => K3AutoPat (w :: PKind) where
   autopat :: PatDa w
 
 instance (K3BaseTy a, K3AutoTy a) => K3AutoPat (PKVar UnivTyRepr a) where
   autopat = PVar autoty
+
+instance K3AutoPat (PKHL '[]) where
+  autopat = HN
+
+instance (K3AutoPat (PKHL ws),
+          K3AutoPat w,
+          MapPatConst ws UnivTyRepr)
+      => K3AutoPat (PKHL (w ': ws)) where
+  autopat = autopat :+ autopat
 
 class UFAP (w :: [PKind]) where unfoldautopat :: HList (MapPatDa w)
 instance UFAP '[] where unfoldautopat = HN
