@@ -1,0 +1,3 @@
+[submodule "external/ekmett-trifecta"]
+	path = external/ekmett-trifecta
+	url = git://github.com/ekmett/trifecta.git
