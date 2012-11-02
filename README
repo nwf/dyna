@@ -1,24 +1,57 @@
 An overview of the source tree
 ------------------------------
 
-src/Dyna/BackendK3 -- An AST and printer for K3,
+external/
+  ekmett-trifecta  -- The trifecta parser combinator library, tracked
+                   -- as a git submodule.
+
+src/Dyna/
+
+  BackendK3        -- An AST and printer for K3,
                    -- done in finally-tagless style.
                    -- Includes some "Examples", even if not self-tests.
 
-src/Dyna/ParserHS  -- the Haskell front-end parser and selftests
+  ParserHS         -- the Haskell front-end parser and selftests
 
-src/Dyna/Term      -- Different representations of terms and
-                      utilities
+  Term             -- Different representations of terms and
+                   --  utilities
 
-src/Dyna/Test      -- code used by self-tests throughout the codebase
+  Test             -- code used by self-tests throughout the codebase
 
-src/Dyna/XXX       -- code that should probably go upstream;
-                      modules here are named by the upstream package.
+  XXX              -- code that should probably go upstream;
+                   -- modules here are named by the upstream package.
 
 
 For those not familar with cabal
 --------------------------------
 
+First, ensure that you have GHC 7.6 or later.
+
+Then, sadly, I have to ask you to build some upstream packages out of their
+repositories.  I thought they were going to be released "soon" when I
+switched to these later versions, but it hasn't happened yet:
+
+git submodule init
+git submodule update
+(cd external/ekmett-trifecta; cabal install --user)
+
+Then fetch, build, and install any dependencies
+
+(cabal install --enable-tests --only-dependencies)
+
+Build Dyna:
+
 cabal configure --user --enable-tests
 cabal build
+cabal haddock
 cabal test
+
+And then run the REPL:
+
+./dist/build/drepl/drepl
+
+OK, that last bit is probably not quite true.  At this point, the code is
+still rather "in the works" so you probably want to load some module in
+GHCi; for example:
+
+ghci -isrc Dyna.ParserHS.Parser
