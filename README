@@ -2,6 +2,8 @@ An overview of the source tree
 ------------------------------
 
 external/
+  damsl-k3         -- The DAMSL K3 tree, tracked as a git submodule.
+
   ekmett-trifecta  -- The trifecta parser combinator library, tracked
                    -- as a git submodule.
 
@@ -34,6 +36,10 @@ switched to these later versions, but it hasn't happened yet:
 git submodule init
 git submodule update
 (cd external/ekmett-trifecta; cabal install --user)
+
+Build K3, which requires OCaml:
+
+(cd external/damsl-k3; make)
 
 Then fetch, build, and install any dependencies
 

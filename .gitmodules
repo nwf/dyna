@@ -1,3 +1,6 @@
 [submodule "external/ekmett-trifecta"]
 	path = external/ekmett-trifecta
 	url = git://github.com/ekmett/trifecta.git
+[submodule "external/damsl-k3"]
+	path = external/damsl-k3
+	url = git@git.assembla.com:damsl.k3.git
