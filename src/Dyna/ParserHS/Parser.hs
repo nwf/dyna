@@ -5,7 +5,7 @@
 -- <https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs>
 -- as well as the trifecta code itself
 --
--- TODO:
+-- TODO (XXX):
 --
 --   * We might want to use T.T.Literate, too, in the end.
 --
@@ -14,6 +14,9 @@
 --   * Doesn't handle parenthesized aggregators
 --
 --   * Doesn't handle shared subgoals ("whenever ... { ... }")
+--
+--   * Don't end numerics with ., even if it's the end-of-rule marker;
+--   put a space first.
 
 --   Header material                                                      {{{
 
@@ -23,7 +26,7 @@
 {-# LANGUAGE Rank2Types #-}
 
 module Dyna.ParserHS.Parser (
-    Term(..), Annotation(..), dterm, dtexpr,
+    Term(..), dterm, dtexpr,
     Rule(..), drule, Line(..), dline, dlines
 ) where
 
@@ -42,19 +45,20 @@ import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
 import           Text.Trifecta
 
+import           Dyna.Term.TTerm (Annotation(..))
 import           Dyna.XXX.Trifecta (identNL)
 
 ------------------------------------------------------------------------}}}
 -- Parsed output definition                                             {{{
 
-data Annotation = AnnType (Spanned Term)
+data Term = TFunctor !B.ByteString
+                     ![Spanned Term]
+          | TAnnot   !(Annotation (Spanned Term))
+                     !(Spanned Term)
+          | TNumeric !(Either Integer Double)
+          | TVar     !B.ByteString
  deriving (Eq,Ord,Show)
 
-data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
-          | TAnnot   Annotation !(Spanned Term)
-          | TVar     {-# UNPACK #-} !B.ByteString
-           -- TDBLit XXX
- deriving (Eq,Ord,Show)
 
 -- | Rules are not just terms because we want to make it very syntactically
 --   explicit about the head being a term (though that's not an expressivity
@@ -64,13 +68,13 @@ data Term = TFunctor {-# UNPACK #-} !B.ByteString ![Spanned Term]
 --   XXX The span on Fact is a little silly
 data Rule = Fact (Spanned Term)
           | Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
- deriving (Eq,Ord,Show)
+ deriving (Eq,Show)
 
 --   XXX The span on LRule is a little silly
 --   XXX Having one kind of Pragma is probably wrong
 data Line = LRule (Spanned Rule)
           | LPragma !(Spanned Term)
- deriving (Eq,Ord,Show)
+ deriving (Eq,Show)
 
 
 ------------------------------------------------------------------------}}}
@@ -82,9 +86,11 @@ bsf = fmap BU.fromString
 ------------------------------------------------------------------------}}}
 -- Identifier Syles                                                     {{{
 
+-- | The full laundry list of punctuation symbols we "usually" mean.
 usualpunct :: CS.CharSet
 usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
 
+-- | Dot operators
 dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
 dynaDotOperStyle = IdentifierStyle
   { styleName = "Dot Operator"
@@ -95,11 +101,13 @@ dynaDotOperStyle = IdentifierStyle
   , styleReservedHighlight = ReservedOperator
   }
 
-    --   Dot is handled specially elsewhere due to its
-    --   dual purpose as an operator and rule separator.
-    --
-    --   Colon is not a permitted beginning to a prefix
-    --   operator, as it is a sigil for type annotations.
+-- | Prefix operators
+--
+-- Dot is handled specially elsewhere due to its
+-- dual purpose as an operator and rule separator.
+--
+-- Colon is not a permitted beginning to a prefix
+-- operator, as it is a sigil for type annotations.
 dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
 dynaPfxOperStyle = IdentifierStyle
   { styleName = "Prefix Operator"
@@ -110,6 +118,10 @@ dynaPfxOperStyle = IdentifierStyle
   , styleReservedHighlight = ReservedOperator
   }
 
+-- | Infix operators
+--
+-- Dot is handled specially elsewhere due to its
+-- dual purpose as an operator and rule separator.
 dynaOperStyle :: TokenParsing m => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
   { styleName = "Infix Operator"
@@ -123,7 +135,7 @@ dynaOperStyle = IdentifierStyle
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
   { styleName = "Atom"
-  , styleStart    = (lower <|> digit <|> char '_')
+  , styleStart    = (lower <|> oneOf "$")
   , styleLetter   = (alphaNum <|> oneOf "_'")
   , styleReserved = H.fromList [ "is", "new", "whenever" ]
   , styleHighlight = Constant
@@ -184,13 +196,23 @@ term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
       [       parens texpr
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
-      , try $ spanned $ flip TFunctor [] <$> atom <* (notFollowedBy $ char '(')
-      , try $ spanned $ mkta <$> (colon *> term) <* spaces <*> term
+
+      ,       spanned $ mkta <$> (colon *> term) <* spaces <*> term
+
+      , try $ spanned $ TNumeric <$> naturalOrDouble
+
+      , try $ spanned $ flip TFunctor [] <$> atom
+                      <* (notFollowedBy $ char '(')
+
+      , try $ spanned $ flip TFunctor [] <$> (bsf $ string "*") 
       ,       spanned $ parenfunc
       ]
  where
-  parenfunc = TFunctor <$> (highlight Identifier atom <?> "Functor")
+  functor = highlight Identifier atom <?> "Functor"
+
+  parenfunc = TFunctor <$> functor
                        <*>  parens (texpr `sepBy` symbolic ',')
+
   mkta ty te = TAnnot (AnnType ty) te
 
 -- XXX right now all binops are at equal precedence and left-associative; that's wrong.
@@ -234,13 +256,13 @@ rulepfx = Rule <$> term
 
 rule :: DeltaParsing m => m Rule
 rule = choice [
-                -- HEAD OP= RESULT whenever EXPRS .
+                -- HEAD OP= RESULT EXPR whenever EXPRS .
                (try (liftA flip rulepfx
                            <*> texpr
                            <*  hrss "whenever"))
                            <*> (texpr `sepBy1` symbolic ',')
 
-                -- HEAD OP= EXPRS, RESULT .
+                -- HEAD OP= EXPRS, RESULT EXPR .
               , (try rulepfx)
                            <*> many (try (texpr <* symbolic ','))
                            <*> texpr
@@ -259,9 +281,7 @@ drule = spanned rule
 
 progline :: DeltaParsing m => m (Spanned Line)
 progline  = spanned $ choice [ LRule <$> drule
-                             , LPragma <$> (symbol ":-"
-                                       *> spaces
-                                       *> texpr)
+                             , LPragma <$> (symbol ":-" *> spaces *> texpr)
                              ]
 
 dline :: DeltaParsing m => m (Spanned Line)

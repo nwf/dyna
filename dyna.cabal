@@ -26,12 +26,12 @@ Library
     ghc-options:        -Wall
 
 
-    Exposed-Modules:    Dyna.BackendK3.AST,
+    Exposed-Modules:    Dyna.Analysis.NormalizeParse,
+                        Dyna.BackendK3.AST,
                         Dyna.BackendK3.Automation,
                         Dyna.BackendK3.Render,
                         Dyna.BackendK3.Stdlib,
                         Dyna.ParserHS.Parser,
-                        Dyna.NormalizeParse,
                         Dyna.XXX.HList,
                         Dyna.XXX.THTuple,
                         Dyna.XXX.Trifecta

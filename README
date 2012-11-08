@@ -4,8 +4,11 @@ An overview of the source tree
 external/
   damsl-k3         -- The DAMSL K3 tree, tracked as a git submodule.
 
-  ekmett-trifecta  -- The trifecta parser combinator library, tracked
+  ekmett-parsers   -- ekmett's parsers combinator library, tracked
                    -- as a git submodule.
+
+  ekmett-trifecta  -- ekmett's trifecta parser combinator library,
+                   -- tracked as a git submodule.
 
 src/Dyna/
 
@@ -27,7 +30,9 @@ src/Dyna/
 For those not familar with cabal
 --------------------------------
 
-First, ensure that you have GHC 7.6 or later.
+First, ensure that you have GHC 7.6 or later.  (Though in a pinch, if you're
+only interested in the frontend stuff, apparently as early as 7.0 continues
+to be servicable.)
 
 Then, sadly, I have to ask you to build some upstream packages out of their
 repositories.  I thought they were going to be released "soon" when I
@@ -35,6 +40,7 @@ switched to these later versions, but it hasn't happened yet:
 
 git submodule init
 git submodule update
+(cd external/ekmett-parsers; cabal install --user)
 (cd external/ekmett-trifecta; cabal install --user)
 
 Build K3, which requires OCaml:
@@ -49,7 +55,7 @@ Build Dyna:
 
 cabal configure --user --enable-tests
 cabal build
-cabal haddock
+# cabal haddock # skip this, for depressing reasons
 cabal test
 
 And then run the REPL:

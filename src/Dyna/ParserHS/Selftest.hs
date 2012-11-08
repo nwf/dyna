@@ -5,7 +5,7 @@
 --   Writing these is still too hard, Template Haskell and the REPL
 --     notwithstanding.
 --
---   Test.Framework.TH appears not to understand comments at the
+--   Test.Framework.TH appears not to understand block comments at the
 --   moment, and parses right through them.
 
 -- Header material                                                      {{{
@@ -30,6 +30,7 @@ import           Text.Trifecta
 import           Text.Trifecta.Delta
 
 import           Dyna.ParserHS.Parser
+import           Dyna.Term.TTerm (Annotation(..))
 import           Dyna.XXX.TrifectaTest
 
 ------------------------------------------------------------------------}}}
@@ -87,8 +88,8 @@ case_basicFunctorNLComment :: Assertion
 case_basicFunctorNLComment = e @=? (term sfb)
  where
   e =  TFunctor "foo"
-         [TFunctor "1" [] :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
-         ,TFunctor "2" [] :~ Span (Lines 1 2 11 2) (Lines 2 0 13 0) "1,2\n"
+         [TNumeric (Left 1) :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
+         ,TNumeric (Left 2) :~ Span (Lines 1 2 11 2) (Lines 2 0 13 0) "1,2\n"
          ]
         :~ Span (Columns 0 0) (Lines 2 1 14 1) "foo(%xxx\n"
 
@@ -99,11 +100,11 @@ case_basicFunctorTWS :: Assertion
 case_basicFunctorTWS = e @=? (term sfb)
  where
   e = TFunctor "foo"
-       [TFunctor "bar" [] :~ Span (Lines 1 1 5 1) (Lines 1 5 9 5) "(bar )"
-       ] :~ Span (Columns 0 0) (Columns 10 10) "foo\n"
+       [TFunctor "bar" [] :~ Span (Columns 5 5) (Columns 9 9) sfb
+       ] :~ Span (Columns 0 0) (Columns 10 10) sfb
 
   sfb :: (IsString s) => s
-  sfb = "foo\n(bar )"
+  sfb = "foo (bar )"
 
 case_basicFunctorNL :: Assertion
 case_basicFunctorNL = e @=? (term sfb)
@@ -128,6 +129,14 @@ case_colonFunctor = e @=? (term pvv)
        :~ Span (Columns 0 0) (Columns 17 17) pvv
   pvv = "possible(Var:Val)"
 
+-- case_nullaryStar :: Assertion
+-- case_nullaryStar = e @=? (term gs)
+--  where
+--   e  = TFunctor "gensym"
+--          [TFunctor "*" [] :~ Span (Columns 7 7) (Columns 8 8) gs
+--          ] :~ Span (Columns 0 0) (Columns 9 9) gs
+--   gs = "gensym(*)"
+
 case_failIncompleteExpr :: Assertion
 case_failIncompleteExpr = checkParseFail dterm "foo +"
   "(interactive):1:5: error: expected: \"(\",\n    end of input\nfoo +<EOF> "
@@ -146,8 +155,6 @@ case_tyAnnot = e @=? (term fintx)
   fintx = "f(:int X)"
 
 ------------------------------------------------------------------------}}}
-
-------------------------------------------------------------------------}}}
 -- Rules and lines                                                      {{{
 
 progline :: ByteString -> Spanned Line
@@ -162,10 +169,10 @@ case_ruleSimple = e @=? (progline sr)
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+=" 
                    []
-                   (TFunctor "1" [] :~ Span (Columns 8 8) (Columns 10 10) sr)
-            :~ Span (Columns 0 0) (Columns 10 10) sr)
-           :~ Span (Columns 0 0) (Columns 10 10) sr
-  sr = "goal += 1 ."
+                   (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
+            :~ Span (Columns 0 0) (Columns 9 9) sr)
+           :~ Span (Columns 0 0) (Columns 9 9) sr
+  sr = "goal += 1."
   
 case_ruleExpr :: Assertion
 case_ruleExpr = e @=? (progline sr)
@@ -230,7 +237,7 @@ case_ruleKeywordsComma = e @=? (progline sr)
                      :~ Span (Columns 21 21) (Columns 32 32) sr
                    ,TFunctor "is"
                       [TVar "Y" :~ Span (Columns 34 34) (Columns 36 36) sr
-                      ,TFunctor "3" [] :~ Span (Columns 39 39) (Columns 41 41) sr
+                      ,TNumeric (Left 3) :~ Span (Columns 39 39) (Columns 41 41) sr
                       ]
                      :~ Span (Columns 34 34) (Columns 41 41) sr
                    ]
@@ -247,17 +254,17 @@ case_rules = e @=? (proglines sr)
   e = [ LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                      "+="
                      []
-                     (TFunctor "1" [] :~ Span (Columns 8 8) (Columns 9 9) sr)
-                    :~ Span (Columns 0 0) (Columns 9 9) sr)
-                   :~ Span (Columns 0 0) (Columns 9 9) sr
-      , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 11 11) (Columns 16 16) sr)
+                     (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
+                    :~ Span (Columns 0 0) (Columns 10 10) sr)
+                   :~ Span (Columns 0 0) (Columns 10 10) sr
+      , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
                     "+="
                     []
-                    (TFunctor "2" [] :~ Span (Columns 19 19) (Columns 20 20) sr)
-                   :~ Span (Columns 11 11) (Columns 20 20) sr)
-                  :~ Span (Columns 11 11) (Columns 20 20) sr
+                    (TNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
+                   :~ Span (Columns 12 12) (Columns 22 22) sr)
+                  :~ Span (Columns 12 12) (Columns 22 22) sr
       ]
-  sr = "goal += 1. goal += 2."
+  sr = "goal += 1 . goal += 2 ."
 
 case_rulesDotExpr :: Assertion
 case_rulesDotExpr = e @=? (proglines sr)
@@ -276,11 +283,11 @@ case_rulesDotExpr = e @=? (proglines sr)
        , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
                       "+=" 
                       []
-                      (TFunctor "1" [] :~ Span (Columns 25 25) (Columns 26 26) sr)
-                     :~ Span (Columns 17 17) (Columns 26 26) sr)
-                    :~ Span (Columns 17 17) (Columns 26 26) sr
+                      (TNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
+                     :~ Span (Columns 17 17) (Columns 27 27) sr)
+                    :~ Span (Columns 17 17) (Columns 27 27) sr
        ]
-  sr = "goal += foo.bar. goal += 1."
+  sr = "goal += foo.bar. goal += 1 ."
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{
