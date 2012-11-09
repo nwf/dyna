@@ -3,7 +3,7 @@
 	url = git@git.assembla.com:damsl.k3.git
 [submodule "external/ekmett-parsers"]
 	path = external/ekmett-parsers
-	url = git://github.com/nwf/parsers.git
+	url = git://github.com/ekmett/parsers.git
 [submodule "external/ekmett-trifecta"]
 	path = external/ekmett-trifecta
-	url = git://github.com/nwf/trifecta.git
+	url = git://github.com/ekmett/trifecta.git
