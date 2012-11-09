@@ -12,8 +12,8 @@ import qualified Dyna.ParserHS.Parser         as P
 import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
-testNormTerm :: Monad m => B.ByteString -> (DTerm, ANFState)
+testNormTerm :: B.ByteString -> (DTerm, ANFState)
 testNormTerm = runNormalize . normTerm False . unsafeParse P.dterm
 
-testNormRule :: Monad m => B.ByteString -> (DRule, ANFState)
+testNormRule :: B.ByteString -> (DRule, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
