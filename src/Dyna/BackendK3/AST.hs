@@ -64,6 +64,7 @@ module Dyna.BackendK3.AST (
     Decl(..), DKind(..), mkdecl, mkfdecl, asCollR, asRefR
 ) where
 
+import           Data.Proxy
 import           Data.Word
 import           GHC.Prim (Constraint)
 -- import           Language.Haskell.TH (varT, mkName)

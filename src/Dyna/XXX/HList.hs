@@ -18,8 +18,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.XXX.HList(
-  -- * Proxy
-  Proxy(..),
   -- * Type-level functions on lifted lists
   Append, Map, MapConstraint,
 
@@ -35,14 +33,6 @@ module Dyna.XXX.HList(
 
 import           Control.Applicative
 import           GHC.Prim (Constraint)
-
-------------------------------------------------------------------------}}}
--- Proxy                                                                {{{
-
--- | Capture a type-constructor as data.
---
--- /Good luck!  I am behind seven/.
-data Proxy (r :: k) = Proxy
 
 ------------------------------------------------------------------------}}}
 -- Type-level functions                                                 {{{
