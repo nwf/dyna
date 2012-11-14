@@ -1,5 +1,5 @@
 ---------------------------------------------------------------------------
--- | Very, very basic representation of terms.
+-- | Very, very basic (Trivial, even) representation of terms.
 --
 -- XXX This isn't going to be sufficient when we start doing more
 -- complicated things, but it suffices for now?
