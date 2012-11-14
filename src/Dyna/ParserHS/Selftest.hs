@@ -163,6 +163,14 @@ progline = unsafeParse dline
 proglines :: ByteString -> [Spanned Line]
 proglines = unsafeParse dlines
 
+case_ruleFact :: Assertion
+case_ruleFact = e @=? (progline sr)
+ where
+  e  = LRule (Fact (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) "goal.")
+                     :~ Span (Columns 0 0) (Columns 4 4) "goal.")
+         :~ Span (Columns 0 0) (Columns 4 4) "goal."
+  sr = "goal."
+
 case_ruleSimple :: Assertion
 case_ruleSimple = e @=? (progline sr)
  where

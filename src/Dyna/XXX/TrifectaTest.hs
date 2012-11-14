@@ -13,7 +13,7 @@ unsafeFS (Success a) = a
 unsafeFS (Failure td) = error $ "Errors: " ++ show td
 
 unsafeFF :: String -> Result t -> Assertion
-unsafeFF e (Success _) = error $ "Unexpected success"
+unsafeFF _ (Success _) = error $ "Unexpected success"
 unsafeFF e (Failure td) = e @=? show td
 
 unsafeParse :: (Show a) => (Parser a) -> ByteString -> a
