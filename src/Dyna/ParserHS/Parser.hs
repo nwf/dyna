@@ -197,7 +197,7 @@ term  = token $ choice
       [       parens texpr
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
 
-      ,       spanned $ mkta <$> (colon *> term) <* spaces <*> term
+      ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
 
       , try $ spanned $ TNumeric <$> naturalOrDouble
 
@@ -251,7 +251,7 @@ dtexpr = unDL texpr
 -- we hope is a rule.  
 rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
 rulepfx = Rule <$> term
-               <*  spaces
+               <*  whiteSpace
                <*> (bsf $ ident dynaOperStyle <?> "Aggregator")
 
 rule :: DeltaParsing m => m Rule
@@ -274,20 +274,22 @@ rule = choice [
   hrss = highlight ReservedOperator . spanned . symbol 
 
 drule :: DeltaParsing m => m (Spanned Rule)
-drule = spanned rule
+drule = unDL (spanned rule)
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
 
 progline :: DeltaParsing m => m (Spanned Line)
-progline  = spanned $ choice [ LRule <$> drule
-                             , LPragma <$> (symbol ":-" *> spaces *> texpr)
-                             ]
+progline  = do
+  whiteSpace
+  spanned (choice [ LRule <$> drule
+                  , LPragma <$> (symbol ":-" *> whiteSpace *> texpr)
+                  ])
 
 dline :: DeltaParsing m => m (Spanned Line)
 dline = unDL (progline <* optional (char '.') <* optional newline)
 
 dlines :: DeltaParsing m => m [Spanned Line]
-dlines = unDL (progline `sepEndBy` (char '.' <* spaces))
+dlines = unDL (progline `sepEndBy` (char '.' <* whiteSpace))
 
 ------------------------------------------------------------------------}}}

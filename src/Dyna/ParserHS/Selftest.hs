@@ -18,6 +18,7 @@ module Dyna.ParserHS.Selftest where
 
 -- import           Control.Applicative ((<*))
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString                     as B
 -- import           Data.Foldable (toList)
 -- import           Data.Monoid (mempty)
 -- import qualified Data.Sequence                       as S
@@ -141,6 +142,7 @@ case_failIncompleteExpr :: Assertion
 case_failIncompleteExpr = checkParseFail dterm "foo +"
   "(interactive):1:5: error: expected: \"(\",\n    end of input\nfoo +<EOF> "
 
+------------------------------------------------------------------------}}}
 -- Annotations                                                          {{{
 
 case_tyAnnot :: Assertion
@@ -273,6 +275,29 @@ case_rules = e @=? (proglines sr)
                   :~ Span (Columns 12 12) (Columns 22 22) sr
       ]
   sr = "goal += 1 . goal += 2 ."
+
+case_rulesWhitespace :: Assertion
+case_rulesWhitespace = e @=? (proglines sr)
+ where
+  e  = [ LRule (Rule (TFunctor "goal" [] :~ Span (Columns 2 2) (Lines 1 1 16 1) l0)
+                     "+="
+                     []
+                     (TNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
+                    :~ Span (Columns 2 2) (Lines 1 6 21 6) l0)
+                   :~ Span (Columns 2 2) (Lines 1 6 21 6) l0
+       , LRule (Rule (TFunctor "goal" [] :~ Span (Lines 3 1 31 1) (Lines 3 6 36 6) l3)
+                     "+="
+                     []
+                     (TNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
+                    :~ Span (Lines 3 1 31 1) (Lines 3 11 41 11) l3)
+                   :~ Span (Lines 3 1 31 1) (Lines 3 11 41 11) " goal += 2 .\n"
+       ]
+  l0 = "  goal%comment\n"
+  l1 = " += 1 .\n"
+  l2 = "%test \n"
+  l3 = " goal += 2 .\n"
+  sr = B.concat [l0,l1,l2,l3]
+
 
 case_rulesDotExpr :: Assertion
 case_rulesDotExpr = e @=? (proglines sr)
