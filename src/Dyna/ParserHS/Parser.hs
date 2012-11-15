@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------
 -- | A parser for some chunk of the Dyna language, using Trifecta
--- 
+--
 -- Based in part on
 -- <https://github.com/ekmett/trifecta/blob/master/examples/RFC2616.hs>
 -- as well as the trifecta code itself
@@ -204,7 +204,7 @@ term  = token $ choice
       , try $ spanned $ flip TFunctor [] <$> atom
                       <* (notFollowedBy $ char '(')
 
-      , try $ spanned $ flip TFunctor [] <$> (bsf $ string "*") 
+      , try $ spanned $ flip TFunctor [] <$> (bsf $ string "*")
       ,       spanned $ parenfunc
       ]
  where
@@ -241,18 +241,20 @@ texpr = buildExpressionParser etable term <?> "Expression"
 
 
 dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
-dterm  = unDL term 
-dtexpr = unDL texpr 
+dterm  = unDL term
+dtexpr = unDL texpr
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
 -- | Grab the head (term!) and aggregation operator from a line that
--- we hope is a rule.  
+-- we hope is a rule.
 rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
 rulepfx = Rule <$> term
                <*  whiteSpace
-               <*> (bsf $ ident dynaOperStyle <?> "Aggregator")
+               -- XXX probably a better way to do this.. probably want aggregators have suffix =
+               <*> ((bsf $ some $ satisfy $ not . isSpace) <?> "Aggregator")
+               <*  whiteSpace
 
 rule :: DeltaParsing m => m Rule
 rule = choice [
@@ -271,7 +273,7 @@ rule = choice [
               , Fact   <$> term
               ]
  where
-  hrss = highlight ReservedOperator . spanned . symbol 
+  hrss = highlight ReservedOperator . spanned . symbol
 
 drule :: DeltaParsing m => m (Spanned Rule)
 drule = unDL (spanned rule)
