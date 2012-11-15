@@ -55,6 +55,8 @@ import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
 -- import           Dyna.Test.Trifecta         -- XXX
 
+import qualified Data.Char as C
+
 data ANFDict = AD
   { -- | A map from (functor,arity) to a list of bits indicating whether to
     -- (True) or not to (False) evaluate that positional argument.
@@ -63,7 +65,7 @@ data ANFDict = AD
     --
     -- XXX Stronger type desired: we'd like static assurance that the
     -- length of the list matches the arity in the key!
-    ad_arg_dispos  :: M.Map (B.ByteString,Int) [Bool]
+    ad_arg_dispos  :: (B.ByteString,Int) -> [Bool]
 
     -- | The set of functors that prefer not to be evaluated.
   , ad_self_dispos :: S.Set (B.ByteString,Int)
@@ -108,6 +110,7 @@ unspan (P.TNumeric v T.:~ _)    = UTerm $ TNumeric v
 unspan (P.TFunctor a as T.:~ _) = UTerm $ TFunctor a $ map unspan as
 unspan (P.TAnnot a t T.:~ _)    = UTerm $ TAnnot (fmap unspan a) (unspan t)
 
+
 -- | Convert a syntactic term into ANF; while here, move to a
 -- Control.Unification term representation.
 --
@@ -127,7 +130,7 @@ normTerm_ _ _   _  (P.TVar  v)       = return $ UVar v
 
     -- Numerics also get returned in-place.
 normTerm_ _ _   _  (P.TNumeric n)    = return $ UTerm $ TNumeric n
-    
+
     -- Quote simply disappears having converted the context to
     -- a non-evaluation context.
 normTerm_ _ _   ss (P.TFunctor "&" [t T.:~ st]) = do
@@ -149,7 +152,7 @@ normTerm_ c u   ss (P.TAnnot a (t T.:~ st)) = do
     -- Functors have both top-down and bottom-up dispositions on
     -- their handling.
 normTerm_ c u   ss (P.TFunctor f as) = do
-    argdispos <- asks $ maybe (repeat True) (id) . M.lookup (f,length as) . ad_arg_dispos
+    argdispos <- asks $ flip ($) (f,length as) . ad_arg_dispos
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ d True (s:ss) a) (zip as argdispos)
     selfdispos <- getSelfDispos
     (case () of
@@ -161,7 +164,7 @@ normTerm_ c u   ss (P.TFunctor f as) = do
    getSelfDispos = do
     set <- asks $ not . S.member (f,length as) . ad_self_dispos
     return set
-    
+
 
 normTerm :: (MonadState ANFState m, MonadReader ANFDict m)
          => Bool               -- ^ In an evaluation context?
@@ -183,10 +186,18 @@ normRule (P.Rule h a es r T.:~ _) = do
     return $ Rule nh a nes nr
 
     -- XXX
-dynaFunctorArgDispositions :: M.Map (B.ByteString,Int) [Bool]
-dynaFunctorArgDispositions = M.fromList [
-    (("is",2),[False,True])
- ]
+--dynaFunctorArgDispositions :: M.Map (B.ByteString,Int) [Bool]
+dynaFunctorArgDispositions :: (B.ByteString, Int) -> [Bool]
+dynaFunctorArgDispositions x = case x of
+    ("is", 2) -> [False,True]
+    -- evaluate arithmetic / math
+    ("exp", 1) -> [True]
+    ("log", 1) -> [True]
+    -- logic
+    ("and", 2) -> [True, True]
+    ("or", 2)  -> [True, True]
+    ("not", 1) -> [True]
+    (name, arity) -> take arity $ repeat $ C.isAlpha $ head $ BU.toString name
 
     -- XXX
     --
