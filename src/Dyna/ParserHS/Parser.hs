@@ -258,16 +258,16 @@ rulepfx = Rule <$> term
 
 rule :: DeltaParsing m => m Rule
 rule = choice [
-                -- HEAD OP= RESULT EXPR whenever EXPRS .
+                -- HEAD OP= RESULTEXPR whenever EXPRS .
                (try (liftA flip rulepfx
                            <*> texpr
                            <*  hrss "whenever"))
                            <*> (texpr `sepBy1` symbolic ',')
 
-                -- HEAD OP= EXPRS, RESULT EXPR .
-              , (try rulepfx)
+                -- HEAD OP= EXPRS, RESULTEXPR .
+              , try (rulepfx
                            <*> many (try (texpr <* symbolic ','))
-                           <*> texpr
+                           <*> texpr)
 
                 -- HEAD .
               , Fact   <$> term
@@ -289,7 +289,7 @@ progline  = do
                   ])
 
 dline :: DeltaParsing m => m (Spanned Line)
-dline = unDL (progline <* optional (char '.') <* optional newline)
+dline = unDL (progline <* optional (char '.') <* optional whiteSpace)
 
 dlines :: DeltaParsing m => m [Spanned Line]
 dlines = unDL (progline `sepEndBy` (char '.' <* whiteSpace))
