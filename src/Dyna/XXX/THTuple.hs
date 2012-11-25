@@ -12,6 +12,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
@@ -67,11 +68,11 @@ $(mkMKRLTs ''MKRLT)
 --   e.g. RTER (a,b) r = (r a, r b)
 class (MKLT (TOL base) ~ base) => Tupled base where
   -- | Apply r to each element of the tuple
-  type RTER base (r :: * -> *) :: *
+  type RTER base (r :: k -> *) :: *
 
   -- | Go from the tuple representation to a promoted list;
   --   the inverse of MKLT (as asserted by class constraints).
-  type TOL base :: [*]
+  type TOL base :: [k]
 
   -- | Send a tuple to an HList
   tupleHL   :: base -> HList (TOL base)
@@ -99,8 +100,8 @@ class (Tupled (RTE arred),
        MKRLT (RTR arred) (TOL (RTE arred)) ~ arred
       )
       => RTupled arred where
-  type RTR arred :: (* -> *)
-  type RTE arred :: *
+  type RTR arred :: (k -> *)
+  type RTE arred :: k
 
   -- | Eliminate an rtuple out to a list.
   tupleopEL :: (RTR arred ~ r) => (forall x . r x -> a) -> arred -> [a]

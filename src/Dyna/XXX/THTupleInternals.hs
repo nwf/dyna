@@ -22,7 +22,9 @@ import           Language.Haskell.TH
   -- XXX
 foreachTupleSize f = mapM f [2..10] -- maxTupleSize]
 
-mkNames n = mapM (newName . ("mti" ++) . show) [1..n]
+mkNames' pfx n = mapM (newName . (pfx ++) . show) [1..n]
+
+mkNames = mkNames' "mti"
 
 genMap app con var = foldl app con . map var
 
@@ -257,6 +259,52 @@ mkLRecInstances a b c = foreachTupleSize (mkLRecInstance a b c)
 
 ------------------------------------------------------------------------}}}
 -- Experimental detritus (XXX)                                          {{{
+
+-- Tuple-folding/mapping function generation                            
+
+{-
+-- | Monadic Tuple Fold and Map
+mkMTFoldMap :: Name               -- ^ Function name
+
+            -> Maybe Name         -- ^ Constructor, if any,
+                                  -- to be pattern matched away
+                                  
+            -> ExpQ               -- ^ Mapping applied at each element
+                                  --   Should be @a -> m b@
+
+            -> Maybe (ExpQ, ExpQ) -- ^ Common extractor and folder.
+                                  --   Should be @(b -> c, [c] -> m d)@
+                                  
+            -> Maybe ExpQ         -- ^ Map extractor.
+
+            -> Int                -- ^ Tuple size
+            -> Q Clause
+mkMTFoldMap fn mc m mcf mm n = do
+  tnames <- mkNames' "t" n
+  rnames <- mkNames' "r" n
+  mnames <- mkNames' "m" n
+
+  -- Build the pattern to extract arguments to tnames
+  let pat = maybe (id) (\na t -> conP na [t]) mc $
+            tupP $ map varP tnames
+
+  -- Apply m
+  rstmts <- mapM (\(te,re) -> bindS re $ appE m te) $ zip tnames rnames
+
+  -- Build folding result
+  let mfstmt = (\(e,f) -> appE f $ listE $ map (appE e . varE) rnames)
+               `fmap` mcf
+
+  -- Build mapping result
+  let mmstmt = (\m -> genMap appE (conE $ tupleDataName n)
+                      $ map (appE m . varE) rnames)
+               `fmap` mm
+
+  let pfx = rstmts
+  
+  clause pat (normalB $ doE pfx) []
+-}
+
 
 {-
 mkNpleFunction :: String -> TypeQ -> Int -> TypeQ
