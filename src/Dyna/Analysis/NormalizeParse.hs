@@ -57,6 +57,9 @@ import           Dyna.Term.TTerm
 
 import qualified Data.Char as C
 
+import Text.PrettyPrint
+
+
 data ANFDict = AD
   { -- | A map from (functor,arity) to a list of bits indicating whether to
     -- (True) or not to (False) evaluate that positional argument.
@@ -216,3 +219,50 @@ runNormalize :: ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize =
   flip runState   (AS 0 M.empty M.empty) .
   flip runReaderT (AD dynaFunctorArgDispositions dynaFunctorSelfDispositions)
+
+
+
+-- FIXME: "str" is the same a constant str.
+
+-- TODO: ANF Normalizer should return *flat terms* so that we have type-safety
+-- can a lint checker can verify we have exhaustive pattern matching... etc.
+
+--     timv: should there ever be more than one side condition? shouldn't it be
+--     a single result variable after normalization? I see that if I use comma
+--     to combine my conditions I get mutliple variables but should side
+--     condtions be combined with comma? I was under the impression that we
+--     always want strong Boolean values (i.e. none of that three-values null
+--     stuff).
+--
+--     it might be nice if terms came in with a type that verified that they are
+--     "flat term" -- they've been normalized.
+--
+--     It would also be nice if spans were killed... maybe there is an argument
+--     against this.
+--
+--     ANF Rule, `result` always the name of a variable -- it would be nice for
+--     its type were string in that case. Similarly, side conditions are always
+--     variables.
+--
+--  TODO: there might too much special handling of the comma operator...
+--
+bs :: B.ByteString -> Doc  -- PrettyPrinter doesn't like ByteStrings
+bs = text . show
+
+pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
+  parens $ (bs a)
+           <+> vcat [ (p h)
+                    , parens $ text "side"   <+> (vcat $ map (text.show) e)
+                    , parens $ text "evals"  <+> (q evals)
+                    , parens $ text "unifs"  <+> (q unifs)
+                    , parens $ text "result" <+> (text $ show result)
+                    ]
+  where
+    p (UTerm (TFunctor fn args)) = parens $ fcat $ punctuate (text " ") $ (bs fn : (map g args))
+
+    q x = vcat $ map (\(x,y)-> parens $ bs x <+> p y) $ M.toList x
+
+    -- todo: doesn't cover annotations or Functor (will `g` ever be passed a Functor?)
+    g (UTerm (TNumeric (Left x))) = text $ show x
+    g (UTerm (TNumeric (Right x))) = text $ show x
+    g (UVar x) = text $ show x
