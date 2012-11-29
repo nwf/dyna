@@ -12,26 +12,22 @@
 
 module Dyna.Analysis.NormalizeParseSelftest where
 
-import Text.PrettyPrint
 
 import qualified Data.ByteString              as B
+import qualified Data.List                    as L
+import qualified Data.Map                     as M
+import qualified Text.Trifecta                as T
+import           Text.PrettyPrint.Free
+
 import           Dyna.Analysis.NormalizeParse
-
 import qualified Dyna.ParserHS.Parser         as P
-import qualified Data.ByteString              as B
-
-
-import Dyna.Term.TTerm
-
-import           Dyna.XXX.TrifectaTest
 import           Dyna.ParserHS.Selftest
+import           Dyna.Term.TTerm
+import           Dyna.XXX.TrifectaTest
 
-import qualified Data.List     as L
-import qualified Data.Map      as M
-import qualified Text.Trifecta as T
 
-testNormTerm :: B.ByteString -> (DTerm, ANFState)
-testNormTerm = runNormalize . normTerm False . unsafeParse P.dterm
+testNormTerm :: Bool -> B.ByteString -> (DTerm, ANFState)
+testNormTerm c = runNormalize . normTerm c . unsafeParse P.dterm
 
 testNormRule :: B.ByteString -> (DRule, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
