@@ -28,7 +28,7 @@ module Dyna.XXX.HList(
   HRList(..), hrlmapa, hrlmap, hrlproj, hrlTravProj,
 
   -- * Interoperation between HList and HRList
-  HLR(..), hlToHrl, HRL2HL
+  HLR(..), hlToHrl,
 ) where
 
 import           Control.Applicative
@@ -114,12 +114,8 @@ hlToHrl :: (forall b . b -> r b) -> HList a -> HRList r a
 hlToHrl _ HN = HRN
 hlToHrl f (a:+as) = f a :++ (hlToHrl f as)
 
-type family HRL2HL (r :: k -> k') (a :: [k]) :: [k']
-type instance HRL2HL r '[] = '[]
-type instance HRL2HL r (a ': as) = r a ': (HRL2HL r as)
-
-class (HRL2HL r a ~ ra)
-   => HLR (r :: * -> *) (a :: [*]) (ra :: [*]) | ra -> r a, r a -> ra
+class (Map r a ~ ra)
+   => HLR (r :: k -> k') (a :: [k]) (ra :: [k']) | ra -> r a
  where
   -- | Reinterpret an HList as an HRList
   hlAsHrl :: HList ra -> HRList r a
