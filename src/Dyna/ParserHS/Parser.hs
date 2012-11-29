@@ -46,7 +46,7 @@ import           Text.Parser.Token.Style
 import           Text.Trifecta
 
 import           Dyna.Term.TTerm (Annotation(..))
-import           Dyna.XXX.Trifecta (identNL)
+import           Dyna.XXX.Trifecta (identNL,stringLiteralSQ)
 
 ------------------------------------------------------------------------}}}
 -- Parsed output definition                                             {{{
@@ -56,6 +56,7 @@ data Term = TFunctor !B.ByteString
           | TAnnot   !(Annotation (Spanned Term))
                      !(Spanned Term)
           | TNumeric !(Either Integer Double)
+          | TString  !B.ByteString
           | TVar     !B.ByteString
  deriving (Eq,Ord,Show)
 
@@ -186,7 +187,7 @@ instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
 -- Atoms                                                                {{{
 
 atom :: (Monad m, TokenParsing m) => m B.ByteString
-atom =     liftA BU.fromString stringLiteral
+atom =     liftA BU.fromString stringLiteralSQ
        <|> (bsf $ ident dynaAtomStyle)
 
 ------------------------------------------------------------------------}}}
@@ -198,6 +199,8 @@ term  = token $ choice
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
 
       ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
+
+      , try $ spanned $ TString  <$> bsf stringLiteral
 
       , try $ spanned $ TNumeric <$> naturalOrDouble
 
@@ -215,7 +218,22 @@ term  = token $ choice
 
   mkta ty te = TAnnot (AnnType ty) te
 
--- XXX right now all binops are at equal precedence and left-associative; that's wrong.
+-- XXX I remember now why we didn't handle ',' as an operator: if it were,
+-- we'd have no way of distinguishing between @f(a,b)@ as
+--
+--   > TFunctor "f" [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _]
+--
+-- and
+--
+--   > TFunctor "f" [TFunctor "," [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _] :~ _]
+--
+-- We can fix this, but it means that we should have a separate expression
+-- parser for contexts where "comma means argument separation" and "comma
+-- means evaluation separator".  I don't yet know how I feel about
+-- the "whenever" (and "is"?) operator(s) being available in the former table.
+
+-- XXX right now all binops are at equal precedence and left-associative;
+-- that's wrong.
 texpr :: DeltaParsing m => m (Spanned Term)
 texpr = buildExpressionParser etable term <?> "Expression"
  where
@@ -226,18 +244,30 @@ texpr = buildExpressionParser etable term <?> "Expression"
            , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
            ]
 
-    -- The dot operator is required to have not-a-space following (to avoid
-    -- confusion with the end-of-rule marker, which is taken to be "dot space"
-    -- or "dot eof").
-  dotAny  = char '.' <* satisfy (not . isSpace)
-  dotOper = try (lookAhead dotAny *> identNL dynaDotOperStyle)
+-- The dot operator is required to have not-a-space following (to avoid
+-- confusion with the end-of-rule marker, which is taken to be "dot space"
+-- or "dot eof").
+--
+-- XXX is the use of isSpace here correct or do we want whiteSpace?
+dotAny :: CharParsing m => m Char
+dotAny  = char '.' <* satisfy (not . isSpace)
 
-  uf f = do
-    (x:~spx)  <- f
-    pure (\a@(_:~sp)   -> (TFunctor x [a]):~(spx <> sp))
-  bf f = do
-    (x:~spx)  <- f
-    pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
+dotOper :: (Monad m, TokenParsing m) => m [Char]
+dotOper = try (lookAhead dotAny *> identNL dynaDotOperStyle)
+
+uf :: (Monad m, Applicative m)
+   => m (Spanned B.ByteString)
+   -> m (Spanned Term -> Spanned Term)
+uf f = do
+  (x:~spx)  <- f
+  pure (\a@(_:~sp)   -> (TFunctor x [a]):~(spx <> sp))
+
+bf :: (Monad m, Applicative m)
+   => m (Spanned B.ByteString)
+   -> m (Spanned Term -> Spanned Term -> Spanned Term)
+bf f = do
+  (x:~spx)  <- f
+  pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
 
 
 dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
@@ -252,26 +282,28 @@ dtexpr = unDL texpr
 rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
 rulepfx = Rule <$> term
                <*  whiteSpace
-               -- XXX probably a better way to do this.. probably want aggregators have suffix =
+               -- XXX probably a better way to do this..
+               -- probably want aggregators have suffix =
                <*> ((bsf $ some $ satisfy $ not . isSpace) <?> "Aggregator")
                <*  whiteSpace
 
 rule :: DeltaParsing m => m Rule
 rule = choice [
-                -- HEAD OP= RESULTEXPR whenever EXPRS .
+               -- HEAD OP= RESULTEXPR whenever EXPRS .
                (try (liftA flip rulepfx
-                           <*> texpr
-                           <*  hrss "whenever"))
-                           <*> (texpr `sepBy1` symbolic ',')
+                          <*> texpr
+                          <*  hrss "whenever"))
+                          <*> (texpr `sepBy1` symbolic ',')
 
-                -- HEAD OP= EXPRS, RESULTEXPR .
-              , try (rulepfx
-                           <*> many (try (texpr <* symbolic ','))
-                           <*> texpr)
+               -- HEAD OP= EXPRS, RESULTEXPR .
+             , try (rulepfx
+                          <*> many (try (texpr <* symbolic ','))
+                          <*> texpr)
 
-                -- HEAD .
-              , Fact   <$> term
-              ]
+               -- HEAD .
+             , Fact   <$> term
+             ]
+       <* optional (char '.')
  where
   hrss = highlight ReservedOperator . spanned . symbol
 
@@ -281,17 +313,23 @@ drule = unDL (spanned rule)
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
 
+dpragma :: DeltaParsing m => m (Spanned Term)
+dpragma =    symbol ":-"
+          *> whiteSpace
+          *> texpr
+          <* whiteSpace
+          <* optional (char '.')
+
 progline :: DeltaParsing m => m (Spanned Line)
-progline  = do
-  whiteSpace
-  spanned (choice [ LRule <$> drule
-                  , LPragma <$> (symbol ":-" *> whiteSpace *> texpr)
-                  ])
+progline  =    whiteSpace
+            *> spanned (choice [ LRule <$> drule
+                               , LPragma <$> dpragma
+                               ])
 
 dline :: DeltaParsing m => m (Spanned Line)
-dline = unDL (progline <* optional (char '.') <* optional whiteSpace)
+dline = unDL (progline <* optional whiteSpace)
 
 dlines :: DeltaParsing m => m [Spanned Line]
-dlines = unDL (progline `sepEndBy` (char '.' <* whiteSpace))
+dlines = unDL (many (progline <* optional whiteSpace))
 
 ------------------------------------------------------------------------}}}

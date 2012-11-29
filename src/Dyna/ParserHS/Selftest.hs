@@ -16,7 +16,7 @@
 
 module Dyna.ParserHS.Selftest where
 
--- import           Control.Applicative ((<*))
+import           Control.Applicative
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString                     as B
 -- import           Data.Foldable (toList)
@@ -160,17 +160,18 @@ case_tyAnnot = e @=? (term fintx)
 -- Rules and lines                                                      {{{
 
 progline :: ByteString -> Spanned Line
-progline = unsafeParse dline
+progline = unsafeParse (dline <* eof)
 
 proglines :: ByteString -> [Spanned Line]
-proglines = unsafeParse dlines
+proglines = unsafeParse (dlines <* eof)
 
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progline sr)
  where
   e  = LRule (Fact (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) "goal.")
-                     :~ Span (Columns 0 0) (Columns 4 4) "goal.")
-         :~ Span (Columns 0 0) (Columns 4 4) "goal."
+                     :~ ts)
+         :~ ts
+  ts = Span (Columns 0 0) (Columns 5 5) "goal."
   sr = "goal."
 
 case_ruleSimple :: Assertion
@@ -180,8 +181,9 @@ case_ruleSimple = e @=? (progline sr)
                    "+=" 
                    []
                    (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
-            :~ Span (Columns 0 0) (Columns 9 9) sr)
-           :~ Span (Columns 0 0) (Columns 9 9) sr
+            :~ ts)
+           :~ ts
+  ts = Span (Columns 0 0) (Columns 10 10) sr
   sr = "goal += 1."
   
 case_ruleExpr :: Assertion
@@ -196,8 +198,9 @@ case_ruleExpr = e @=? (progline sr)
                       ]
                      :~ Span (Columns 8 8) (Columns 18 18) sr
                    )
-                  :~ Span (Columns 0 0) (Columns 18 18) sr)
-                 :~ Span (Columns 0 0) (Columns 18 18) sr
+                  :~ ts)
+                 :~ ts
+  ts = Span (Columns 0 0) (Columns 19 19) sr
   sr = "goal += foo + bar ."
 
 case_ruleDotExpr :: Assertion
@@ -212,8 +215,9 @@ case_ruleDotExpr = e @=? (progline sr)
                       ]
                      :~ Span (Columns 8 8) (Columns 15 15) sr
                    )
-                  :~ Span (Columns 0 0) (Columns 15 15) sr)
-                 :~ Span (Columns 0 0) (Columns 15 15) sr
+                  :~ ts)
+                 :~ ts
+  ts = Span (Columns 0 0) (Columns 16 16) sr
   sr = "goal += foo.bar."
 
 case_ruleComma :: Assertion
@@ -229,8 +233,9 @@ case_ruleComma = e @=? (progline sr)
                     :~ Span (Columns 15 15) (Columns 21 21) sr
                   ]
                   (TVar "X" :~ Span (Columns 23 23) (Columns 24 24) sr)
-                 :~ Span (Columns 0 0) (Columns 24 24) sr)
-                :~ Span (Columns 0 0) (Columns 24 24) sr
+                 :~ ts)
+                :~ ts
+  ts = Span (Columns 0 0) (Columns 25 25) sr
   sr = "foo += bar(X), baz(X), X."
 
 case_ruleKeywordsComma :: Assertion
@@ -254,8 +259,9 @@ case_ruleKeywordsComma = e @=? (progline sr)
                    (TFunctor "new"
                       [TVar "X" :~ Span (Columns 10 10) (Columns 12 12) sr]
                      :~ Span (Columns 6 6) (Columns 12 12) sr)
-                  :~ Span (Columns 0 0) (Columns 41 41) sr)
-                 :~ Span (Columns 0 0) (Columns 41 41) sr
+                  :~ ts)
+                 :~ ts
+  ts = Span (Columns 0 0) (Columns 42 42) sr
   sr = "foo = new X whenever X is baz(Y), Y is 3 ."
 
 case_rules :: Assertion
@@ -265,15 +271,17 @@ case_rules = e @=? (proglines sr)
                      "+="
                      []
                      (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
-                    :~ Span (Columns 0 0) (Columns 10 10) sr)
-                   :~ Span (Columns 0 0) (Columns 10 10) sr
+                    :~ s1)
+                   :~ s1
       , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
                     "+="
                     []
                     (TNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
-                   :~ Span (Columns 12 12) (Columns 22 22) sr)
-                  :~ Span (Columns 12 12) (Columns 22 22) sr
+                   :~ s2)
+                  :~ s2
       ]
+  s1 = Span (Columns 0 0) (Columns 11 11) sr
+  s2 = Span (Columns 12 12) (Columns 23 23) sr
   sr = "goal += 1 . goal += 2 ."
 
 case_rulesWhitespace :: Assertion
@@ -283,19 +291,21 @@ case_rulesWhitespace = e @=? (proglines sr)
                      "+="
                      []
                      (TNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
-                    :~ Span (Columns 2 2) (Lines 1 6 21 6) l0)
-                   :~ Span (Columns 2 2) (Lines 1 6 21 6) l0
+                    :~ s1)
+                   :~ s1
        , LRule (Rule (TFunctor "goal" [] :~ Span (Lines 3 1 31 1) (Lines 3 6 36 6) l3)
                      "+="
                      []
                      (TNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
-                    :~ Span (Lines 3 1 31 1) (Lines 3 11 41 11) l3)
-                   :~ Span (Lines 3 1 31 1) (Lines 3 11 41 11) " goal += 2 .\n"
+                    :~ s2)
+                   :~ s2
        ]
   l0 = "  goal%comment\n"
   l1 = " += 1 .\n"
   l2 = "%test \n"
-  l3 = " goal += 2 .\n"
+  l3 = " goal += 2 . "
+  s1 = Span (Columns 2 2) (Lines 1 7 22 7) l0
+  s2 = Span (Lines 3 1 31 1) (Lines 3 12 42 12) l3
   sr = B.concat [l0,l1,l2,l3]
 
 
@@ -311,15 +321,17 @@ case_rulesDotExpr = e @=? (proglines sr)
                          ]
                         :~ Span (Columns 8 8) (Columns 15 15) sr
                       )
-                     :~ Span (Columns 0 0) (Columns 15 15) sr)
-                    :~ Span (Columns 0 0) (Columns 15 15) sr
+                     :~ s1)
+                    :~ s1
        , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
                       "+=" 
                       []
                       (TNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
-                     :~ Span (Columns 17 17) (Columns 27 27) sr)
-                    :~ Span (Columns 17 17) (Columns 27 27) sr
+                     :~ s2) 
+                    :~ s2
        ]
+  s1 = Span (Columns 0 0) (Columns 16 16) sr
+  s2 = Span (Columns 17 17) (Columns 28 28) sr
   sr = "goal += foo.bar. goal += 1 ."
 
 ------------------------------------------------------------------------}}}
