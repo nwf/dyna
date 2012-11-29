@@ -131,8 +131,8 @@ normTerm_ _ _   _  (P.TVar  v)       = return $ UVar v
     -- Numerics also get returned in-place.
 normTerm_ _ _   _  (P.TNumeric n)    = return $ UTerm $ TNumeric n
 
-    -- Quote simply disappears having converted the context to
-    -- a non-evaluation context.
+    -- FIXME: (nwf) Quote simply disappears having converted the context to a
+    -- non-evaluation context.
 normTerm_ _ _   ss (P.TFunctor "&" [t T.:~ st]) = do
     normTerm_ False True (st:ss) t
 
@@ -140,7 +140,7 @@ normTerm_ _ _   ss (P.TFunctor "&" [t T.:~ st]) = do
     -- to not be evaluated, thus the sort of odd "normalize in
     -- nonevaluation context then eval" here.
 normTerm_ _ _   ss (P.TFunctor "*" [t T.:~ st]) = do
-    normTerm_ False True (st:ss) t >>= newEval "_normTS_"
+    normTerm_ False True (st:ss) t >>= newEval "_s"
 
      -- Annotations are stripped of their span information
      --
@@ -156,8 +156,8 @@ normTerm_ c u   ss (P.TFunctor f as) = do
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ d True (s:ss) a) (zip as argdispos)
     selfdispos <- getSelfDispos
     (case () of
-       _ | c && selfdispos -> newEval "_normTF_"
-       _ | u               -> newUnif "_normTU_"
+       _ | c && selfdispos -> newEval "_f"
+       _ | u               -> newUnif "_u"
        _                   -> return)
      $ UTerm $ TFunctor f normas
  where
@@ -186,7 +186,6 @@ normRule (P.Rule h a es r T.:~ _) = do
     return $ Rule nh a nes nr
 
     -- XXX
---dynaFunctorArgDispositions :: M.Map (B.ByteString,Int) [Bool]
 dynaFunctorArgDispositions :: (B.ByteString, Int) -> [Bool]
 dynaFunctorArgDispositions x = case x of
     ("is", 2) -> [False,True]
@@ -197,7 +196,7 @@ dynaFunctorArgDispositions x = case x of
     ("and", 2) -> [True, True]
     ("or", 2)  -> [True, True]
     ("not", 1) -> [True]
-    (name, arity) -> take arity $ repeat $ C.isAlpha $ head $ BU.toString name
+    (name, arity) -> take arity $ repeat $ not.C.isAlphaNum $ head $ BU.toString name
 
     -- XXX
     --
