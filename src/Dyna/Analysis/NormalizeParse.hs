@@ -158,7 +158,7 @@ normTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
                -> P.Term        -- ^ Term being digested
                -> m DTerm
 
--- Variables only evaluate in explicit context 
+-- Variables only evaluate in explicit context
 normTerm_ c _ (P.TVar v) =
     case c of
        (ECExplicit,ADEval) -> newEval "_$v"
@@ -296,20 +296,20 @@ runNormalize =
 --  TODO: there might too much special handling of the comma operator...
 --
 
+valign = align.vcat
+
 pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
   parens $ (pretty a)
-           <+> vcat [ (p h)
-                    , parens $ text "side"   <+> (vcat $ map (text.show) e)
-                    , parens $ text "evals"  <+> (q evals)
-                    , parens $ text "unifs"  <+> (q unifs)
-                    , parens $ text "result" <+> (text $ show result)
-                    ]
+           <+> valign [ (p h)
+                      , parens $ text "side"   <+> (valign $ map (text.show) e)
+                      , parens $ text "evals"  <+> (q evals)
+                      , parens $ text "unifs"  <+> (q unifs)
+                      , parens $ text "result" <+> (text $ show result)
+                      ]
   where
-    p (UTerm (TFunctor fn args)) = parens $ hcat $ punctuate (text " ") $ (pretty fn : (map g args))
+    p (UTerm (TFunctor fn args)) = parens $ hcat $ punctuate (text " ") $ (pretty fn : (map p args))
+    p (UTerm (TNumeric (Left x))) = text $ show x
+    p (UTerm (TNumeric (Right x))) = text $ show x
+    p (UVar x) = text $ show x
 
-    q x = vcat $ map (\(x,y)-> parens $ pretty x <+> p y) $ M.toList x
-
-    -- todo: doesn't cover annotations or Functor (will `g` ever be passed a Functor?)
-    g (UTerm (TNumeric (Left x))) = text $ show x
-    g (UTerm (TNumeric (Right x))) = text $ show x
-    g (UVar x) = text $ show x
+    q x = valign $ map (\(x,y)-> parens $ pretty x <+> p y) $ M.toList x
