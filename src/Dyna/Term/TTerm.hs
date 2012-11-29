@@ -18,7 +18,7 @@ module Dyna.Term.TTerm (
     Annotation(..),
 
         -- * Terms
-    TermF(..), DTermV, DTerm,
+    TermF(..), DTermV, DVar, DFunct, DTerm,
 
         -- * Rules
     DRule(..),
@@ -43,9 +43,11 @@ data TermF a t = TFunctor !a ![t]
                | TNumeric !(Either Integer Double)
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
-type DTermV v = UTerm (TermF B.ByteString) v
+type DFunct = B.ByteString
+type DTermV v = UTerm (TermF DFunct) v
 
-type DTerm = DTermV B.ByteString
+type DVar  = B.ByteString
+type DTerm = DTermV DVar
 
 ------------------------------------------------------------------------}}}
 -- Instances                                                            {{{
