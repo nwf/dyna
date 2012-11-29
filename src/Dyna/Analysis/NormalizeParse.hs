@@ -232,7 +232,7 @@ normRule (P.Rule h a es r T.:~ _) = do
 -- XXX
 dynaFunctorArgDispositions :: (DFunct, Int) -> [ArgDispos]
 dynaFunctorArgDispositions x = case x of
-    ("is", 2) -> [ADQuote,ADEval]
+    ("is", 2)  -> [ADQuote,ADEval]
     -- evaluate arithmetic / math
     ("exp", 1) -> [ADEval]
     ("log", 1) -> [ADEval]
@@ -241,9 +241,10 @@ dynaFunctorArgDispositions x = case x of
     ("or", 2)  -> [ADEval, ADEval]
     ("not", 1) -> [ADEval]
     (name, arity) ->
+       -- If it starts with a nonalpha, it prefers to evaluate arguments
        let d = if C.isAlphaNum $ head $ BU.toString name
-                then ADEval
-                else ADQuote
+                then ADQuote
+                else ADEval
        in take arity $ repeat $ d
 
 -- XXX
@@ -255,6 +256,7 @@ dynaFunctorSelfDispositions x = case x of
     ("false",0)  -> SDQuote
     ("pair",2)   -> SDQuote
     (name, arity) ->
+       -- If it starts with a nonalpha, it prefers to evaluate
        let d = if C.isAlphaNum $ head $ BU.toString name
                 then SDInherit
                 else SDEval
