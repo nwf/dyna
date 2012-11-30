@@ -89,8 +89,8 @@ Edge = namedtuple('Edge', 'head label body')
 class Hypergraph(object):
 
     def __init__(self):
-        self.incoming = defaultdict(list)
-        self.outgoing = defaultdict(list)
+        self.incoming = {}
+        self.outgoing = {}
         self.edges = []
         self.nodes = set()
         self.sty = defaultdict(dict)
@@ -98,11 +98,18 @@ class Hypergraph(object):
     def edge(self, head, label, body):
         e = Edge(head, label, tuple(body))
         self.edges.append(e)
-        self.incoming[e.head].append(e)
+
+        self.incoming[e.head] = [e]
+        self.outgoing[e.head] = []
         self.nodes.add(e.head)
+
         for b in e.body:
+            if b not in self.nodes:
+                self.outgoing[b] = []
+                self.incoming[b] = []
+                self.nodes.add(b)
             self.outgoing[b].append(e)
-            self.nodes.add(b)
+
         return e
 
     def render(self, name):
@@ -162,7 +169,7 @@ class Hypergraph(object):
             return str(x)
 
         elif not isinstance(x, Edge):
-            if x not in self.incoming or not self.incoming[x]:  # input variable
+            if not self.incoming[x]:  # input variable
                 return x
             [e] = self.incoming[x]    # only one incoming edge per variable in this type of graph
             return self.get_function(e)
@@ -184,33 +191,86 @@ class Hypergraph(object):
 
         return t(root)
 
-    def plan(self, root):
-
+    def plan(self, start):
         incoming = self.incoming
 
-        [e] = incoming[root]
+        def reversible(e, chart):
+            C = [chart[b] for b in e.body]
 
-        q = [e]
-        c = {e: 0 for e in self.edges}
+            h = e.head
+
+            print 'reversible?', e, C
+
+            for M, o in modes(e.label, len(e.body)):
+
+                print '  supports:', M, o
+
+                if all((not m or c) for (m,c) in zip(M, C)):  # inputs pass mode check
+                    if not o or chart[h]:
+
+                        xxx = '%r [%s] -> %s' % (e.label, ' '.join('-+'[m] for m in M), '-+'[o])
+                        print 'witness:', xxx
+
+                        #xxx = '%r [%s] -> %s' % (e.label, ' '.join('-+'[m] for m in C), '-+'[chart[h]])
+                        #print 'binds at least:', xxx, 'will bind more later.'
+
+                        return xxx
+
+        q = [start]
+        chart = {x: 0 for x in self.nodes}   # chart checks node coverage
+
+        chart[start.head] = 1
+        for b in start.body:
+            chart[b] = 1
+
+        for x in self.nodes:
+            if not isvar(x):
+                chart[x] = 1
+
 
         while q:
             e = q.pop()
             print e
 
-            c[e] = 1
-
             for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
 
                 # is edge traversable?
+                if reversible(c, chart):
+                    q.append(c)
 
-                q.append(c)
+                    for b in c.body:
+                        chart[b] = 1
 
-        pprint(e)
+        pprint(chart)
+
+
+def modes(f, arity):
+
+    if f.startswith('&'):
+        yield [True] * arity, False
+        yield [False] * arity, True
+
+    if f in ('^', '+', '-', '*', '/'):
+        yield [True] * arity, False
+
+        if f in ('^', '+', '-', '*', '/'):  # invertible math
+            for i in xrange(arity):
+                z = [True] * arity
+                z[i] = False
+                yield z, True
+
+    else:
+        assert f.isalnum()
+
+        yield [False] * arity, False
 
 
 def isconst(x):
     return isinstance(x, (float, int))
 
+
+def isvar(x):
+    return isinstance(x,str) and (x.isupper() or x.startswith('_$'))
 
 
 def circuit(anf):
@@ -223,8 +283,8 @@ def circuit(anf):
         g.edge(head=var, label=op, body=args)
 
     for var, op, args in unifs:
-#        e = g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
-        e = g.edge(head=var, label=op, body=args)
+        e = g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
+        #e = g.edge(head=var, label=op, body=args)
 
         # distiguish unif edges
         g.sty[e].update({'style': 'filled', 'fillcolor': 'grey'})
@@ -234,7 +294,7 @@ def circuit(anf):
         if not g.incoming[x]:
             g.sty[x].update({'style': 'filled', 'fillcolor': 'yellow'})
 
-            if isinstance(x,str) and (x.isupper() or x.startswith('_$')):   # variables are bold
+            if isvar(x):   # variables are bold
                 g.sty[x].update({'penwidth': '3'})
 
         if not g.outgoing[x]:
@@ -299,6 +359,23 @@ def main(dynafile):
 
     if argv.browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+
+
+    for i, r in enumerate(rules):
+
+        print red % '#________________________________________________'
+        print red % '# rule %s' % i
+
+        for e in r.edges:
+
+#            if not r.outgoing[e.head]:  # skip "output edge"
+#                continue
+
+            # suppose we receive an update to x
+            print green % 'update %s' % (e,)
+
+            # find a plan
+            r.plan(e)
 
 
 if __name__ == '__main__':
