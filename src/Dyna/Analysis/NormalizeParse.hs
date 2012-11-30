@@ -302,7 +302,7 @@ pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
                       , parens $ text "side"   <+> (valign $ map (text.show) e)
                       , parens $ text "evals"  <+> (q evals)
                       , parens $ text "unifs"  <+> (q unifs)
-                      , parens $ text "result" <+> (text $ show result)
+                      , parens $ text "result" <+> (p result)
                       ]
   where
     p (UTerm (TFunctor fn args)) = parens $ hcat $ punctuate (text " ") $ (pretty fn : (map p args))

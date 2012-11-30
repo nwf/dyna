@@ -1,17 +1,19 @@
 #!/usr/bin/env python
 """
-Generates a visual representation of a Dyna rule graphviz after the
+Generates a visual representation of a Dyna program rules after the
 normalization process.
-
-TODO: to be useful as a script we should process entire *.dyna files.
-
 """
+
+# TODO: add a directory of sample Dyna programs to repo (Fibonacci, CKY,
+# second-order markov, shortest-path)
 
 import re, os, sys
 from collections import defaultdict, namedtuple
-from os.path import abspath
+from pprint import pprint
 
-red = '\033[31m%s\033[0m'
+
+black, red, green, yellow, blue, magenta, cyan, white = \
+    map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
 def convert(f):
@@ -24,12 +26,10 @@ def convert(f):
         return h.read()
 
 
-def toANF(code, f):
+def toANF(code, f='/tmp/tmp.dyna'):
     with file(f, 'wb') as tmp:
         tmp.write(code)
-    anf = convert(tmp.name)
-    print anf
-    return evalthings(parse_sexpr(anf))
+    return convert(tmp.name)
 
 
 # by George Sakkis (gsakkis at rutgers.edu)
@@ -61,11 +61,26 @@ def parse_sexpr(e):
 def evalthings(t):
     if isinstance(t, str):
         try:
-            return eval(t)
+            return eval(t)   # FIXME: dangerous way to do this.
         except:
             return t
     else:
         return [evalthings(x) for x in t]
+
+
+def read_anf(e):
+    x = evalthings(parse_sexpr(e))
+
+    def g(x):
+        return [(var, val[0], val[1:]) for var, val in x]
+
+    for (agg, head, side, evals, unifs, [_,result]) in x:
+        yield (agg,
+               head,
+               side[1:],
+               g(evals[1:]),
+               g(unifs[1:]),
+               result)
 
 
 Edge = namedtuple('Edge', 'head label body')
@@ -91,8 +106,8 @@ class Hypergraph(object):
         return e
 
     def render(self, name):
-        dot = abspath('%s.dot' % name)
-        png = abspath('%s.png' % name)
+        dot = '%s.dot' % name
+        png = '%s.png' % name
 
         # write the dot file so that we can pass it to graphviz
         with file(dot, 'wb') as f:
@@ -125,31 +140,91 @@ class Hypergraph(object):
 
             print >> f, '}'
 
+        print 'wrote', dot, 'compiling...'
+
         # run graphviz to produce image
-        os.system('(dot -Tpng %s > %s)' % (dot, png))
+        assert 0 == os.system('(dot -Tpng %s > %s)' % (dot, png)), 'graphviz failed.'
+
+        print 'created', png
+
+        return png
+
+    def show(self, name='/tmp/tmp'):
+        os.system('gnome-open %s 2>/dev/null' % self.render(name))
+
+    def get_function(self, x):
+        """
+        String of symbolic representation of ``x``, a variable or function, in
+        this expresion graph.
+        """
+
+        if isconst(x):
+            return str(x)
+
+        elif not isinstance(x, Edge):
+            if x not in self.incoming or not self.incoming[x]:  # input variable
+                return x
+            [e] = self.incoming[x]    # only one incoming edge per variable in this type of graph
+            return self.get_function(e)
+
+        else:
+            return '%s(%s)' % (x.label, ', '.join(map(self.get_function, x.body)))
+
+    def toposort(self, root):
+        visited = set()
+
+        def t(v):
+            if v not in visited:
+                visited.add(v)
+                for e in self.incoming[v]:
+                    for u in e.body:
+                        for b in t(u):  # "yield from" recursive call
+                            yield b
+                yield v
+
+        return t(root)
+
+    def plan(self, root):
+
+        incoming = self.incoming
+
+        [e] = incoming[root]
+
+        q = [e]
+        c = {e: 0 for e in self.edges}
+
+        while q:
+            e = q.pop()
+            print e
+
+            c[e] = 1
+
+            for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
+
+                # is edge traversable?
+
+                q.append(c)
+
+        pprint(e)
 
 
-def goo(x):
-    for var, val in x:
-        op, args = val[0], val[1:]
-        yield var, op, args
+def isconst(x):
+    return isinstance(x, (float, int))
+
 
 
 def circuit(anf):
 
-    [(agg, head, side, evals, unifs, result)] = anf
-
-    side = set(side[1:])
-
-    [_, result] = result
+    (agg, head, side, evals, unifs, result) = anf
 
     g = Hypergraph()
-    for var, op, args in goo(evals[1:]):
+    for var, op, args in evals:
         #if not args: args, op = [op], 'const'    # todo: useless special case?
         g.edge(head=var, label=op, body=args)
 
-    for var, op, args in goo(unifs[1:]):
-        e = g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
+    for var, op, args in unifs:
+#        e = g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
+        e = g.edge(head=var, label=op, body=args)
 
         # distiguish unif edges
         g.sty[e].update({'style': 'filled', 'fillcolor': 'grey'})
@@ -158,58 +233,80 @@ def circuit(anf):
     for x in g.nodes:
         if not g.incoming[x]:
             g.sty[x].update({'style': 'filled', 'fillcolor': 'yellow'})
+
+            if isinstance(x,str) and (x.isupper() or x.startswith('_$')):   # variables are bold
+                g.sty[x].update({'penwidth': '3'})
+
         if not g.outgoing[x]:
-            g.sty[x].update({'style': 'filled', 'fillcolor': 'red'})
+            g.sty[x].update({'style': 'filled', 'fillcolor': 'salmon'})
         if x in side:
-            g.sty[x].update({'style': 'filled', 'fillcolor': 'green'})
+            g.sty[x].update({'style': 'filled', 'fillcolor': 'olivedrab2'})
 
     # variables which are projected-out to the head
-#    g.sty[head].update({'penwidth': '3'})
-    g.sty[head].update({'style': 'filled', 'fillcolor': 'blue'})
+    g.sty[head].update({'style': 'filled', 'fillcolor': 'lightblue'})
+
+    g.head = head
+    g.result = result
+    g.inputs = [x for x in g.nodes if not g.incoming[x]]
+    g.outputs = [x for x in g.nodes if not g.outgoing[x]]
+    g.intermediate = [x for x in g.nodes if g.incoming[x] and g.outgoing[x]]
+    g.side = side
 
     return g
 
 
-def test():
+def main(dynafile):
 
-    examples = {
-        # min-cost path in a second-order markov model
-        'markov2': 'path(pair(Y,Z),V) min= path(pair(X,Y),U) + cost(X,Y,Z,U,V).',
+    with file(dynafile) as f:
+        code = f.read()
 
-        # Fibonacci numbers: note `X-1` is evaluated even though `f` generally
-        # doesn't require it's arguments quoted
-        'fib': 'f(X) := f(X-1) + f(X-2).',
+    d = dynafile + '.d'
+    os.system('mkdir -p %s' % d)
 
-        # part of the cky program
-        'cky': 'phrase(X,I,K) += phrase(Y,I,J) * phrase(Z,J,K) * rewrite(X,Y,Z) * f(X,X).',
+    with file(d + '/index.html', 'wb') as html:
 
-        # example which build a lot of structure.
-        'structure': 'x :- g(Y, f(X, h(Z, Y)), e(q(X, Y))).',
+        print >> html, '<style>'
+        print >> html, '.box, pre { border: 1px solid #eee; margin: 10px; padding: 10px;}'
+        print >> html, 'h2 { margin-top: 40px; }'
+        print >> html, '</style>'
 
-        # monster
-       'monster': ('f(X,Y) += (g(X,"string",d) - h(X,X,Y) - c)^2 + f(Y,Z)/exp(3.0)'
-                   ' whenever ?c, (d < 10), e(f(h(X)), g(X)).')
+        print >> html, '<h1>%s</h1>' % dynafile
 
-    }
+        print >> html, '<h2>Dyna source</h2>'
+        print >> html, '<pre>\n%s\n</pre>' % code.strip()
 
-    if not sys.argv[1:] or not all(x in examples for x in sys.argv[1:] if x != 'all'):
-        print 'usage:\n\t%s [%s]+' % (sys.argv[0], '|'.join(examples.keys()))
-        return
+        anf = toANF(code)
 
-    os.system('rm -f /tmp/*.png')
+        print >> html, '<h2>ANF</h2>'
+        print >> html, '<pre>\n%s\n</pre>' % anf.strip()
 
-    for name in (examples if 'all' in sys.argv[1:] else sys.argv[1:]):
-        print red % name
+        print >> html, '<h2>Hyperedge templates</h2>'
 
-        code = examples[name]
-        print code
+        rules = []
 
-        g = circuit(toANF(code, '/tmp/' + name + '.dyna'))
+        for i, x in enumerate(read_anf(anf)):
+            g = circuit(x)
 
-        g.render('/tmp/' + name)
+            rules.append(g)
 
-    os.system('gnome-open /tmp/*.png 2>/dev/null')
+            g.render(dynafile + '.d/rule-%s' % i)
+
+            png = 'rule-%s.png' % i  # path relative (to html file)
+
+            print >> html, '<div class="box"><img src="%s" /></div>' % png
+
+    print 'wrote', html.name
+
+    if argv.browser:
+        os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
 
 
 if __name__ == '__main__':
-    test()
+
+    from argparse import ArgumentParser
+    p = ArgumentParser(description=__doc__)
+    p.add_argument('input', help='Path to Dyna source file.')
+    p.add_argument('-x', dest='browser', action='store_false')
+
+    argv = p.parse_args()
+    main(argv.input)

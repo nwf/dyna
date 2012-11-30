@@ -1,0 +1,1 @@
+path(pair(Y,Z),V) min= path(pair(X,Y),U) + cost(X,Y,Z,U,V).
