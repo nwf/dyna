@@ -25,7 +25,7 @@ module Dyna.XXX.HList(
   HList(..), hlmapa,
 
   -- * HLists of a type constructor's images
-  HRList(..), hrlmapa, hrlmap, hrlproj, hrlTravProj,
+  HRList(..), hrlmapa, hrllen, hrlmap, hrlproj, hrlTravProj,
 
   -- * Interoperation between HList and HRList
   HLR(..), hlToHrl,
@@ -86,6 +86,13 @@ data HRList r a where
 instance Show (HRList r '[]) where show _ = "HRN"
 instance (Show (r a), Show (HRList r as)) => Show (HRList r (a ': as)) where
     show (a :++ as) = show a ++ " :+ " ++ show as
+
+hrllen :: HRList r t -> Int
+hrllen = go 0
+ where
+  go :: Int -> HRList r t -> Int
+  go a HRN = a
+  go a (x :++ xs) = a `seq` go (a+1) xs
 
 -- | Shift the type-function of a HRList
 hrlmap :: (forall a . r a -> s a) -> HRList r t -> HRList s t

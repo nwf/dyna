@@ -14,7 +14,7 @@ bracketState bs m = do
  return (r, bs)
 
 
-incState :: (MonadState Int m) => m Int
+incState :: (Num a, MonadState a m) => m a
 incState = do
   s <- get
   put $! (s+1)

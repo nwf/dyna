@@ -4,10 +4,10 @@ Cabal-Version:  >=1.14
 Build-Type:     Simple
 Stability:      alpha
 Copyright:      Copyright (c) 2007--2012,
-                      Nathaniel W. Filardo, wren ng thornton
+                      Nathaniel W. Filardo, Tim Vieira, wren ng thornton
 License:        OtherLicense
 License-File:   LICENSE
-Author:         Nathaniel W. Filardo, wren ng thornton
+Author:         Nathaniel W. Filardo, Tim Vieira, wren ng thornton
 Maintainer:     haskell@dyna.org
 Homepage:       http://www.dyna.org/
 Category:       Compilers/Interpreters

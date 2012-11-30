@@ -2,15 +2,18 @@
 -- XXX contribute back to trifecta
 
 module Dyna.XXX.Trifecta (
-    identNL, pureSpanned, triInteract
+    identNL, pureSpanned, stringLiteralSQ, triInteract
 ) where
 
 import           Control.Applicative
 import           Control.Monad (when)
 import qualified Data.ByteString.UTF8                as BU
+import           Data.Char
+import           Data.List (foldl')
 import           Data.Monoid (mempty)
 import           Data.HashSet as HashSet (member)
 import qualified Data.Semigroup.Reducer              as R
+import           Text.Parser.Token.Highlight
 import           Text.Trifecta
 import           Text.Trifecta.Delta
 
@@ -25,6 +28,62 @@ identNL s = try $ do
   name <- highlight (styleHighlight s) ((:) <$> styleStart s <*> many (styleLetter s) <?> styleName s)
   when (HashSet.member name (styleReserved s)) $ unexpected $ "reserved " ++ styleName s ++ " " ++ show name
   return name
+
+-- | Just like stringLiteral but with single quotes.
+--
+-- belongs in Text.Parser.Token
+stringLiteralSQ :: TokenParsing m => m String
+stringLiteralSQ = token (highlight StringLiteral lit) where
+  lit = Prelude.foldr (maybe id (:)) ""
+    <$> between (char '\'') (char '\'' <?> "end of string") (many stringChar)
+    <?> "string"
+  stringChar = Just <$> stringLetter
+           <|> stringEscape
+       <?> "string character"
+  stringLetter    = satisfy (\c -> (c /= '\'') && (c /= '\\') && (c > '\026'))
+                    -- XXX That is, charLetter
+
+  stringEscape = highlight EscapeCode $ char '\\' *> esc where
+    esc = Nothing <$ escapeGap
+      <|> Nothing <$ escapeEmpty
+      <|> Just <$> escapeCode
+  escapeEmpty = char '&'
+  escapeGap = skipSome space *> (char '\\' <?> "end of string gap")
+{-# INLINE stringLiteralSQ #-}
+
+-- XXX Duplicated from Text.Parser.Token
+escapeCode :: TokenParsing m => m Char
+escapeCode = (charEsc <|> charNum <|> charAscii <|> charControl) <?> "escape code"
+  where
+  charControl = (\c -> toEnum (fromEnum c - fromEnum 'A')) <$> (char '^' *> upper)
+  charNum     = toEnum . fromInteger <$> num where
+    num = decimal
+      <|> (char 'o' *> number 8 octDigit)
+      <|> (char 'x' *> number 16 hexDigit)
+  charEsc = choice $ parseEsc <$> escMap
+  parseEsc (c,code) = code <$ char c
+  escMap = zip ("abfnrtv\\\"\'") ("\a\b\f\n\r\t\v\\\"\'")
+  charAscii = choice $ parseAscii <$> asciiMap
+  parseAscii (asc,code) = try $ code <$ string asc
+  asciiMap = zip (ascii3codes ++ ascii2codes) (ascii3 ++ ascii2)
+  ascii2codes, ascii3codes :: [String]
+  ascii2codes = [ "BS","HT","LF","VT","FF","CR","SO"
+                , "SI","EM","FS","GS","RS","US","SP"]
+  ascii3codes = ["NUL","SOH","STX","ETX","EOT","ENQ","ACK"
+                ,"BEL","DLE","DC1","DC2","DC3","DC4","NAK"
+                ,"SYN","ETB","CAN","SUB","ESC","DEL"]
+  ascii2, ascii3 :: [Char]
+  ascii2 = ['\BS','\HT','\LF','\VT','\FF','\CR','\SO','\SI'
+           ,'\EM','\FS','\GS','\RS','\US','\SP']
+  ascii3 = ['\NUL','\SOH','\STX','\ETX','\EOT','\ENQ','\ACK'
+           ,'\BEL','\DLE','\DC1','\DC2','\DC3','\DC4','\NAK'
+           ,'\SYN','\ETB','\CAN','\SUB','\ESC','\DEL']
+
+-- XXX Duplicated from Text.Parser.Token
+number :: TokenParsing m => Integer -> m Char -> m Integer
+number base baseDigit =
+  foldl' (\x d -> base*x + toInteger (digitToInt d)) 0 <$> some baseDigit
+
 
 -- | Just like "pure" but right here in the parsing state
 --
