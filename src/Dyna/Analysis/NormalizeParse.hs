@@ -123,7 +123,8 @@ newEval pfx t = do
     return $ UVar n
 
 newUnif :: (MonadState ANFState m) => String -> DTerm -> m DTerm
-newUnif pfx t = do
+newUnif _   t@(UVar _)  = return t
+newUnif pfx t@(UTerm _) = do
     n   <- nextVar pfx
     uns <- gets as_unifs
     modify (\s -> s { as_unifs = M.insert n t uns })
@@ -159,11 +160,15 @@ normTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
                -> m DTerm
 
 -- Variables only evaluate in explicit context
-normTerm_ c _ (P.TVar v) =
+--
+-- While here, replace bare underscores with unique names.
+-- XXX is this the right place for that?
+normTerm_ c _ t@(P.TVar v) = do
+    v' <- if v == "_" then nextVar "_$w" else return v
     case c of
        (ECExplicit,ADEval) -> newEval "_$v"
        _                   -> return
-    $ UVar v
+     $ UVar v'
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
 normTerm_ c   ss  (P.TNumeric n)    = do
@@ -225,7 +230,7 @@ normRule (P.Fact t T.:~ _) = do
     return $ Rule nt ":-" [] (UTerm $ TFunctor "true" [])
 normRule (P.Rule h a es r T.:~ _) = do
     nh  <- normTerm False h
-    nr  <- normTerm True  r
+    nr  <- normTerm True  r >>= newUnif "_$r"
     nes <- mapM (normTerm True) es
     return $ Rule nh a nes nr
 
