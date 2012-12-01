@@ -310,6 +310,6 @@ pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
     p (UTerm (TFunctor fn args)) = parens $ hcat $ punctuate (text " ") $ (pretty fn : (map p args))
     p (UTerm (TNumeric (Left x))) = text $ show x
     p (UTerm (TNumeric (Right x))) = text $ show x
-    p (UVar x) = text $ show x
+    p (UVar x) = pretty x
 
     q x = valign $ map (\(x,y)-> parens $ pretty x <+> p y) $ M.toList x
