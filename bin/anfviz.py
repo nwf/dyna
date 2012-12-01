@@ -4,86 +4,16 @@ Generates a visual representation of a Dyna program rules after the
 normalization process.
 """
 
-# TODO: add a directory of sample Dyna programs to repo (Fibonacci, CKY,
-# second-order markov, shortest-path)
-
-import re, os, sys
+import os
 from collections import defaultdict, namedtuple
-from pprint import pprint
-
-
-black, red, green, yellow, blue, magenta, cyan, white = \
-    map('\033[3%sm%%s\033[0m'.__mod__, range(8))
-
-
-def convert(f):
-    os.system('rm -f %s.anf' % f)  # clean up any existing ANF output
-
-    assert 0 == os.system("""ghc -isrc Dyna.Analysis.NormalizeParseSelftest -e 'normalizeFile "%s"' """ % f), \
-        'failed to convert file.'
-
-    with file('%s.anf' % f) as h:
-        return h.read()
-
-
-def toANF(code, f='/tmp/tmp.dyna'):
-    with file(f, 'wb') as tmp:
-        tmp.write(code)
-    return convert(tmp.name)
-
-
-# by George Sakkis (gsakkis at rutgers.edu)
-# http://mail.python.org/pipermail/python-list/2005-March/312004.html
-def parse_sexpr(e):
-    "If multiple s-expressions expected as output, set multiple to True."
-    es, stack = [], []
-    for token in re.split(r'([()])|\s+', e):
-        if token == '(':
-            new = []
-            if stack:
-                stack[-1].append(new)
-            else:
-                es.append(new)
-            stack.append(new)
-        elif token == ')':
-            try:
-                stack.pop()
-            except IndexError:
-                raise ValueError("Unbalanced right parenthesis: %s" % e)
-        elif token:
-            try:
-                stack[-1].append(token)
-            except IndexError:
-                raise ValueError("Unenclosed subexpression (near %s)" % token)
-    return es
-
-
-def evalthings(t):
-    if isinstance(t, str):
-        try:
-            return eval(t)   # FIXME: dangerous way to do this.
-        except:
-            return t
-    else:
-        return [evalthings(x) for x in t]
-
-
-def read_anf(e):
-    x = evalthings(parse_sexpr(e))
-
-    def g(x):
-        return [(var, val[0], val[1:]) for var, val in x]
-
-    for (agg, head, side, evals, unifs, [_,result]) in x:
-        yield (agg,
-               head,
-               side[1:],
-               g(evals[1:]),
-               g(unifs[1:]),
-               result)
-
+from utils import magenta, red, green, yellow, white, toANF, read_anf
 
 Edge = namedtuple('Edge', 'head label body')
+
+def edge_code(x):
+    return '%s = %s(%s)' % (x.head, x.label, ', '.join(x.body)) if x.body else x.label
+
+Edge.__repr__ = edge_code
 
 
 class Hypergraph(object):
@@ -93,28 +23,34 @@ class Hypergraph(object):
         self.outgoing = {}
         self.edges = []
         self.nodes = set()
-        self.sty = defaultdict(dict)
 
     def edge(self, head, label, body):
         e = Edge(head, label, tuple(body))
         self.edges.append(e)
 
-        self.incoming[e.head] = [e]
-        self.outgoing[e.head] = []
-        self.nodes.add(e.head)
-
+        # make slots in indexes for new nodes incident edge.
+        if e.head not in self.nodes:
+            self.incoming[e.head] = []
+            self.outgoing[e.head] = []
+            self.nodes.add(e.head)
         for b in e.body:
             if b not in self.nodes:
                 self.outgoing[b] = []
                 self.incoming[b] = []
                 self.nodes.add(b)
+
+        # update indices
+        self.incoming[e.head].append(e)
+        for b in e.body:
             self.outgoing[b].append(e)
 
         return e
 
-    def render(self, name):
+    def render(self, name, sty=None):
+        sty = sty or defaultdict(dict)
+
         dot = '%s.dot' % name
-        png = '%s.png' % name
+        svg = '%s.svg' % name
 
         # write the dot file so that we can pass it to graphviz
         with file(dot, 'wb') as f:
@@ -137,24 +73,25 @@ class Hypergraph(object):
 
             # node styles
             for x in self.nodes:
-                self.sty[x].update({'shape': 'circle'})
-                print >> f, '"%s" [%s]' % (x, ','.join('%s=%s' % (k,v) for k,v in self.sty[x].items()))
+                sty[x].update({'shape': 'circle'})
+                print >> f, '"%s" [%s]' % (x, ','.join('%s=%s' % (k,v) for k,v in sty[x].items()))
 
             # edge styles
             for e in self.edges:
-                self.sty[e].update({'shape': 'rectangle'})
-                print >> f, '"%s" [%s]' % (id(e), ','.join('%s=%s' % (k,v) for k,v in self.sty[e].items()))
+                sty[e].update({'shape': 'rectangle'})
+                print >> f, '"%s" [%s]' % (id(e), ','.join('%s=%s' % (k,v) for k,v in sty[e].items()))
 
             print >> f, '}'
 
         print 'wrote', dot, 'compiling...'
 
         # run graphviz to produce image
-        assert 0 == os.system('(dot -Tpng %s > %s)' % (dot, png)), 'graphviz failed.'
+        assert 0 == os.system('(dot -Tsvg %s > %s)' % (dot, svg)), 'graphviz failed.'
 
-        print 'created', png
+        print 'created', svg
 
-        return png
+        with file(svg) as f:
+            return f.read()
 
     def show(self, name='/tmp/tmp'):
         os.system('gnome-open %s 2>/dev/null' % self.render(name))
@@ -165,17 +102,15 @@ class Hypergraph(object):
         this expresion graph.
         """
 
-        if isconst(x):
-            return str(x)
-
-        elif not isinstance(x, Edge):
+        if isinstance(x, Edge):
+            if not x.body:  # arity 0
+                return x.label
+            return '%s(%s)' % (x.label, ', '.join(map(self.get_function, x.body)))
+        else:
             if not self.incoming[x]:  # input variable
                 return x
             [e] = self.incoming[x]    # only one incoming edge per variable in this type of graph
             return self.get_function(e)
-
-        else:
-            return '%s(%s)' % (x.label, ', '.join(map(self.get_function, x.body)))
 
     def toposort(self, root):
         visited = set()
@@ -191,57 +126,100 @@ class Hypergraph(object):
 
         return t(root)
 
-    def plan(self, start):
+    def find_update_plans(self, start):
         incoming = self.incoming
+        outgoing = self.outgoing
 
-        def reversible(e, chart):
+        def display_mode(inputs, output):
+            z = {None: red % '?', False: yellow % '-', True: white % '+'}
+            return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
+                                   z[output])
+
+        def consistent(e, chart):
             C = [chart[b] for b in e.body]
 
             h = e.head
 
-            print 'reversible?', e, C
+            print 'reversible?', e
+            print '  chart:  ', display_mode(C, chart[h])
 
             for M, o in modes(e.label, len(e.body)):
 
-                print '  supports:', M, o
+                B = [(c or not m) for m, c in zip(M, C)]
+                b = chart[h] or not o
 
-                if all((not m or c) for (m,c) in zip(M, C)):  # inputs pass mode check
-                    if not o or chart[h]:
+                assert all(z is not None for z in B) and (b is not None)
 
-                        xxx = '%r [%s] -> %s' % (e.label, ' '.join('-+'[m] for m in M), '-+'[o])
-                        print 'witness:', xxx
+                print '  witness:', display_mode(M, o)
+                print '  binds:  ', display_mode(B, b)
 
-                        #xxx = '%r [%s] -> %s' % (e.label, ' '.join('-+'[m] for m in C), '-+'[chart[h]])
-                        #print 'binds at least:', xxx, 'will bind more later.'
+                return B, b
 
-                        return xxx
+            print '  binds:  ', red % 'FAIL'
 
-        q = [start]
-        chart = {x: 0 for x in self.nodes}   # chart checks node coverage
+        def show_chart(chart):
+            print
+            print magenta % 'Chart'
+            print magenta % '=================='
+            for k, v in chart.items():
+                print {None: red, False: yellow, True: white}[v] % v, k
+            print
 
-        chart[start.head] = 1
-        for b in start.body:
-            chart[b] = 1
+        def first_pass():
+            q = [start]
+            chart = {x: None for x in self.nodes}   # chart checks node coverage
 
-        for x in self.nodes:
-            if not isvar(x):
-                chart[x] = 1
+            chart[start.head] = True
+            for b in start.body:
+                chart[b] = True
 
+            for x in self.nodes:
+                if not isvar(x):
+                    chart[x] = True
 
-        while q:
-            e = q.pop()
-            print e
+            while q:
+                e = q.pop()
+                print e
 
-            for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
+                for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
+
+                    # is edge traversable?
+                    mode = consistent(c, chart)
+
+                    if mode:
+                        q.append(c)
+                        M, _ = mode
+                        for b, m in zip(c.body, M):
+                            chart[b] = m    # XXX: mark node with dominating mode
+
+            return chart
+
+        def second_pass(chart):
+            q = [e for x in self.inputs for e in outgoing[x]]
+
+            print self.inputs
+            print q
+
+            while q:
+                e = q.pop()
+                print e
 
                 # is edge traversable?
-                if reversible(c, chart):
-                    q.append(c)
+                mode = consistent(e, chart)
 
-                    for b in c.body:
-                        chart[b] = 1
+                if mode:
+                    _, o = mode
+                    chart[e.head] = o
 
-        pprint(chart)
+                    for c in outgoing[e.head]:
+                        q.append(c)
+
+            return chart
+
+        chart = first_pass()
+        show_chart(chart)
+        chart = second_pass(chart)
+        show_chart(chart)
 
 
 def modes(f, arity):
@@ -260,13 +238,7 @@ def modes(f, arity):
                 yield z, True
 
     else:
-        assert f.isalnum()
-
         yield [False] * arity, False
-
-
-def isconst(x):
-    return isinstance(x, (float, int))
 
 
 def isvar(x):
@@ -283,27 +255,7 @@ def circuit(anf):
         g.edge(head=var, label=op, body=args)
 
     for var, op, args in unifs:
-        e = g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
-        #e = g.edge(head=var, label=op, body=args)
-
-        # distiguish unif edges
-        g.sty[e].update({'style': 'filled', 'fillcolor': 'grey'})
-
-    # node styles
-    for x in g.nodes:
-        if not g.incoming[x]:
-            g.sty[x].update({'style': 'filled', 'fillcolor': 'yellow'})
-
-            if isvar(x):   # variables are bold
-                g.sty[x].update({'penwidth': '3'})
-
-        if not g.outgoing[x]:
-            g.sty[x].update({'style': 'filled', 'fillcolor': 'salmon'})
-        if x in side:
-            g.sty[x].update({'style': 'filled', 'fillcolor': 'olivedrab2'})
-
-    # variables which are projected-out to the head
-    g.sty[head].update({'style': 'filled', 'fillcolor': 'lightblue'})
+        g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
 
     g.head = head
     g.result = result
@@ -313,6 +265,36 @@ def circuit(anf):
     g.side = side
 
     return g
+
+
+def graph_styles(g, anf):
+
+    (_, head, side, _, _, result) = anf
+
+    sty = defaultdict(dict)   # style overrides and additions
+
+    # edge styles
+    for e in g.edges:
+        if e.label.startswith('&'):  # distiguish unif edges
+            sty[e].update({'style': 'filled', 'fillcolor': 'grey'})
+
+    # node styles
+    for x in g.nodes:
+
+        if not g.incoming[x]:  # inputs (constants and variables) are yellow
+            sty[x].update({'style': 'filled', 'fillcolor': 'yellow'})
+
+            if isvar(x):   # input variables are bold
+                sty[x].update({'penwidth': '3'})
+
+        if x in side:
+            sty[x].update({'style': 'filled', 'fillcolor': 'olivedrab2'})
+
+    # distinguish circuit head and result
+    sty[head].update({'style': 'filled', 'fillcolor': 'lightblue'})
+    sty[result].update({'style': 'filled', 'fillcolor': 'salmon'})
+
+    return sty
 
 
 def main(dynafile):
@@ -349,18 +331,21 @@ def main(dynafile):
 
             rules.append(g)
 
-            g.render(dynafile + '.d/rule-%s' % i)
+            sty = graph_styles(g, x)
 
-            png = 'rule-%s.png' % i  # path relative (to html file)
+            svg = g.render(dynafile + '.d/rule-%s' % i, sty)
 
-            print >> html, '<div class="box"><img src="%s" /></div>' % png
+            print >> html, '<div class="box">%s</div>' % svg
 
     print 'wrote', html.name
+
 
     if argv.browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
 
 
+    # find "update plans" -- every term (edge) in a rule must have code to
+    # handle and update to it's value.
     for i, r in enumerate(rules):
 
         print red % '#________________________________________________'
@@ -368,14 +353,11 @@ def main(dynafile):
 
         for e in r.edges:
 
-#            if not r.outgoing[e.head]:  # skip "output edge"
-#                continue
+            # suppose we receive an update to e
+            print
+            print green % 'Update %s' % (e,)
 
-            # suppose we receive an update to x
-            print green % 'update %s' % (e,)
-
-            # find a plan
-            r.plan(e)
+            r.find_update_plans(e)
 
 
 if __name__ == '__main__':
