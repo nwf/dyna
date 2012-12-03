@@ -4,25 +4,24 @@ black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
-def convert(f):
+def toANF(code, f='/tmp/tmp.dyna'):
+    "Convert to ANF using Haskell implemention via system call."
+    with file(f, 'wb') as tmp:
+        tmp.write(code)
     os.system('rm -f %s.anf' % f)  # clean up any existing ANF output
-
     assert 0 == os.system("""ghc -isrc Dyna.Analysis.NormalizeParseSelftest -e 'normalizeFile "%s"' """ % f), \
         'failed to convert file.'
-
     with file('%s.anf' % f) as h:
         return h.read()
 
 
-def toANF(code, f='/tmp/tmp.dyna'):
-    with file(f, 'wb') as tmp:
-        tmp.write(code)
-    return convert(tmp.name)
-
-# by George Sakkis (gsakkis at rutgers.edu)
-# http://mail.python.org/pipermail/python-list/2005-March/312004.html
 def parse_sexpr(e):
-    "If multiple s-expressions expected as output, set multiple to True."
+    """
+    Parse a string representing an s-expressions into lists-of-lists.
+
+    based on implementation by George Sakkis
+    http://mail.python.org/pipermail/python-list/2005-March/312004.html
+    """
     es, stack = [], []
     for token in re.split(r'([()])|\s+', e):
         if token == '(':
@@ -45,15 +44,8 @@ def parse_sexpr(e):
     return es
 
 
-def evalthings(t):
-    if isinstance(t, str):
-        return t
-    else:
-        return [evalthings(x) for x in t]
-
-
 def read_anf(e):
-    x = evalthings(parse_sexpr(e))
+    x = parse_sexpr(e)
 
     def g(x):
         return [(var, val[0], val[1:]) for var, val in x]
