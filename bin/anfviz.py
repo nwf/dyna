@@ -127,156 +127,90 @@ class Hypergraph(object):
         return t(root)
 
     def find_update_plans(self, start):
-        incoming = self.incoming
-        outgoing = self.outgoing
 
-        def display_mode(inputs, output):
-            z = {None: red % '?', False: yellow % '-', True: white % '+'}
-            return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
-                                   z[output])
+        # update planning algorithm: is a brute-force search for a feasible
+        # solution.
+        #
+        # timv: not sure we can do much better (i.e dynamic programming)
+        #
+        # TODO: add search heuristic (i.e. A* or best-first search). However,
+        # these search problems are very small so this might not matter much.
+        #
+        # TODO: refine cost function (for now not it's just feasibility).
 
-        def display_mode_nocolor(inputs, output):
-            z = {None: '?', False: '-', True: '+'}
-            return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
-                                   z[output])
+        chart = {x: False for x in self.nodes}   # chart checks node coverage
 
+        # set start's nodes to True
+        chart[start.head] = True
+        for b in start.body:
+            chart[b] = True
 
-        def consistent(e, chart):
-            C = [chart[b] for b in e.body]
+        # set constants to True
+        for x in self.nodes:
+            if not isvar(x):
+                chart[x] = True
 
-            h = e.head
+        # enqueue start
+        q = [(chart.copy(), [(start, None)])]
 
-            print 'reversible?', e
-            print '  chart:  ', display_mode(C, chart[h])
+        while q:
+            [chart, history] = q.pop()
+            print chart
 
-            for M, o in modes(e.label, len(e.body)):
+            visited_edges = {e for e, _ in history}
 
-                B = [(c or not m) for m, c in zip(M, C)]
-                b = chart[h] or not o
+            if all(chart.values()):     # complete configuration
+                return history
 
-                assert all(z is not None for z in B) and (b is not None)
+            for e in self.edges:
 
-                print
-                print '    witness:', display_mode(M, o)
-                print '    binds:  ', display_mode(B, b)
-
-                yield B, b
-
-            print
-
-        def show_chart(chart):
-            print
-            print magenta % 'Chart'
-            print magenta % '=================='
-            for k, v in chart.items():
-                print {None: red, False: yellow, True: white}[v] % v, k
-            print
-
-
-        mmm = Hypergraph()
-
-        cone = set()
-
-        def first_pass():
-
-            # XXX: AAAH! I think we need backtracking search in first pass
-            # because we may not have a tree we need to propagate a single
-            # consistent binding... and we want to find the best one.
-
-            q = [start]
-            chart = {x: None for x in self.nodes}   # chart checks node coverage
-
-            mmm.edge(head=start.head,
-                     body=start.body,
-                     label=repr('INIT %s: [%s] -> %s' % (start.label, ' '.join('+' for _ in start.body), '+')))
-
-
-            chart[start.head] = True
-            for b in start.body:
-                chart[b] = True
-
-            for x in self.nodes:
-                if not isvar(x):
-                    chart[x] = True
-
-            q = [(start, ([chart[b] for b in start.body], chart[start.head]))]
-
-            cone.add(start)
-
-            while q:
-                e, (M, o) = q.pop()
-                print e
-
-                mmm.edge(head=e.head, body=e.body, label=repr(e.label + ': ' + display_mode_nocolor(M, o)))
-
-                cone.add(e)
-
-                for b, m in zip(e.body, M):
-                    chart[b] = m
-
-                for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
-
-                    # is edge traversable?
-                    for mode in consistent(c, chart):
-
-                        # check if it's better than what's in the chart right now...
-                        q.append((c, mode))
-
-            return chart
-
-        def second_pass(chart):
-            xx = set(e for x in self.inputs for e in outgoing[x])  # input edges
-
-            # edge body is bound in some way
-            q = [(e, ([chart[b]
-                   for b in e.body], chart[e.head]))
-                       for e in xx
-                           if e not in cone # stay out of cone
-                              and all(b is not None for b in e.body)
-                 ]
-
-            print self.inputs
-            print q
-
-            while q:
-                e, (M, o) = q.pop()
-                print e
-
-                if e in cone:   # stay out of the cone
+                if e in visited_edges:  # already visited this edge
                     continue
 
-                mmm.edge(head=e.head, body=e.body, label=repr(e.label + ': ' + display_mode_nocolor(M, o)))
+                for mode in consistent(e, chart):
 
-                chart[e.head] = o
+                    newchart = chart.copy()
 
-                for c in outgoing[e.head]:
+                    newchart[e.head] = True
+                    for b in e.body:
+                        newchart[b] = True
 
-                    # is edge traversable?
-                    for mode in consistent(c, chart):
+                    q.append((newchart, [(e, mode)] + history))
 
-                        # check if it's better than what's in the chart right now...
-                        q.append((c, mode))
+        assert False, 'No plan found for update to %s' % start
 
-            return chart
 
-        # remember equality constraints (nodes can fork and merge on backward
-        # pass; can the same thing happen forward?
+def consistent(e, chart):
+    C = [chart[b] for b in e.body]
 
-        chart = first_pass()
-        show_chart(chart)
-        chart = second_pass(chart)
-        show_chart(chart)
+    h = e.head
 
-        return mmm
+    print 'reversible?', e
+    print '  chart:  ', display_mode(C, chart[h])
+
+    for M, o in modes(e.label, len(e.body)):
+
+        if all((c or not m) for m, c in zip(M, C)) and (chart[h] or not o):
+
+            B = [(c or m) for m, c in zip(M, C)]
+            b = chart[h] or o
+
+            print
+            print '    witness:', display_mode(M, o)
+            print '    runs:  ', display_mode(B, b)
+
+            yield B, b
+
+    print
 
 
 def modes(f, arity):
 
-    if f.startswith('&'):
+    if f.startswith('& '):
         yield [True] * arity, False
         yield [False] * arity, True
 
-    if f in ('^', '+', '-', '*', '/'):
+    elif f in ('^', '+', '-', '*', '/'):
         yield [True] * arity, False
 
         if f in ('^', '+', '-', '*', '/'):  # invertible math
@@ -287,6 +221,17 @@ def modes(f, arity):
 
     else:
         yield [False] * arity, False
+
+
+def display_mode(inputs, output):
+    z = {None: red % '?', False: yellow % '-', True: white % '+'}
+    return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
+                           z[output])
+
+def display_mode_nocolor(inputs, output):
+    z = {None: '?', False: '-', True: '+'}
+    return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
+                           z[output])
 
 
 def isvar(x):
@@ -396,9 +341,7 @@ def main(dynafile):
             print red % '#________________________________________________'
             print red % '# rule %s' % i
 
-
             print >> html, '<h2 style="color:red;">%s</h2>' % '# rule %s' % i
-
 
             for e in r.edges:
 
@@ -406,22 +349,28 @@ def main(dynafile):
                 print
                 print green % 'Update %s' % (e,)
 
-                uplan_graph = r.find_update_plans(e)
+                plan = r.find_update_plans(e)
 
-                svg = uplan_graph.render('/tmp/tmp')
+                print
+                print yellow % 'Update %s' % (e,)
+                for e, mode in reversed(plan):
+                    if mode is None:
+                        continue
+                    (M, o) = mode
+                    d = display_mode(M, o)
+                    print '%-40s  %s' % (e, d)
 
-                print >> html, '<h3>Update %s</h3>' % (e,)
-                print >> html, '<div class="box">%s</div>' % svg
+                # TODO: plate notation for loop structure.
 
+                #svg = uplan_graph.render('/tmp/tmp')
 
+                #print >> html, '<h3>Update %s</h3>' % (e,)
+                #print >> html, '<div class="box">%s</div>' % svg
 
     print 'wrote', html.name
 
-
     if argv.browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
-
-
 
 
 if __name__ == '__main__':
