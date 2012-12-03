@@ -252,17 +252,16 @@ def circuit(anf):
 
     g.head = head
     g.result = result
+    g.side = side
+
     g.inputs = [x for x in g.nodes if not g.incoming[x]]
     g.outputs = [x for x in g.nodes if not g.outgoing[x]]
     g.intermediate = [x for x in g.nodes if g.incoming[x] and g.outgoing[x]]
-    g.side = side
 
     return g
 
 
-def graph_styles(g, anf):
-
-    (_, head, side, _, _, result) = anf
+def graph_styles(g):
 
     sty = defaultdict(dict)   # style overrides and additions
 
@@ -280,12 +279,12 @@ def graph_styles(g, anf):
             if isvar(x):   # input variables are bold
                 sty[x].update({'penwidth': '3'})
 
-        if x in side:
+        if x in g.side:
             sty[x].update({'style': 'filled', 'fillcolor': 'olivedrab2'})
 
     # distinguish circuit head and result
-    sty[head].update({'style': 'filled', 'fillcolor': 'lightblue'})
-    sty[result].update({'style': 'filled', 'fillcolor': 'salmon'})
+    sty[g.head].update({'style': 'filled', 'fillcolor': 'lightblue'})
+    sty[g.result].update({'style': 'filled', 'fillcolor': 'salmon'})
 
     return sty
 
@@ -317,17 +316,10 @@ def main(dynafile):
 
         print >> html, '<h2>Hyperedge templates</h2>'
 
-        rules = []
-
-        for i, x in enumerate(read_anf(anf)):
-            g = circuit(x)
-
-            rules.append(g)
-
-            sty = graph_styles(g, x)
-
+        rules = [circuit(x) for x in read_anf(anf)]
+        for i, g in enumerate(rules):
+            sty = graph_styles(g)
             svg = g.render(dynafile + '.d/rule-%s' % i, sty)
-
             print >> html, '<div class="box">%s</div>' % svg
 
 
@@ -359,6 +351,18 @@ def main(dynafile):
                     (M, o) = mode
                     d = display_mode(M, o)
                     print '%-40s  %s' % (e, d)
+
+                print >> html, '<h3>Update %s</h3>' % (e,)
+
+                print >> html, '<table style="font-family: Courier;">'
+                for e, mode in reversed(plan):
+                    if mode is None:
+                        continue
+                    (M, o) = mode
+                    d = display_mode_nocolor(M, o)
+                    print >> html, '<tr><td>%s</td><td>%s</td></tr>' % (e, d)
+                print >> html, '</table>'
+
 
                 # TODO: plate notation for loop structure.
 
