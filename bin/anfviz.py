@@ -8,7 +8,7 @@ import os
 from collections import defaultdict, namedtuple
 from utils import magenta, red, green, yellow, white, toANF, read_anf
 
-Edge = namedtuple('Edge', 'head label body')
+Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "tail"
 
 def edge_code(x):
     return '%s = %s(%s)' % (x.head, x.label, ', '.join(x.body)) if x.body else x.label
@@ -19,8 +19,8 @@ Edge.__repr__ = edge_code
 class Hypergraph(object):
 
     def __init__(self):
-        self.incoming = {}
-        self.outgoing = {}
+        self.incoming = {}   # "backward star" (BS)
+        self.outgoing = {}   # "forward star" (FS)
         self.edges = []
         self.nodes = set()
 
@@ -94,14 +94,14 @@ class Hypergraph(object):
             return f.read()
 
     def show(self, name='/tmp/tmp'):
-        os.system('gnome-open %s 2>/dev/null' % self.render(name))
+        self.render(name)
+        os.system('gnome-open %s.svg 2>/dev/null' % name)
 
     def get_function(self, x):
         """
         String of symbolic representation of ``x``, a variable or function, in
         this expresion graph.
         """
-
         if isinstance(x, Edge):
             if not x.body:  # arity 0
                 return x.label
@@ -109,7 +109,7 @@ class Hypergraph(object):
         else:
             if not self.incoming[x]:  # input variable
                 return x
-            [e] = self.incoming[x]    # only one incoming edge per variable in this type of graph
+            [e] = self.incoming[x]
             return self.get_function(e)
 
     def toposort(self, root):
@@ -135,6 +135,12 @@ class Hypergraph(object):
             return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
                                    z[output])
 
+        def display_mode_nocolor(inputs, output):
+            z = {None: '?', False: '-', True: '+'}
+            return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
+                                   z[output])
+
+
         def consistent(e, chart):
             C = [chart[b] for b in e.body]
 
@@ -150,12 +156,13 @@ class Hypergraph(object):
 
                 assert all(z is not None for z in B) and (b is not None)
 
-                print '  witness:', display_mode(M, o)
-                print '  binds:  ', display_mode(B, b)
+                print
+                print '    witness:', display_mode(M, o)
+                print '    binds:  ', display_mode(B, b)
 
-                return B, b
+                yield B, b
 
-            print '  binds:  ', red % 'FAIL'
+            print
 
         def show_chart(chart):
             print
@@ -165,9 +172,24 @@ class Hypergraph(object):
                 print {None: red, False: yellow, True: white}[v] % v, k
             print
 
+
+        mmm = Hypergraph()
+
+        cone = set()
+
         def first_pass():
+
+            # XXX: AAAH! I think we need backtracking search in first pass
+            # because we may not have a tree we need to propagate a single
+            # consistent binding... and we want to find the best one.
+
             q = [start]
             chart = {x: None for x in self.nodes}   # chart checks node coverage
+
+            mmm.edge(head=start.head,
+                     body=start.body,
+                     label=repr('INIT %s: [%s] -> %s' % (start.label, ' '.join('+' for _ in start.body), '+')))
+
 
             chart[start.head] = True
             for b in start.body:
@@ -177,49 +199,75 @@ class Hypergraph(object):
                 if not isvar(x):
                     chart[x] = True
 
+            q = [(start, ([chart[b] for b in start.body], chart[start.head]))]
+
+            cone.add(start)
+
             while q:
-                e = q.pop()
+                e, (M, o) = q.pop()
                 print e
+
+                mmm.edge(head=e.head, body=e.body, label=repr(e.label + ': ' + display_mode_nocolor(M, o)))
+
+                cone.add(e)
+
+                for b, m in zip(e.body, M):
+                    chart[b] = m
 
                 for c in (c for b in e.body for c in incoming[b]):  # edge->node->edge
 
                     # is edge traversable?
-                    mode = consistent(c, chart)
+                    for mode in consistent(c, chart):
 
-                    if mode:
-                        q.append(c)
-                        M, _ = mode
-                        for b, m in zip(c.body, M):
-                            chart[b] = m    # XXX: mark node with dominating mode
+                        # check if it's better than what's in the chart right now...
+                        q.append((c, mode))
 
             return chart
 
         def second_pass(chart):
-            q = [e for x in self.inputs for e in outgoing[x]]
+            xx = set(e for x in self.inputs for e in outgoing[x])  # input edges
+
+            # edge body is bound in some way
+            q = [(e, ([chart[b]
+                   for b in e.body], chart[e.head]))
+                       for e in xx
+                           if e not in cone # stay out of cone
+                              and all(b is not None for b in e.body)
+                 ]
 
             print self.inputs
             print q
 
             while q:
-                e = q.pop()
+                e, (M, o) = q.pop()
                 print e
 
-                # is edge traversable?
-                mode = consistent(e, chart)
+                if e in cone:   # stay out of the cone
+                    continue
 
-                if mode:
-                    _, o = mode
-                    chart[e.head] = o
+                mmm.edge(head=e.head, body=e.body, label=repr(e.label + ': ' + display_mode_nocolor(M, o)))
 
-                    for c in outgoing[e.head]:
-                        q.append(c)
+                chart[e.head] = o
+
+                for c in outgoing[e.head]:
+
+                    # is edge traversable?
+                    for mode in consistent(c, chart):
+
+                        # check if it's better than what's in the chart right now...
+                        q.append((c, mode))
 
             return chart
+
+        # remember equality constraints (nodes can fork and merge on backward
+        # pass; can the same thing happen forward?
 
         chart = first_pass()
         show_chart(chart)
         chart = second_pass(chart)
         show_chart(chart)
+
+        return mmm
 
 
 def modes(f, arity):
@@ -337,6 +385,36 @@ def main(dynafile):
 
             print >> html, '<div class="box">%s</div>' % svg
 
+
+        # find "update plans" -- every term (edge) in a rule must have code to
+        # handle and update to it's value.
+
+        print >> html, '<h2>Update plans<h2>'
+
+        for i, r in enumerate(rules):
+
+            print red % '#________________________________________________'
+            print red % '# rule %s' % i
+
+
+            print >> html, '<h2 style="color:red;">%s</h2>' % '# rule %s' % i
+
+
+            for e in r.edges:
+
+                # suppose we receive an update to e
+                print
+                print green % 'Update %s' % (e,)
+
+                uplan_graph = r.find_update_plans(e)
+
+                svg = uplan_graph.render('/tmp/tmp')
+
+                print >> html, '<h3>Update %s</h3>' % (e,)
+                print >> html, '<div class="box">%s</div>' % svg
+
+
+
     print 'wrote', html.name
 
 
@@ -344,20 +422,6 @@ def main(dynafile):
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
 
 
-    # find "update plans" -- every term (edge) in a rule must have code to
-    # handle and update to it's value.
-    for i, r in enumerate(rules):
-
-        print red % '#________________________________________________'
-        print red % '# rule %s' % i
-
-        for e in r.edges:
-
-            # suppose we receive an update to e
-            print
-            print green % 'Update %s' % (e,)
-
-            r.find_update_plans(e)
 
 
 if __name__ == '__main__':
