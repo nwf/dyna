@@ -38,13 +38,40 @@
 -- @is(X,Y) :- X = *Y.@.  Is that something we should be normalizing out
 -- here or should be waiting for some further unfolding optimization phase?
 
+-- FIXME: "str" is the same a constant str.
+
+-- TODO: ANF Normalizer should return *flat terms* so that we have type-safety
+-- can a lint checker can verify we have exhaustive pattern matching... etc.
+
+--     timv: should there ever be more than one side condition? shouldn't it be
+--     a single result variable after normalization? I see that if I use comma
+--     to combine my conditions I get mutliple variables but should side
+--     condtions be combined with comma? I was under the impression that we
+--     always want strong Boolean values (i.e. none of that three-values null
+--     stuff).
+--
+--     it might be nice if terms came in with a type that verified that they are
+--     "flat term" -- they've been normalized.
+--
+--     It would also be nice if spans were killed... maybe there is an argument
+--     against this.
+--
+--     ANF Rule, `result` always the name of a variable -- it would be nice for
+--     its type were string in that case. Similarly, side conditions are always
+--     variables.
+--
+--  TODO: there might too much special handling of the comma operator...
+
+
 -- Header material                                                      {{{
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dyna.Analysis.NormalizeParse where
+module Dyna.Analysis.NormalizeParse (
+    ANFState, normTerm, normRule, runNormalize, printANF
+) where
 
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -52,7 +79,6 @@ import           Control.Unification
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
-import qualified Data.Set                   as S
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
@@ -61,6 +87,9 @@ import           Dyna.Term.TTerm
 -- import           Dyna.Test.Trifecta         -- XXX
 
 import qualified Data.Char as C
+
+------------------------------------------------------------------------}}}
+-- Preliminaries                                                        {{{
 
 data SelfDispos = SDInherit
                 | SDEval
@@ -88,6 +117,7 @@ data ANFDict = AD
   , ad_self_dispos :: (DFunct,Int) -> SelfDispos
   }
 
+mergeDispositions :: SelfDispos -> (ECSrc, ArgDispos) -> ArgDispos
 mergeDispositions = md
  where
   md SDInherit (_,d)                = d
@@ -136,9 +166,46 @@ newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
 unspan :: T.Spanned P.Term -> DTerm
 unspan (P.TVar v T.:~ _)        = UVar v
 unspan (P.TNumeric v T.:~ _)    = UTerm $ TNumeric v
+unspan (P.TString v T.:~ _)     = UTerm $ TString v
 unspan (P.TFunctor a as T.:~ _) = UTerm $ TFunctor a $ map unspan as
 unspan (P.TAnnot a t T.:~ _)    = UTerm $ TAnnot (fmap unspan a) (unspan t)
 
+------------------------------------------------------------------------}}}
+-- Disposition computations                                             {{{
+
+-- XXX These should be read from declarations
+dynaFunctorArgDispositions :: (DFunct, Int) -> [ArgDispos]
+dynaFunctorArgDispositions x = case x of
+    ("is", 2)  -> [ADQuote,ADEval]
+    -- evaluate arithmetic / math
+    ("exp", 1) -> [ADEval]
+    ("log", 1) -> [ADEval]
+    -- logic
+    ("and", 2) -> [ADEval, ADEval]
+    ("or", 2)  -> [ADEval, ADEval]
+    ("not", 1) -> [ADEval]
+    (name, arity) ->
+       -- If it starts with a nonalpha, it prefers to evaluate arguments
+       let d = if C.isAlphaNum $ head $ BU.toString name
+                then ADQuote
+                else ADEval
+       in take arity $ repeat $ d
+
+-- XXX These should be read from declarations
+dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
+dynaFunctorSelfDispositions x = case x of
+    ("true",0)   -> SDQuote
+    ("false",0)  -> SDQuote
+    ("pair",2)   -> SDQuote
+    (name, _) ->
+       -- If it starts with a nonalpha, it prefers to evaluate
+       let d = if C.isAlphaNum $ head $ BU.toString name
+                then SDInherit
+                else SDEval
+       in d
+
+------------------------------------------------------------------------}}}
+-- Normalize a Term                                                     {{{
 
 -- | Convert a syntactic term into ANF; while here, move to a
 -- Control.Unification term representation.
@@ -163,7 +230,7 @@ normTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
 --
 -- While here, replace bare underscores with unique names.
 -- XXX is this the right place for that?
-normTerm_ c _ t@(P.TVar v) = do
+normTerm_ c _ (P.TVar v) = do
     v' <- if v == "_" then nextVar "_$w" else return v
     case c of
        (ECExplicit,ADEval) -> newEval "_$v"
@@ -176,6 +243,13 @@ normTerm_ c   ss  (P.TNumeric n)    = do
       (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate numeric" ss
       _                   -> return ()
     return $ UTerm $ TNumeric n
+
+-- Strings too
+normTerm_ c   ss  (P.TString s)    = do
+    case c of
+      (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate string" ss
+      _                   -> return ()
+    return $ UTerm $ TString s
 
 -- Quote makes the context explicitly a quoting one
 normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
@@ -221,52 +295,22 @@ normTerm :: (MonadState ANFState m, MonadReader ANFDict m)
 normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
                                   [s] t
 
+------------------------------------------------------------------------}}}
+-- Normalize a Rule                                                     {{{
+
 -- XXX
 normRule :: (MonadState ANFState m, MonadReader ANFDict m)
          => T.Spanned P.Rule   -- ^ Term to digest
          -> m DRule
-normRule (P.Fact t T.:~ _) = do
-    nt <- normTerm False t
-    return $ Rule nt ":-" [] (UTerm $ TFunctor "true" [])
 normRule (P.Rule h a es r T.:~ _) = do
     nh  <- normTerm False h
     nr  <- normTerm True  r >>= newUnif "_$r"
     nes <- mapM (normTerm True) es
     return $ Rule nh a nes nr
 
--- XXX
-dynaFunctorArgDispositions :: (DFunct, Int) -> [ArgDispos]
-dynaFunctorArgDispositions x = case x of
-    ("is", 2)  -> [ADQuote,ADEval]
-    -- evaluate arithmetic / math
-    ("exp", 1) -> [ADEval]
-    ("log", 1) -> [ADEval]
-    -- logic
-    ("and", 2) -> [ADEval, ADEval]
-    ("or", 2)  -> [ADEval, ADEval]
-    ("not", 1) -> [ADEval]
-    (name, arity) ->
-       -- If it starts with a nonalpha, it prefers to evaluate arguments
-       let d = if C.isAlphaNum $ head $ BU.toString name
-                then ADQuote
-                else ADEval
-       in take arity $ repeat $ d
 
--- XXX
---
--- Functors which prefer not to be evaluated
-dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
-dynaFunctorSelfDispositions x = case x of
-    ("true",0)   -> SDQuote
-    ("false",0)  -> SDQuote
-    ("pair",2)   -> SDQuote
-    (name, arity) ->
-       -- If it starts with a nonalpha, it prefers to evaluate
-       let d = if C.isAlphaNum $ head $ BU.toString name
-                then SDInherit
-                else SDEval
-       in d
-
+------------------------------------------------------------------------}}}
+-- Run the normalizer                                                   {{{
 
 -- | Run the normalization routine.
 --
@@ -276,34 +320,11 @@ runNormalize =
   flip runState   (AS 0 M.empty M.empty M.empty []) .
   flip runReaderT (AD dynaFunctorArgDispositions dynaFunctorSelfDispositions)
 
--- FIXME: "str" is the same a constant str.
+------------------------------------------------------------------------}}}
+-- Pretty Printer                                                       {{{
 
--- TODO: ANF Normalizer should return *flat terms* so that we have type-safety
--- can a lint checker can verify we have exhaustive pattern matching... etc.
-
---     timv: should there ever be more than one side condition? shouldn't it be
---     a single result variable after normalization? I see that if I use comma
---     to combine my conditions I get mutliple variables but should side
---     condtions be combined with comma? I was under the impression that we
---     always want strong Boolean values (i.e. none of that three-values null
---     stuff).
---
---     it might be nice if terms came in with a type that verified that they are
---     "flat term" -- they've been normalized.
---
---     It would also be nice if spans were killed... maybe there is an argument
---     against this.
---
---     ANF Rule, `result` always the name of a variable -- it would be nice for
---     its type were string in that case. Similarly, side conditions are always
---     variables.
---
---  TODO: there might too much special handling of the comma operator...
---
-
-valign = align.vcat
-
-pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
+printANF :: (DRule, ANFState) -> Doc e
+printANF ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
   parens $ (pretty a)
            <+> valign [ (p h)
                       , parens $ text "side"   <+> (valign $ map (text.show) e)
@@ -312,9 +333,14 @@ pp ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
                       , parens $ text "result" <+> (p result)
                       ]
   where
-    p (UTerm (TFunctor fn args)) = parens $ hcat $ punctuate (text " ") $ (pretty fn : (map p args))
-    p (UTerm (TNumeric (Left x))) = text $ show x
+    valign = align.vcat
+
+    p (UTerm (TFunctor fn args))   = parens $ hcat $ punctuate (text " ")
+                                     $ (pretty fn : (map p args))
+    p (UTerm (TNumeric (Left x)))  = text $ show x
     p (UTerm (TNumeric (Right x))) = text $ show x
+    p (UTerm (TString s))          = text $ show s
+    p (UTerm (TAnnot _ t))         = p t -- XXX
     p (UVar x) = pretty x
 
-    q x = valign $ map (\(x,y)-> parens $ pretty x <+> p y) $ M.toList x
+    q x = valign $ map (\(y,z)-> parens $ pretty y <+> p z) $ M.toList x

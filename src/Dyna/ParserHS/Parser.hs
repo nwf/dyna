@@ -15,8 +15,11 @@
 --
 --   * Doesn't handle shared subgoals ("whenever ... { ... }")
 --
---   * Don't end numerics with ., even if it's the end-of-rule marker;
---   put a space first.
+--   * Doesn't understand nullary star for gensym correctly
+--      (it's a available in term context but not texpr context;
+--      this depends on an upstream fix in Text.Parser.Expression.
+--      But: I am not worried about it since we don't handle gensyms
+--      anywhere else in the pipeline yet)
 
 --   Header material                                                      {{{
 
@@ -65,10 +68,7 @@ data Term = TFunctor !B.ByteString
 --   explicit about the head being a term (though that's not an expressivity
 --   concern -- just use the parenthesized texpr case) so that there is no
 --   risk of parsing ambiguity.
---
---   XXX The span on Fact is a little silly
-data Rule = Fact (Spanned Term)
-          | Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
+data Rule = Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
  deriving (Eq,Show)
 
 --   XXX The span on LRule is a little silly
@@ -193,6 +193,9 @@ atom =     liftA BU.fromString stringLiteralSQ
 ------------------------------------------------------------------------}}}
 -- Terms and term expressions                                           {{{
 
+nullaryStar :: DeltaParsing m => m (Spanned Term)
+nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
+
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
       [       parens texpr
@@ -207,7 +210,7 @@ term  = token $ choice
       , try $ spanned $ flip TFunctor [] <$> atom
                       <* (notFollowedBy $ char '(')
 
-      , try $ spanned $ flip TFunctor [] <$> (bsf $ string "*")
+      , try $ nullaryStar
       ,       spanned $ parenfunc
       ]
  where
@@ -218,33 +221,7 @@ term  = token $ choice
 
   mkta ty te = TAnnot (AnnType ty) te
 
--- XXX I remember now why we didn't handle ',' as an operator: if it were,
--- we'd have no way of distinguishing between @f(a,b)@ as
---
---   > TFunctor "f" [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _]
---
--- and
---
---   > TFunctor "f" [TFunctor "," [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _] :~ _]
---
--- We can fix this, but it means that we should have a separate expression
--- parser for contexts where "comma means argument separation" and "comma
--- means evaluation separator".  I don't yet know how I feel about
--- the "whenever" (and "is"?) operator(s) being available in the former table.
-
--- XXX right now all binops are at equal precedence and left-associative;
--- that's wrong.
-texpr :: DeltaParsing m => m (Spanned Term)
-texpr = buildExpressionParser etable term <?> "Expression"
- where
-  etable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
-           , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
-           , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
-           , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
-           , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
-           ]
-
--- The dot operator is required to have not-a-space following (to avoid
+-- | The dot operator is required to have not-a-space following (to avoid
 -- confusion with the end-of-rule marker, which is taken to be "dot space"
 -- or "dot eof").
 --
@@ -252,6 +229,8 @@ texpr = buildExpressionParser etable term <?> "Expression"
 dotAny :: CharParsing m => m Char
 dotAny  = char '.' <* satisfy (not . isSpace)
 
+-- | A "dot operator" is a dot followed immediately by something that looks
+-- like a typical operator.
 dotOper :: (Monad m, TokenParsing m) => m [Char]
 dotOper = try (lookAhead dotAny *> identNL dynaDotOperStyle)
 
@@ -269,6 +248,40 @@ bf f = do
   (x:~spx)  <- f
   pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
 
+-- | The basic expression table
+--
+-- XXX right now all binops are at equal precedence and left-associative;
+-- that's wrong.
+--
+-- XXX I remember now why we didn't handle ',' as an operator: if it were,
+-- we'd have no way of distinguishing between @f(a,b)@ as
+--
+--   > TFunctor "f" [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _]
+--
+-- and
+--
+--   > TFunctor "f" [TFunctor "," [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _] :~ _]
+--
+-- We can fix this, but it means that we should have a separate expression
+-- parser for contexts where "comma means argument separation" and "comma
+-- means evaluation separator".  I don't yet know how I feel about
+-- the "whenever" (and "is"?) operator(s) being available in the former table.
+termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
+             , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
+             , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
+             , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
+                -- XXX "is" belongs only in the full expression parser, not
+                -- in the term table
+             , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
+             ]
+
+-- fullETable = termETable ++
+--              [ [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
+--             , [ Infix  (bf (spanned $ bsf $ symbol ",")) AssocRight ]
+--             ]
+
+texpr :: DeltaParsing m => m (Spanned Term)
+texpr = buildExpressionParser termETable term <?> "Expression"
 
 dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
 dterm  = unDL term
@@ -301,7 +314,7 @@ rule = choice [
                           <*> texpr)
 
                -- HEAD .
-             , Fact   <$> term
+             , (\h@(_ :~ s) -> Rule h ":-" [] $ (TFunctor "true" [] :~ s)) <$> term
              ]
        <* optional (char '.')
  where

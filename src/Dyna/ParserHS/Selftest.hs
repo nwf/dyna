@@ -168,10 +168,13 @@ proglines = unsafeParse (dlines <* eof)
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progline sr)
  where
-  e  = LRule (Fact (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) "goal.")
-                     :~ ts)
+  e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+                   ":-"
+                   []
+                   (TFunctor "true" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+                   :~ ts)
          :~ ts
-  ts = Span (Columns 0 0) (Columns 5 5) "goal."
+  ts = Span (Columns 0 0) (Columns 5 5) sr
   sr = "goal."
 
 case_ruleSimple :: Assertion

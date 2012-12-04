@@ -33,9 +33,8 @@ testNormRule :: B.ByteString -> (DRule, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
 
 
--- XXX fix periods, parser thinks it's an infix op and fails.
 e1 = testNormRule "f(X)."
-e2 = testNormRule "f(X) := 1." -- does not work
+e2 = testNormRule "f(X) := 1."
 
 t1 = testNormRule "f(X) max= g(X) + h(X,X)"
 t2 = testNormRule "f(X, g(I)) += (g(I, h(X)) + 10)^2"
@@ -46,13 +45,13 @@ t4 = unsafeParse P.dlines e4
 -- hideous monster rule
 e3 = "f(X,Y) += (g(X,\"str\",d) - h(X,X,Y) - c)^2 + f(Y,Z)/exp(3.0) whenever ?c, (d < 10), e(f(h(X)), g(X))"
 t3 = testNormRule e3
-p3 = pp $ t3
+p3 = printANF $ t3
 
 
 normalizeFile file = do
     contents <- B.readFile file
     writeFile (file ++ ".anf")
-              (show $ vcat (map (\(P.LRule x T.:~ _) -> pp $ runNormalize $ normRule x)
+              (show $ vcat (map (\(P.LRule x T.:~ _) -> printANF $ runNormalize $ normRule x)
                                 (unsafeParse P.dlines contents))
                       <> text "\n") -- add newline at end of file...
     return ()
