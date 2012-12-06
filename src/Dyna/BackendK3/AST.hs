@@ -11,6 +11,12 @@
 -- XXX Currently does not have any mechanism for declaring local variables
 -- The K3 Way -- right now the only way to do that is let-as-lambda.
 --
+-- XXX k3ref K3 does not yet support references.  This string is littered
+-- through the codebase from a previous, incomplete attempt at handling
+-- references which has been commented out to prevent the overly ambitious
+-- from attempting to make use of it.
+--
+-- XXX k3xref K3 does not yet support foreign key constraints.
 
 -- Header material                                                      {{{
 {-# LANGUAGE ConstraintKinds #-}
@@ -18,15 +24,19 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wall -Werror #-}
 
 module Dyna.BackendK3.AST (
     -- * Preliminaries
@@ -36,20 +46,19 @@ module Dyna.BackendK3.AST (
     BiNum(..), UnNum(..),
 
     -- * Collections
-    CTE, CKind(..), CollTy(..), K3_Coll_C, asColl,
+    CTE, CKind(..), CollTy(..), asColl,
 
+{- XXX k3ref
     -- * References
     Ref, 
+-}
 
     -- * Pattern System
-    PKind(..), Pat(..),
-    PVar(..), PUnk(..), PJust(..), PRef(..),
-    UnPatDa,
-    MapPatDa, UnMapPatDa, MapPatTy,
-    MapPatConst, K3_Pat_C, K3_Slice_C,
+    PKind(..), Pat(..), PDat(..),
+    MapPatConst,
 
     -- * Annotations
-    AnnT(..), AnnE(..), FunDepSpec(..), K3_Xref_C,
+    AnnT(..), AnnE(..), FunDepSpec(..),
 
     -- * Type System: Base constraints
     K3BaseTy,
@@ -60,16 +69,28 @@ module Dyna.BackendK3.AST (
     -- * Expressions
     K3(..), 
 
+{- XXX
+    -- * Roles and Streams
+    -- SFormat(..), Stream(..), K3RoleDesc(..),
+-}
+
     -- * Declarations
-    Decl(..), DKind(..), mkdecl, mkfdecl, asCollR, asRefR
+    Decl(..), DBody(..), asR, asCollR, {- asRefR, -}
+    mkCollDecl, mkTrigDecl, -- unUDR,
+
+    -- * Programs
+    mkK3, mkK3T, MkK3T, Prog(..)
 ) where
 
+import           Control.Monad.Identity
+import           Control.Monad.State
 import           Data.Proxy
 import           Data.Word
 import           GHC.Prim (Constraint)
 -- import           Language.Haskell.TH (varT, mkName)
 
 import           Dyna.XXX.HList
+import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
@@ -77,6 +98,8 @@ import           Dyna.XXX.THTuple
 
   -- XXX
 newtype VarIx  = Var String
+ deriving (Eq,Ord,Show)
+
   -- XXX (Hostname,Port)
 newtype AddrIx = Addr (String,Int)
  deriving (Eq,Show)
@@ -99,6 +122,64 @@ instance (K3BaseTy a, K3BaseTy (HList as)) => K3BaseTy (HList (a ': as))
 $(mkTupleRecInstances ''K3BaseTy [])
 
 ------------------------------------------------------------------------}}}
+-- Type System: Proxified Representations                               {{{
+
+type family K3Proxied (a :: *) :: *
+type family K3Unproxy (r :: * -> *) (a :: *) :: *
+
+type instance K3Proxied   Bool   = Bool
+type instance K3Unproxy r Bool   = Bool
+
+type instance K3Proxied   Word8  = Word8
+type instance K3Unproxy r Word8  = Word8
+
+type instance K3Proxied   Float  = Float
+type instance K3Unproxy r Float  = Float
+
+type instance K3Proxied   Int    = Int
+type instance K3Unproxy r Int    = Int
+
+type instance K3Proxied   String = String
+type instance K3Unproxy r String = String
+
+type instance K3Proxied   ()     = ()
+type instance K3Unproxy r ()     = ()
+
+type instance K3Proxied   (Maybe a) = Maybe (K3Proxied   a)
+type instance K3Unproxy r (Maybe a) = Maybe (K3Unproxy r a)
+
+type family MapK3Proxied (a :: [*]) :: [*]
+type instance MapK3Proxied '[] = '[]
+type instance MapK3Proxied (a ': as) = K3Proxied a ': (MapK3Proxied as)
+
+type family MapK3Unproxy (r :: * -> *) (a :: [*]) :: [*]
+type instance MapK3Unproxy r '[] = '[]
+type instance MapK3Unproxy r (a ': as) = K3Unproxy r a ': (MapK3Unproxy r as)
+
+type instance K3Proxied   (HList a) = HList (MapK3Proxied   a)
+type instance K3Unproxy r (HList a) = HList (MapK3Unproxy r a)
+
+type instance K3Proxied   (a,b) = (K3Proxied   a, K3Proxied   b)
+type instance K3Unproxy r (a,b) = (K3Unproxy r a, K3Unproxy r b)
+
+type instance K3Proxied   (a,b,c) = (K3Proxied   a, K3Proxied   b,
+                                     K3Proxied   c)
+type instance K3Unproxy r (a,b,c) = (K3Unproxy r a, K3Unproxy r b,
+                                     K3Unproxy r c)
+
+type instance K3Proxied   (a,b,c,d) = (K3Proxied   a, K3Proxied   b,
+                                       K3Proxied   c, K3Proxied   d)
+type instance K3Unproxy r (a,b,c,d) = (K3Unproxy r a, K3Unproxy r b,
+                                       K3Unproxy r c, K3Unproxy r d)
+
+type instance K3Proxied   (a,b,c,d,e) = (K3Proxied   a, K3Proxied   b,
+                                         K3Proxied   c, K3Proxied   d,
+                                         K3Proxied   e)
+type instance K3Unproxy r (a,b,c,d,e) = (K3Unproxy r a, K3Unproxy r b,
+                                         K3Unproxy r c, K3Unproxy r d,
+                                         K3Unproxy r e)
+
+------------------------------------------------------------------------}}}
 -- Targets                                                              {{{
 
 -- | The 'r' representation of a target taking argument type 't'.
@@ -111,26 +192,32 @@ data family Target (r :: * -> *) t :: *
 
 instance (K3BaseTy a) => K3BaseTy (Target r a)
 
+type instance K3Proxied   (Target r     a) = Target Proxy (K3Proxied   a)
+type instance K3Unproxy r (Target Proxy a) = Target r     (K3Unproxy r a)
+
 ------------------------------------------------------------------------}}}
 -- Collections                                                          {{{
 
 -- | Reflect 'CollTy' at the type level.
-data CKind = CBag | CList | CSet
+data CKind = CKBag | CKList | CKSet
 
 -- | The 'r' representation of a collection of kind 'c' of elements 'e'.
 data family CTE (r :: * -> *) (c :: CKind) e
 
 -- | Data-level specification of collection kinds
 data CollTy c where
-  CTBag  :: CollTy CBag
-  CTList :: CollTy CList
-  CTSet  :: CollTy CSet
+  -- | Bags are unordered collections of elements which may have duplicates.
+  CBag  :: CollTy CKBag
+  -- | Lists are linearly ordered collecitons of elements in the usual
+  -- mu-recursive style.
+  CList :: CollTy CKList
+  -- | Sets are unordered collections of elements with no duplicates.
+  CSet  :: CollTy CKSet
 
 instance (K3BaseTy a) => K3BaseTy (CTE r c a)
 
--- | A representation-specific constraint for collections, on functions
--- which need to dispatch on a type-tag in the output.
-type family K3_Coll_C (r :: * -> *) (c :: CKind) :: Constraint
+type instance K3Proxied   (CTE r     c a) = CTE Proxy c (K3Proxied   a)
+type instance K3Unproxy r (CTE Proxy c a) = CTE r     c (K3Unproxy r a)
 
 -- | A convenience function for setting the type of a collection.
 --
@@ -141,10 +228,15 @@ asColl = const
 ------------------------------------------------------------------------}}}
 -- References                                                           {{{
 
+{- XXX k3ref
 -- | The 'r' representation of references of elements of type 'a'
 data family Ref (r :: * -> *) a
 
 instance (K3BaseTy a) => K3BaseTy (Ref r a)
+
+type instance K3Proxied   (Ref r     a) = Ref Proxy (K3Proxied   a)
+type instance K3Unproxy r (Ref Proxy a) = Ref r     (K3Unproxy r a)
+ -}
 
 ------------------------------------------------------------------------}}}
 -- Pattern System                                                       {{{
@@ -160,8 +252,10 @@ data PKind where
   -- | Just patterns (see 'PJust')
   PKJust :: PKind -> PKind
 
+{- XXX k3ref
   -- | Ref patterns (see 'PRef')
   PKRef :: PKind -> PKind
+ -}
 
   -- | HList patterns
   PKHL :: [PKind] -> PKind
@@ -171,9 +265,51 @@ data PKind where
   -- 'PatTy' and 'PatReprFn' both produce tuples.
   PKTup  :: [PKind] -> PKind
 
--- | Provides witnesses that certain types may be used
---   as arguments to K3 lambdas.  Useful when building
---   up type signatures and pattern matches in lambdas.
+-- | Data-representation of patterns in K3.
+--
+--   The 'r' parameter is the representation of components of the pattern
+--   itself, and is used to constrain representation of variables.  When
+--   being used as slices, @r@ will be the same as @s@ given to the type
+--   functions in the 'Pat' class below; when being used as patterns for
+--   lambdas, @r ~ UnivTyRepr@ and 's' is a 'K3'.  In this latter case,
+--   the 'UnivTyRepr' is needed for "Dyna.BackendK3.Render"'s function,
+--   since every lambda needs an explicit type signature on its pattern.
+data PDat (r :: * -> *) (k :: PKind) where
+  -- | A variable used literally in a pattern
+  PVar  :: r a -> PDat r (PKVar r (a :: *))
+
+  -- | A pattern wildcard.
+  --
+  -- Note that 'PatReprFn s (PUnk a) ~ ()', which should prohibit even
+  -- accidental use as part of a 'K3' expression or type.
+  PUnk  :: PDat r (PKUnk (a :: *))
+
+  -- | A /Just/ pattern.  Eliminates a Just constructor, and causes the
+  -- trigger to abort on a Nothing.
+  --
+  -- Note the distinction between PatTy and (PatBTy and PatReprFn) here!
+  -- This pattern witnesses a type "Maybe a" but binds a variable of type
+  -- "a".  This will in general be true of any variant (i.e. sum) pattern.
+  PJust :: PDat r w -> PDat r (PKJust w)
+
+{- XXX k3ref
+  -- | A /Ref/ pattern; dereferences the provided reference.
+  PRef  :: PDat r w -> PDat r (PKRef w)
+-}
+
+  -- | A HList-style product pattern
+  PHL   :: HRList (PDat r) ws -> PDat r (PKHL ws)
+
+  PT2   :: (PDat r w1, PDat r w2) -> PDat r (PKTup [w1,w2])
+  PT3   :: (PDat r w1, PDat r w2, PDat r w3) -> PDat r (PKTup [w1,w2,w3])
+  PT4   :: (PDat r w1, PDat r w2, PDat r w3, PDat r w4)
+        -> PDat r (PKTup [w1,w2,w3,w4])
+  PT5   :: (PDat r w1, PDat r w2, PDat r w3, PDat r w4, PDat r w5)
+        -> PDat r (PKTup [w1,w2,w3,w4,w5])
+
+
+-- | Provides type functions on patterns.  Useful when building up type
+--   signatures and pattern matches in lambdas.
 --
 --   Note that this is a closed class using the promoted
 --   data 'PKind'.
@@ -192,17 +328,7 @@ data PKind where
 --   used to constrain the representation of 'Ref's to be consistent across
 --   a pattern.
 --
---   The 'r' class parameter (also on 'PVar') is the representation of
---   components of the pattern itself, and is used to constrain
---   representation of variables.  When being used as slices, @r ~ s@; when
---   being used as patterns for lambdas, @r ~ UnivTyRepr@ and 's' is a 'K3'.
---   In this latter case, 'PatDa' is needed for "Dyna.BackendK3.Render"'s
---   function, since every lambda needs an explicit type signature on its
---   variable.
---
-class (UnPatDa (PatDa w) ~ w) => Pat (r :: * -> *) (w :: PKind) where
-  -- | Any data this witness needs to carry around
-  type PatDa w :: *
+class Pat (w :: PKind) where
   -- | The type this witness witnesses (i.e. the things matched against)
   type PatTy (s :: * -> *) w :: *
   -- | The type this witness binds (i.e. after matching is done)
@@ -210,63 +336,29 @@ class (UnPatDa (PatDa w) ~ w) => Pat (r :: * -> *) (w :: PKind) where
   -- | The type of this pattern.
   type PatReprFn (s :: * -> *) w :: *
 
--- | Given a chunk of pattern data, recover the PKind.
-type family UnPatDa (pd :: *) :: PKind
-
--- | Given a PatReprFn output and type constructor input, recover the PKind
-type family UnPatReprFn (s :: * -> *) (prf :: *) :: PKind
-
--- | A variable used literally in a pattern
-newtype PVar r a = PVar (r a)
-type instance UnPatDa (PVar r a) = PKVar r a
-instance (K3BaseTy a, r ~ r') => Pat r' (PKVar (r :: * -> *) (a :: *)) where
-  type PatDa       (PKVar r a) = PVar r a
+instance (K3BaseTy a) => Pat (PKVar (r :: * -> *) (a :: *)) where
   type PatTy     s (PKVar r a) =   a
   type PatBTy    s (PKVar r a) =   a
   type PatReprFn s (PKVar r a) = s a
 
--- | A pattern wildcard.
---
--- Note that 'PatReprFn s (PUnk a) ~ ()', which should prohibit even
--- accidental use as part of a 'K3' expression or type.
-data PUnk (a :: *) = PUnk
-type instance UnPatDa (PUnk a)       = PKUnk a
-instance (K3BaseTy a) => Pat r (PKUnk (a :: *)) where
-  type PatDa       (PKUnk a) = PUnk a
+instance (K3BaseTy a) => Pat (PKUnk (a :: *)) where
   type PatTy     s (PKUnk a) =   a
   type PatBTy    s (PKUnk a) =   ()
   type PatReprFn s (PKUnk a) =   ()
 
--- | A /Just/ pattern.  Eliminates a Just constructor, and causes the
--- trigger to abort on a Nothing.
---
--- Note the distinction between PatTy and (PatBTy and PatReprFn) here!
--- This pattern witnesses a type "Maybe a" but binds a variable of type
--- "a".  This will in general be true of any variant (i.e. sum) pattern.
-newtype PJust w = PJust { unPJust :: PatDa w }
-type instance UnPatDa (PJust w)      = PKJust w
-instance (Pat r w) => Pat r (PKJust w) where
-  type PatDa       (PKJust w) = PJust w
+instance (Pat w) => Pat (PKJust w) where
   type PatTy     s (PKJust w) = Maybe (PatTy s w)
   type PatBTy    s (PKJust w) = PatBTy s w
   type PatReprFn s (PKJust w) = PatReprFn s w
 
--- | A /Ref/ pattern; dereferences the provided reference.
-newtype PRef w = PRef { unPRef :: PatDa w }
-type instance UnPatDa (PRef w)    = PKRef w
-instance (Pat r w) => Pat r (PKRef w) where
-  type PatDa       (PKRef w) = PRef w
+{- XXX k3ref
+instance (Pat w) => Pat (PKRef w) where
   type PatTy     s (PKRef w) = Ref s (PatTy s w)
   type PatBTy    s (PKRef w) = PatBTy s w
   type PatReprFn s (PKRef w) = PatReprFn s w
+-}
 
 -- ** Tuples
-
-type family TMapPatDa (x :: [PKind]) :: *
-$(mkTyMapFlat 0 ''TMapPatDa ''PatDa)
-
-type family UnMapPatDa (x :: *) :: [PKind]
-$(mkTyUnMap Nothing 0 ''UnMapPatDa ''UnPatDa)
 
 type family TMapPatTy (s :: * -> *) (x :: [PKind]) :: *
 $(mkTyMapFlat 1 ''TMapPatTy ''PatTy)
@@ -277,28 +369,17 @@ $(mkTyMapFlat 1 ''TMapPatBTy ''PatBTy)
 type family TMapPatReprFn  (r :: * -> *) (x :: [PKind]) :: *
 $(mkTyMapFlat 1 ''TMapPatReprFn ''PatReprFn)
 
-$(mkTyUnMap (Just 'PKTup) 0 ''UnPatDa ''UnPatDa)
+type family MapPatConst (x :: [PKind]) :: Constraint
+type instance MapPatConst '[] = ()
+type instance MapPatConst (x ': xs) = (Pat x, MapPatConst xs)
 
-type family MapPatConst (x :: [PKind]) (r :: * -> *) :: Constraint
-type instance MapPatConst '[] r = ()
-type instance MapPatConst (x ': xs) r = (Pat r x, MapPatConst xs r)
-
-instance (UnPatDa (TMapPatDa ts) ~ PKTup ts, MapPatConst ts r)
-      => Pat     r (PKTup (ts :: [PKind])) where
-  type PatDa       (PKTup ts) = TMapPatDa ts
+instance (MapPatConst ts)
+      => Pat       (PKTup (ts :: [PKind])) where
   type PatTy     s (PKTup ts) = TMapPatTy s ts
   type PatBTy    s (PKTup ts) = TMapPatBTy s ts
   type PatReprFn s (PKTup ts) = TMapPatReprFn s ts
 
 -- ** HLists
-
-type instance UnMapPatDa (HList '[]) = '[]
-type instance UnMapPatDa (HList (a ': as)) = UnPatDa a ': (UnMapPatDa (HList as))
-type instance UnPatDa (HList x) = PKHL (UnMapPatDa (HList x))
-
-type family MapPatDa (x :: [PKind]) :: [*]
-type instance MapPatDa ('[]) = '[]
-type instance MapPatDa (w ': ws) = PatDa w ': (MapPatDa ws)
 
 type family MapPatTy (r :: * -> *) (x :: [PKind]) :: [*]
 type instance MapPatTy r ('[]) = '[]
@@ -312,18 +393,11 @@ type family MapPatReprFn  (r :: * -> *) (x :: [PKind]) :: [*]
 type instance MapPatReprFn r '[] = '[]
 type instance MapPatReprFn r (w ': ws) = PatReprFn r w ': (MapPatReprFn r ws)
 
-instance (UnPatDa (HList (MapPatDa ts)) ~ PKHL ts, MapPatConst ts r)
-      => Pat     r (PKHL (ts :: [PKind])) where
-  type PatDa       (PKHL ts) = HList (MapPatDa ts)
+instance (MapPatConst ts)
+      => Pat     (PKHL (ts :: [PKind])) where
   type PatTy     s (PKHL ts) = HList (MapPatTy s ts)
   type PatBTy    s (PKHL ts) = HList (MapPatBTy s ts)
   type PatReprFn s (PKHL ts) = HList (MapPatReprFn s ts)
-
--- | A representation-specific constraint on handling patterns, on 'eLam'.
-type family K3_Pat_C (r :: * -> *) (w :: PKind) :: Constraint
-
--- | A representation-specific constraint for slices, on 'eSlice'.
-type family K3_Slice_C (r :: * -> *) (w :: PKind) :: Constraint
 
 ------------------------------------------------------------------------}}}
 -- Annotations                                                          {{{
@@ -332,14 +406,12 @@ type family K3_Slice_C (r :: * -> *) (w :: PKind) :: Constraint
 --
 -- XXX This has a phantom type only so that we can use it as an r
 -- in RTupled.  We'd rather not (see "Dyna.BackendK3.Render"'s
--- need to use fdscast)
+-- need to use 'fdscast'), but the alternative of, e.g. Tagged, is not that
+-- great either!
 data FunDepSpec a = FDIrr -- ^ /Irr/elevant to a fundep
                   | FDDom -- ^ In the /Dom/ain of a fundep
                   | FDCod -- ^ In the /Cod/omain of a fundep
  deriving (Eq,Show)
-
--- | A representation-specific constraint for cross-references
-type family K3_Xref_C (r :: * -> *) (w :: PKind) :: Constraint
 
 -- | Annotations on 'K3Ty' types
 data AnnT a where
@@ -365,31 +437,35 @@ data AnnT a where
   -- | 'AOneOf' for HList representations
   AOneOfHL :: (HLR Maybe v mv) => AnnT (HList mv)
 
+{- XXX k3xref
   -- | A cross-reference within this collection
+  -- 
+  -- Note that the AST supports the use of arbitrary expressions here, which
+  -- is not likely the case of the actual K3 system!  Please don't do
+  -- something silly.
   --
-  -- XXX this is not actually implemented anywhere and has yet to be
-  -- demonstrated as being implementable
-  AXref :: (PatTy r w ~ t, w ~ UnPatDa (PatDa w))
-        => PatDa w -> (forall p . PatReprFn p w -> p x)
-             -- Foreign projection
-        -> PatDa w -> (forall p . PatReprFn p w -> p x)
+  -- XXX The need to specify a Proxy is annoying.
+  AXref :: (Pat w, PatTy r w ~ t, Pat w', PatTy r w' ~ t)
+        => Proxy x
+        -> PDat r w  -> (forall p . PatReprFn p w  -> p x)
+        -> PDat r w' -> (forall p . PatReprFn p w' -> p x)
         -> AnnT (CTE r c' t)
 
   -- | A cross-reference to a declared collection.
   --
-  -- XXX this is not actually implemented anywhere and has yet to be
-  -- demonstrated as being implementable
-  AXrefF :: (Pat p w, Pat p w', PatTy p w ~ t, PatTy p w' ~ t')
-         => Decl UnivTyRepr r' (CTE r' c t) -- Foreign collection
-         -> PatDa w
-         -> (PatReprFn p w  -> p x)         -- Foreign projection
-         -> PatDa w'
-         -> (PatReprFn p w' -> p x)         -- Local projection
-         -> AnnT (CTE r c' t')
+  -- See the notes for 'AXref'
+  AXrefF :: (Pat w, Pat w', PatTy r w ~ t, PatTy r w' ~ t')
+         => Proxy x
+         -> Decl s (CTE Proxy c' t') -- Foreign collection
+         -> PDat UnivTyRepr w' -> (forall p . PatReprFn p w' -> p x)
+         -> PDat UnivTyRepr w  -> (forall p . PatReprFn p w  -> p x)
+         -> AnnT (CTE r c t)
+-}
 
   -- | An escape hatch! (XXX)
   ATMisc :: String -> AnnT a
 
+	-- XXX Missing: INDEX, UNIQUE, ORDERED, SORTED
 
 -- | Annotations on 'K3' expressions
 data AnnE a where
@@ -397,7 +473,9 @@ data AnnE a where
   -- | Decorate an expression as atomic.
   AAtomic :: AnnE a
 
-  -- |
+  -- | Flag that a collection (or collection expression) ought to be a
+  -- singleton.  K3's type system is not so deeply embedded into Haskell
+  -- that we can check this.
   ASingleton :: AnnE (CTE r t a)
 
   -- | An escape hatch! (XXX)
@@ -423,7 +501,8 @@ class K3Ty (r :: * -> *) where
 
   -- tPair   :: r a -> r b -> r (a,b)
   tMaybe   :: r a -> r (Maybe a)
-  tRef     :: r a -> r (Ref r' a)
+  -- XXX k3ref
+  -- tRef     :: r a -> r (Ref r' a)
   tColl    :: (K3BaseTy a) => CollTy c -> r a -> r (CTE r' c a)
   tFun     :: (K3BaseTy a, K3BaseTy b) => r a -> r b -> r (a -> b)
 
@@ -457,7 +536,8 @@ instance K3Ty UnivTyRepr where
   tColl   c      (UTR a) = UTR $ tColl c a
   tFun   (UTR a) (UTR b) = UTR $ tFun a b
   tMaybe (UTR a)         = UTR $ tMaybe a
-  tRef   (UTR a)         = UTR $ tRef a
+  -- XXX k3ref
+  -- tRef   (UTR a)         = UTR $ tRef a
 
   -- XXX TUPLES
   -- tTuple   us            = UTR $ tTuple  $ tupleopRS unUTR us
@@ -470,9 +550,6 @@ instance K3Ty UnivTyRepr where
 
 ------------------------------------------------------------------------}}}
 -- Numeric Autocasting                                                  {{{
-
-  -- XXX should we make these be constraints in the K3 class so that
-  -- different representations can make different choices?
 
 -- | Unary numerics
 class UnNum a where unneg :: a -> a
@@ -512,15 +589,23 @@ instance BiNum Float Int where
   biadd a b = (a + (fromIntegral b))
   bimul a b = (a * (fromIntegral b))
 
-
-  -- XXX More
-
 ------------------------------------------------------------------------}}}
 -- Expressions                                                          {{{
 
 -- | Data level representation of K3 expression, indexed by equivalent
 -- type in Haskell.
 class K3 (r :: * -> *) where
+
+  declVar   :: (pt ~ K3Proxied t, t ~ K3Unproxy r pt)
+            => Decl s pt -> r t
+
+  -- | Reference the given variable (and promise that it has type 'a')
+  --
+  -- Note that this is, for example, the only way of producing Targets.
+  --
+  -- We might also want an eLocalVar :: VarIx -> UnivTyRepr a -> r (Ref a)
+  -- to get something like "The K3 Way" of doing local variables?
+  unsafeVar :: VarIx -> UnivTyRepr a -> r a
 
   -- | Add a comment to some part of the AST
   cComment  :: String -> r a -> r a
@@ -536,21 +621,9 @@ class K3 (r :: * -> *) where
   cString   :: String -> r String
   cUnit     :: r ()
 
-  -- | Reference the given variable (and promise that it has type 'a')
-  --
-  -- Note that this is, for example, the only way of producing Targets.
-  --
-  -- XXX replace with something more like declvar so that, in theory, a
-  -- sufficiently smart "r" might know what to do about it?
-  --
-  -- We might also want an eLocalVar :: VarIx -> UnivTyRepr a -> r (Ref a)
-  -- to get something like "The K3 Way" of doing local variables?
-  unsafeVar :: VarIx -> UnivTyRepr a -> r a
-
-  declVar   :: Decl UnivTyRepr r a -> r a
-
   eJust     :: r a -> r (Maybe a)
-  eRef      :: r a -> r (Ref r a)
+  -- XXX k3ref
+  -- eRef      :: r a -> r (Ref r a)
 
     -- XXX TUPLES
   eTuple2   :: (r a, r b) -> r (a,b)
@@ -561,8 +634,8 @@ class K3 (r :: * -> *) where
 
   eHL       :: HRList r a -> r (HList a)
 
-  eEmpty    :: (K3_Coll_C r c) => r (CTE r c e)
-  eSing     :: (K3_Coll_C r c) => r e -> r (CTE r c e)
+  eEmpty    :: CollTy c -> r (CTE r c e)
+  eSing     :: CollTy c -> r e -> r (CTE r c e)
   eCombine  :: r (CTE r c e) -> r (CTE r c e) -> r (CTE r c e)
   eRange    :: r Int -> r Int -> r Int -> r (CTE r c Int)
 
@@ -583,8 +656,8 @@ class K3 (r :: * -> *) where
   -- (1,2) vs (\(x,y) -> eTuple2 (x,y)) (1,2): the former has a HOAS lambda
   -- of type (r (a,b) -> r (a,b)) while the latter has ((r a, r b) -> r
   -- (a,b)).
-  eLam      :: (K3_Pat_C r w, Pat UnivTyRepr w, K3BaseTy (PatTy r w))
-            => PatDa w -> (PatReprFn r w -> r b) -> r (PatTy r w -> b)
+  eLam      :: (Pat w)
+            => PDat UnivTyRepr w -> (PatReprFn r w -> r b) -> r (PatTy r w -> b)
 
   -- | Apply
   eApp      :: r (a -> b) -> r a -> r b
@@ -623,7 +696,7 @@ class K3 (r :: * -> *) where
   -- | Sort a collection into a list.
   eSort     :: r (CTE r c t)      -- ^ Input collection
             -> r ((t,t) -> Bool)  -- ^ Less-or-equal
-            -> r (CTE r 'CList t)
+            -> r (CTE r 'CKList t)
 
   -- | Peek an element from a collection.
   --
@@ -638,8 +711,8 @@ class K3 (r :: * -> *) where
   --
   -- Rather like lambdas, except that the witness is also
   -- a mandatory part of the definition of "slice" :)
-  eSlice    :: (K3_Slice_C r w, Pat r w, PatTy r w ~ t)
-            => PatDa w       -- ^ Slice specification
+  eSlice    :: (Pat w, PatTy r w ~ t, K3BaseTy t)
+            => PDat r w      -- ^ Slice specification
             -> r (CTE r c t) -- ^ Input collection
             -> r (CTE r c t)
 
@@ -655,7 +728,8 @@ class K3 (r :: * -> *) where
   --
   -- Note that dereference is done by a lambda pattern.  See Automation's
   -- 'deref'.
-  eAssign   :: r (Ref r t) -> r t -> r ()
+  -- XXX k3ref
+  -- eAssign   :: r (Ref r t) -> r t -> r ()
 
   -- | Send a function and data to another node.
   --
@@ -663,47 +737,130 @@ class K3 (r :: * -> *) where
   eSend     :: r AddrIx -> r (Target r a) -> r a -> r ()
 
 ------------------------------------------------------------------------}}}
+-- Roles and Streams                                                    {{{
+
+{- XXX UNTESTED!
+
+data Role = Role
+data SFormat = CSV | JSON
+data Stream t = StreamFile SFormat String
+
+-- | Describe the information flow through a K3 program.  K3 calls these
+-- "roles".
+--
+-- XXX Doesn't do anything with "patterns" at the moment.
+class K3RoleDesc (r :: * -> *) where
+  type K3RD_M r :: * -> * -> *
+
+  -- | Finalize a role description.  Since we force sources to be made
+  -- inside some @Monad@, we'll need a way out which seals the
+  -- universe.  This is the ST Monad trick over again.
+  mkRole :: (m ~ K3RD_M r)
+         => (forall s . (Monad (m s) => m s (r ())))
+         -> r Role
+
+  -- | Create a source for this role.
+  rSource  :: (K3BaseTy t, m ~ K3RD_M r, Monad (m s))
+             => UnivTyRepr t -> Stream t -> m s (r t)
+
+  -- | Bind a source to a trigger
+  rBind    :: (K3BaseTy t)
+           => r t -> (Decl s t) -> r ()
+
+  -- | Consume
+  rConsume :: r t -> r ()
+
+  -- | Many terminal role descriptions group together
+  -- to form a terminal role description.
+  rBlock :: [r ()] -> r ()
+-}
+
+------------------------------------------------------------------------}}}
 -- Declarations                                                         {{{
 
--- | K3 supports a few kinds of delcarations at the top level:
-data DKind r dt where
+-- | K3 supports a few kinds of delcarations at the top level.
+--
+-- Those with actual structural content are required to be universal in the
+-- underlying representation.  The types exposed here are all 'K3Proxied' so
+-- that universally quantified variables do not escape (all references to
+-- representation are replaced with 'Proxy').
+data DBody dt where
   -- | Collections
   --
-  -- XXX No initializers? [t] ->
-  DKColl :: DKind r (CTE r (c :: CKind) t)
+  -- XXX No initializers? [r t] ->
+  DColl :: (pt ~ K3Proxied t)
+        => UnivTyRepr (CTE r c t) -> DBody (CTE Proxy (c :: CKind) pt)
 
+{-
+ - XXX K3ref
   -- | Global References
-  DKRef  :: DKind r (Ref r t)
-
-  -- | Functions, which execute in the same transaction as the caller
-  DKFunc :: r (a -> b) -> DKind r (a -> b)
+  DRef  :: DBody (Ref Proxy (K3Proxied t))
+-}
 
   -- | Triggers, which execute in a different transaction than the caller
-  DKTrig :: r (t -> ()) -> DKind r (Target r t)
+  --
+  -- XXX does not support local variables
+  DTrig :: (forall r . (K3 r) => r (t -> ())) -> DBody (Target Proxy (K3Proxied t))
+
+  -- | Functions, which execute in the same transaction as the caller
+  DFunc :: (forall r . (K3 r) => r (a -> b)) -> DBody (K3Proxied (a -> b))
+
+{- XXX
+  -- | Role declaration
+  DRole :: (K3RoleDesc ro) => String -> ro Role -> DBody Role
+-}
 
 -- | A top-level declaration.
 --
--- XXX does not enumerate local variables
-data Decl tr r t = Decl VarIx (tr t) (DKind r t)
+-- Contains the name ultimately used in the K3 program and the body of the
+-- declaration.
+data Decl s t = Decl VarIx (DBody t)
 
--- | A utility for setting the type of sub-components of a declaration, by
--- constraining polymorphism.  Use the 'asCollR' and 'asRefR' combinators
--- to avail yourself of the Proxy passed in.
-mkdecl :: (Proxy r -> Decl tr r t) -> Decl tr r t
-mkdecl f = f Proxy
+-- XXX This really can't quite be right; in the end a K3 program is a set of
+-- role declarations!
+data Prog = forall s t . Prog (Decl s t)
 
--- | Define a fixed-point declaration.  Like mkdecl, it continues to assist
--- in constraining polymorphism, but also yields a representation of the
--- declaration being made.
---
--- Note that this relies on laziness in Haskell it pulls out the name and
--- type fields of the Decl being built to construct a K3 AST variable to
--- refer to the current definition.
-mkfdecl :: (K3 r, K3Ty trx)
-        => (Proxy r -> r t -> (forall tr . (K3Ty tr) => Decl tr r t))
-        -> Decl trx r t
-mkfdecl f = let self = (\(Decl n tr _) -> unsafeVar n tr) (f Proxy self)
-            in f Proxy self
+newtype DeclIx = DeclIx Int
+ deriving (Num,Show)
+
+mkCollDecl :: (Monad m)
+           => String
+           -> (forall r . Proxy r -> UnivTyRepr (CTE r c t))
+           -> MkK3T m s (Decl s (CTE Proxy c (K3Proxied t)))
+mkCollDecl n f = do
+  (DeclIx uniq) <- incState
+  let v = Var $ n ++ "_" ++ show uniq
+  return $ Decl v $ DColl (f Proxy)
+
+-- | Define a fixed-point declaration, with an assist in constraining
+-- polymorphism.
+mkTrigDecl :: (Monad m)
+           => String
+           -> (forall r . Proxy r -> UnivTyRepr t)
+           -> (forall r . (K3 r) => r t -> r (t -> ()))
+           -> MkK3T m s (Decl s (Target Proxy (K3Proxied t)))
+mkTrigDecl n ty mk     = do
+  (DeclIx uniq) <- incState
+  let v = Var $ n ++ "_" ++ show uniq
+  return $ Decl v (DTrig $ mk (unsafeVar v (ty Proxy)))
+
+newtype MkK3T m s a = MkK3T { unMkK3T :: StateT DeclIx m a }
+ deriving (Monad, MonadState DeclIx)
+
+mkK3T :: (Functor m, Monad m)
+      => (forall s . MkK3T m s (Decl s a))
+      -> m Prog
+mkK3T a = Prog `fmap` evalStateT (unMkK3T a) (DeclIx 0)
+
+mkK3 :: (forall s . MkK3T Identity s (Decl s a))
+     -> Prog
+mkK3 = runIdentity . mkK3T
+
+------------------------------------------------------------------------}}}
+-- Utilities for AST work                                               {{{
+
+asR :: r a -> Proxy r -> r a
+asR = const
 
 -- | Ensure that the representation type of a collection matches
 --
@@ -712,8 +869,11 @@ mkfdecl f = let self = (\(Decl n tr _) -> unsafeVar n tr) (f Proxy self)
 asCollR :: s (CTE r c t) -> Proxy r -> s (CTE r c t)
 asCollR = const
 
+{-
+ - XXX k3ref
 -- | Ensure that the representation type of a ref matches
-asRefR :: r' (Ref r t) -> Proxy r -> r' (Ref r t)
+asRefR :: s (Ref r t) -> Proxy r -> s (Ref r t)
 asRefR = const
+-}
 
 ------------------------------------------------------------------------}}}
