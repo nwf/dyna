@@ -27,13 +27,13 @@ module Dyna.BackendK3.Automation (
   autopv,
 
     -- * K3 macro library
-  localVar, caseMaybe, emptyPeek, deref, combMany
+  localVar, caseMaybe, emptyPeek, {- XXX k3ref deref, -} combMany, switchCase
 ) where
 
 import           Data.Word
 import           Dyna.BackendK3.AST
 import           Dyna.XXX.HList
-import           Dyna.XXX.THTuple
+-- import           Dyna.XXX.THTuple
 
 ------------------------------------------------------------------------}}}
 -- Automate collection type                                             {{{
@@ -45,9 +45,9 @@ import           Dyna.XXX.THTuple
 -- otherwise it imposes a constraint on the haskell tyvar.
 -- (This should be a total function)
 class K3AutoColl (c :: CKind) where autocoll :: CollTy c
-instance K3AutoColl CBag where autocoll = CTBag
-instance K3AutoColl CList where autocoll = CTList
-instance K3AutoColl CSet where autocoll = CTSet
+instance K3AutoColl CKBag where autocoll = CBag
+instance K3AutoColl CKList where autocoll = CList
+instance K3AutoColl CKSet where autocoll = CSet
 
 ------------------------------------------------------------------------}}}
 -- Automate type                                                        {{{
@@ -67,7 +67,8 @@ instance K3AutoTy ()     where autoty = tUnit
 instance (K3AutoColl c, K3AutoTy a, K3BaseTy a) => K3AutoTy (CTE r c a) where
   autoty = tColl autocoll autoty
 instance (K3AutoTy a) => K3AutoTy (Maybe a) where autoty = tMaybe autoty
-instance (K3AutoTy a) => K3AutoTy (Ref r a) where autoty = tRef autoty
+-- XXX k3ref
+-- instance (K3AutoTy a) => K3AutoTy (Ref r a) where autoty = tRef autoty
 instance (K3AutoTy a) => K3AutoTy (Target r a) where autoty = tTarget autoty
 instance (K3AutoTy a, K3BaseTy a, K3AutoTy b, K3BaseTy b)
       => K3AutoTy (a -> b) where
@@ -154,14 +155,14 @@ instance (K3AutoTy a, UFAP ts)
 
 -}
 
-autopv :: (K3AutoTy a) => PatDa (PKVar UnivTyRepr a)
+autopv :: (K3BaseTy a, K3AutoTy a) => PDat UnivTyRepr (PKVar UnivTyRepr a)
 autopv = PVar autoty
 
 ------------------------------------------------------------------------}}}
 -- K3 Macro Library (XXX WIP)                                           {{{
 
 -- | Let as lambda
-localVar :: (K3 r, K3AutoTy a, K3BaseTy a, K3_Pat_C r (PKVar UnivTyRepr a))
+localVar :: (K3 r, K3AutoTy a, K3BaseTy a)
          => (r a)
          -> (r a -> r b)
          -> r b
@@ -169,7 +170,7 @@ localVar a b = eApp (eLam autopv b) a
 
 {-
 -- | Let as lambda with explicit type variable
-localVar' :: (K3 r, K3BaseTy a, K3_Pat_C r (PKVar UnivTyRepr a))
+localVar' :: (K3 r, K3BaseTy a)
           => UnivTyRepr a
           -> (r a)
           -> (r a -> r b)
@@ -178,8 +179,7 @@ localVar' w a b = eApp (eLam (PVar w) b) a
 -}
 
 -- | Case analyze a Maybe
-caseMaybe :: (K3 r, K3BaseTy a,
-              K3_Pat_C r (PKJust (PKVar UnivTyRepr a)))
+caseMaybe :: (K3 r, K3BaseTy a)
           => UnivTyRepr a
           -> r (Maybe a)
           -> r b
@@ -190,23 +190,27 @@ caseMaybe w m n b = eITE (eEq m cNothing)
                                (eApp (eLam (PJust (PVar w)) b) m)
 
 -- | Case analyze a collection as either empty or a peeked element
-emptyPeek :: (K3_Coll_C r c,
-              K3_Pat_C r (PKVar UnivTyRepr a),
-              K3 r, K3BaseTy a, K3AutoTy a)
+emptyPeek :: (K3 r, K3BaseTy a, K3AutoTy a, K3AutoColl c)
           => r (CTE r c a) -> r b -> (r a -> r b) -> r b
-emptyPeek c e l = eITE (eEq c eEmpty)
+emptyPeek c e l = eITE (eEq c $ eEmpty autocoll)
                              e
                              (eApp (eLam (PVar autoty) l) $ ePeek c)
 
+{- XXX k3ref
 -- | Dereference a value by using a Ref pattern on a lambda.
-deref :: (K3_Pat_C r (PKRef (PKVar UnivTyRepr a)),
-          K3AutoTy a, K3BaseTy a, K3 r)
+deref :: (K3AutoTy a, K3BaseTy a, K3 r)
       => r (Ref r a) -> r a
 deref = eApp (eLam (PRef $ PVar autoty) id)
+-}
 
 -- | Combine many things
-combMany :: (K3_Coll_C r c, K3 r) => [r a] -> r (CTE r c a)
-combMany = foldr (\e c -> eCombine c (eSing e)) eEmpty
+combMany :: (K3AutoColl c, K3 r) => [r a] -> r (CTE r c a)
+combMany = foldr (\e c -> eCombine c (eSing autocoll e)) $ eEmpty autocoll
+
+switchCase :: (K3 r, K3AutoTy s, K3BaseTy s)
+           => [(r s, r a)] -> r a -> r (s -> a)
+switchCase arms def = eLam autopv
+  (\s -> foldl (\c (s',a) -> eITE (eEq s s') a c) def arms)
 
 ------------------------------------------------------------------------}}}
 -- Collect variables in a term (XXX TODO)                               {{{
@@ -226,8 +230,6 @@ sVIK (VIK vs) = list $ map showEVT vs
 
 instance K3 VarsInK3 where
   type K3AST_Coll_C VarsInK3 c = ()
-  type K3AST_Pat_C VarsInK3 p = ()
-  type K3AST_Slice_C VarsInK3 s = ()
 
   cComment _ v = v
   cAnn _ a = a

@@ -33,7 +33,6 @@ Library
                         Dyna.BackendK3.AST,
                         Dyna.BackendK3.Automation,
                         Dyna.BackendK3.Render,
-                        Dyna.BackendK3.Stdlib,
                         Dyna.ParserHS.Parser,
                         Dyna.XXX.HList,
                         Dyna.XXX.THTuple,
