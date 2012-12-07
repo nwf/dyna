@@ -206,11 +206,11 @@ def consistent(e, chart):
 
 def modes(f, arity):
 
-    if f.startswith('& '):
+    if f.startswith('& '):                  # Unification
         yield [True] * arity, False
         yield [False] * arity, True
 
-    elif f in ('^', '+', '-', '*', '/'):
+    elif f in ('^', '+', '-', '*', '/'):    # math (XXX should be "all backchaining")
         yield [True] * arity, False
 
         if f in ('^', '+', '-', '*', '/'):  # invertible math
@@ -219,7 +219,7 @@ def modes(f, arity):
                 z[i] = False
                 yield z, True
 
-    else:
+    else:                                   # extensional tables
         yield [False] * arity, False
 
 

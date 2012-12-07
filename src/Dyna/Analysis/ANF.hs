@@ -60,7 +60,6 @@
 --     its type were string in that case. Similarly, side conditions are always
 --     variables.
 --
---  TODO: there might too much special handling of the comma operator...
 
 
 -- Header material                                                      {{{
@@ -69,8 +68,9 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dyna.Analysis.NormalizeParse (
-    ANFState, normTerm, normRule, runNormalize, printANF
+module Dyna.Analysis.ANF (
+    ANFState(..), NT, FDT, ENT, EVF, FDR, 
+    normTerm, normRule, runNormalize, printANF
 ) where
 
 import           Control.Monad.Reader
@@ -84,6 +84,7 @@ import qualified Text.Trifecta              as T
 
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
+import           Dyna.XXX.PPrint (valign)
 -- import           Dyna.Test.Trifecta         -- XXX
 
 import qualified Data.Char as C
@@ -126,14 +127,22 @@ mergeDispositions = md
   md SDQuote   (ECExplicit,ADEval)  = ADEval
   md SDQuote   (_,_)                = ADQuote
 
+data NT = NTNumeric (Either Integer Double)
+        | NTString  B.ByteString
+        | NTVar     DVar
+ deriving (Show)
+type FDT = TermF DVar NT
+type EVF = Either DVar FDT
+type ENT = Either NT FDT
+
 {- This stage of ANF does not actually link evaluations to
  - their semantic interpretation.  That is, we have not yet
  - resolved foreign function calls.
  -}
 data ANFState = AS
               { as_next  :: !Int
-              , as_evals :: M.Map DVar DTerm
-              , as_unifs :: M.Map DVar DTerm
+              , as_evals :: M.Map DVar EVF
+              , as_unifs :: M.Map DVar ENT
               , as_annot :: M.Map DVar [T.Spanned (Annotation DTerm)]
               , as_warns :: [(B.ByteString, [T.Span])]
               }
@@ -145,30 +154,23 @@ nextVar pfx = do
     modify (\s -> s { as_next = vn + 1 })
     return $ BU.fromString $ pfx ++ show vn
 
-newEval :: (MonadState ANFState m) => String -> DTerm -> m DTerm
+newEval :: (MonadState ANFState m) => String -> EVF -> m DVar
 newEval pfx t = do
     n   <- nextVar pfx
     evs <- gets as_evals
     modify (\s -> s { as_evals = M.insert n t evs })
-    return $ UVar n
+    return n
 
-newUnif :: (MonadState ANFState m) => String -> DTerm -> m DTerm
-newUnif _   t@(UVar _)  = return t
-newUnif pfx t@(UTerm _) = do
+newUnif :: (MonadState ANFState m) => String -> ENT -> m DVar
+newUnif pfx (Left (NTVar x)) = return x
+newUnif pfx t = do
     n   <- nextVar pfx
     uns <- gets as_unifs
     modify (\s -> s { as_unifs = M.insert n t uns })
-    return $ UVar n
+    return n
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
-
-unspan :: T.Spanned P.Term -> DTerm
-unspan (P.TVar v T.:~ _)        = UVar v
-unspan (P.TNumeric v T.:~ _)    = UTerm $ TNumeric v
-unspan (P.TString v T.:~ _)     = UTerm $ TString v
-unspan (P.TFunctor a as T.:~ _) = UTerm $ TFunctor a $ map unspan as
-unspan (P.TAnnot a t T.:~ _)    = UTerm $ TAnnot (fmap unspan a) (unspan t)
 
 ------------------------------------------------------------------------}}}
 -- Disposition computations                                             {{{
@@ -220,11 +222,11 @@ dynaFunctorSelfDispositions x = case x of
 -- actually want.  Note that we're careful to keep a stack of contexts
 -- around, so we should probably do something clever like attach them to
 -- operations we extract?
-normTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
+normTerm_ :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
                => EvalCtx       -- ^ In an evaluation context?
                -> [T.Span]      -- ^ List of spans traversed
                -> P.Term        -- ^ Term being digested
-               -> m DTerm
+               -> m NT
 
 -- Variables only evaluate in explicit context
 --
@@ -233,23 +235,22 @@ normTerm_ :: (MonadState ANFState m, MonadReader ANFDict m)
 normTerm_ c _ (P.TVar v) = do
     v' <- if v == "_" then nextVar "_$w" else return v
     case c of
-       (ECExplicit,ADEval) -> newEval "_$v"
-       _                   -> return
-     $ UVar v'
+       (ECExplicit,ADEval) -> NTVar `fmap` newEval "_$v" (Left v')
+       _                   -> return $ NTVar v'
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
 normTerm_ c   ss  (P.TNumeric n)    = do
     case c of
       (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate numeric" ss
       _                   -> return ()
-    return $ UTerm $ TNumeric n
+    return $ NTNumeric n
 
 -- Strings too
 normTerm_ c   ss  (P.TString s)    = do
     case c of
       (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate string" ss
       _                   -> return ()
-    return $ UTerm $ TString s
+    return $ NTString s
 
 -- Quote makes the context explicitly a quoting one
 normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
@@ -260,16 +261,21 @@ normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
 -- evaluation!
 normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
     normTerm_ (ECExplicit,ADEval) (st:ss) t
-    >>= case c of
-          (_,ADEval) -> newEval "_$s"
-          _          -> return
+    >>= \nt -> case c of
+                (_,ADEval) -> case nt of
+                                NTVar v -> NTVar `fmap` newEval "_$s" (Left v)
+                                _       -> do
+                                            newWarn "Ignoring * of literal" ss
+                                            return nt
+                _          -> return nt
 
 -- Annotations are stripped of their span information
 --
 -- XXX this is probably the wrong thing to do
 normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
     nt <- normTerm_ c (st:ss) t
-    return $ UTerm $ TAnnot (fmap unspan a) nt
+    -- return $ UTerm $ TAnnot (fmap unspan a) nt
+    undefined -- XXX!!!
 
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
@@ -282,32 +288,34 @@ normTerm_ c   ss (P.TFunctor f as) = do
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
     let dispos = mergeDispositions selfdispos c
+    
+    fmap NTVar $
+     case dispos of
+       ADEval  -> newEval "_$f" . Right
+       ADQuote -> newUnif "_$u" . Right
+      $ TFunctor f normas
 
-    (case dispos of
-        ADEval  -> newEval "_$f"
-        ADQuote -> newUnif "_$u")
-     $ UTerm $ TFunctor f normas
-
-normTerm :: (MonadState ANFState m, MonadReader ANFDict m)
+normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => Bool               -- ^ In an evaluation context?
          -> T.Spanned P.Term   -- ^ Term to digest
-         -> m DTerm
+         -> m NT
 normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
                                   [s] t
 
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
--- XXX
-normRule :: (MonadState ANFState m, MonadReader ANFDict m)
-         => T.Spanned P.Rule   -- ^ Term to digest
-         -> m DRule
-normRule (P.Rule h a es r T.:~ _) = do
-    nh  <- normTerm False h
-    nr  <- normTerm True  r >>= newUnif "_$r"
-    nes <- mapM (normTerm True) es
-    return $ Rule nh a nes nr
+data FDR = FRule DVar B.ByteString [DVar] DVar
 
+-- XXX
+normRule :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
+         => T.Spanned P.Rule   -- ^ Term to digest
+         -> m FDR
+normRule (P.Rule h a es r T.:~ _) = do
+    nh  <- normTerm False h >>= newUnif "_$h" . Left
+    nr  <- normTerm True  r >>= newUnif "_$r" . Left
+    nes <- mapM (\e -> normTerm True e >>= newUnif "_$c" . Left) es
+    return $ FRule nh a nes nr
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -323,24 +331,34 @@ runNormalize =
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
-printANF :: (DRule, ANFState) -> Doc e
-printANF ((Rule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
+printANF :: (FDR, ANFState) -> Doc e
+printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
   parens $ (pretty a)
-           <+> valign [ (p h)
-                      , parens $ text "side"   <+> (valign $ map (text.show) e)
-                      , parens $ text "evals"  <+> (q evals)
-                      , parens $ text "unifs"  <+> (q unifs)
-                      , parens $ text "result" <+> (p result)
+           <+> valign [ (pretty h)
+                      , parens $ text "side"   <+> (valign $ map pretty e)
+                      , parens $ text "evals"  <+> (pev evals)
+                      , parens $ text "unifs"  <+> (pun unifs)
+                      , parens $ text "result" <+> (pretty result)
                       ]
   where
-    valign = align.vcat
+    pnt (NTNumeric (Left x))        = pretty x
+    pnt (NTNumeric (Right x))       = pretty x
+    pnt (NTString s)                = pretty s
+    pnt (NTVar v)                   = pretty v
 
-    p (UTerm (TFunctor fn args))   = parens $ hcat $ punctuate (text " ")
-                                     $ (pretty fn : (map p args))
-    p (UTerm (TNumeric (Left x)))  = text $ show x
-    p (UTerm (TNumeric (Right x))) = text $ show x
-    p (UTerm (TString s))          = text $ show s
-    p (UTerm (TAnnot _ t))         = p t -- XXX
-    p (UVar x) = pretty x
+    pft (TFunctor fn args)   = parens $ hcat $ punctuate (text " ")
+                                             $ (pretty fn : (map pnt args))
+    pft (TNumeric (Left x))  = pretty x
+    pft (TNumeric (Right x)) = pretty x
+    pft (TString s)          = pretty s
 
-    q x = valign $ map (\(y,z)-> parens $ pretty y <+> p z) $ M.toList x
+    pef (Left v)   = pretty v
+    pef (Right t)  = pft t
+
+    pet (Left n)   = pnt n
+    pet (Right t)  = pft t
+
+    pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pef z) $ M.toList x
+    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> pet z) $ M.toList x
+
+------------------------------------------------------------------------}}}

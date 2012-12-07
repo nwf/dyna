@@ -39,7 +39,6 @@ data Annotation t = AnnType t
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 data TermF a t = TFunctor !a ![t]
-               | TAnnot   !(Annotation t) !t
                | TNumeric !(Either Integer Double)
                | TString  !B.ByteString
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)

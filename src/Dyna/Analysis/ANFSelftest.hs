@@ -10,7 +10,7 @@
 --    ghci> :set -XOverloadedStrings
 --
 
-module Dyna.Analysis.NormalizeParseSelftest where
+module Dyna.Analysis.ANFSelftest where
 
 
 import qualified Data.ByteString              as B
@@ -19,17 +19,17 @@ import qualified Data.Map                     as M
 import qualified Text.Trifecta                as T
 import           Text.PrettyPrint.Free
 
-import           Dyna.Analysis.NormalizeParse
+import           Dyna.Analysis.ANF
 import qualified Dyna.ParserHS.Parser         as P
 import           Dyna.ParserHS.Selftest
 import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
 
-testNormTerm :: Bool -> B.ByteString -> (DTerm, ANFState)
+testNormTerm :: Bool -> B.ByteString -> (NT, ANFState)
 testNormTerm c = runNormalize . normTerm c . unsafeParse P.dterm
 
-testNormRule :: B.ByteString -> (DRule, ANFState)
+testNormRule :: B.ByteString -> (FDR, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
 
 

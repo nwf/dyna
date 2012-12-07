@@ -28,7 +28,7 @@ Library
     ghc-options:        -Wall
 
 
-    Exposed-Modules:    Dyna.Analysis.NormalizeParse,
+    Exposed-Modules:    Dyna.Analysis.ANF,
                         Dyna.Analysis.Mode,
                         Dyna.BackendK3.AST,
                         Dyna.BackendK3.Automation,
