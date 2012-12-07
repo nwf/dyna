@@ -343,14 +343,14 @@ def main(dynafile):
 
                 plan = r.find_update_plans(e)
 
-                print
-                print yellow % 'Update %s' % (e,)
-                for e, mode in reversed(plan):
-                    if mode is None:
-                        continue
-                    (M, o) = mode
-                    d = display_mode(M, o)
-                    print '%-40s  %s' % (e, d)
+                #print
+                #print yellow % 'Update %s' % (e,)
+                #for e, mode in reversed(plan):
+                #    if mode is None:
+                #        continue
+                #    (M, o) = mode
+                #    d = display_mode(M, o)
+                #    print '%-40s  %s' % (e, d)
 
                 print >> html, '<h3>Update %s</h3>' % (e,)
 
