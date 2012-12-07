@@ -47,11 +47,24 @@ type family Map (f :: k -> k') (x :: [k]) :: [k']
 type instance Map f '[] = '[]
 type instance Map f (a ': as) = (f a) ': Map f as
 
+-- | Inverse of 'Map'
+type family UnMap (f :: k -> k') (x :: [k']) :: [k]
+type instance UnMap f '[] = '[]
+type instance UnMap f (f a ': fas) = a ': UnMap f fas
+
 -- | Apply a type function yielding a constraint to each element of a
 -- lifted list.
 type family MapConstraint (f :: k -> Constraint) (x :: [k]) :: Constraint
 type instance MapConstraint f '[] = ()
 type instance MapConstraint f (x ': xs) = (f x, MapConstraint f xs)
+
+------------------------------------------------------------------------}}}
+-- Classes                                                              {{{
+
+-- | Assert that two lifted-lists are of the same length
+class EqLen (x :: [k]) (y :: [k']) | x -> y, y -> x
+instance EqLen '[] '[]
+instance (EqLen xs ys) => EqLen (x ': xs) (y ': ys)
 
 ------------------------------------------------------------------------}}}
 -- Data-level HLists                                                    {{{
@@ -71,6 +84,15 @@ hlmapa :: (Applicative m, Map c t ~ t')
        => (forall a . a -> m (c a)) -> HList t -> m (HList t')
 hlmapa _ HN = pure HN
 hlmapa f (a :+ as) = liftA2 (:+) (f a) (hlmapa f as)
+
+{-
+ - XXX Why can't I make this work?
+hrlmap' :: (EqLen ras sas, HLR r as ras, HLR s as sas)
+        => (forall a . r a -> s a) -> HList ras -> HList sas
+hrlmap' _  HN       = HN
+hrlmap' f (a :+ as) = f a :+ (hrlmap' f as)
+-}
+
 
 ------------------------------------------------------------------------}}}
 -- HRLists - HLists of a type constructor's images                      {{{
@@ -121,8 +143,8 @@ hlToHrl :: (forall b . b -> r b) -> HList a -> HRList r a
 hlToHrl _ HN = HRN
 hlToHrl f (a:+as) = f a :++ (hlToHrl f as)
 
-class (Map r a ~ ra)
-   => HLR (r :: k -> k') (a :: [k]) (ra :: [k']) | ra -> r a
+class (Map r a ~ ra, UnMap r ra ~ a)
+   => HLR (r :: * -> *) (a :: [*]) (ra :: [*])
  where
   -- | Reinterpret an HList as an HRList
   hlAsHrl :: HList ra -> HRList r a
