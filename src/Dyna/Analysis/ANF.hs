@@ -69,7 +69,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT(..), FDT, EVF, FDR(..),
+    ANFState(..), NT(..), FDT, NTV, EVF, FDR(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -127,18 +127,24 @@ mergeDispositions = md
   md SDQuote   (ECExplicit,ADEval)  = ADEval
   md SDQuote   (_,_)                = ADQuote
 
+-- | A Normalized Term, parametric in the variable case
+--
 -- The Ord instance is solely for Data.Set's use
-data NT = NTNumeric (Either Integer Double)
-        | NTString  B.ByteString
-        | NTVar     DVar
+data NT v = NTNumeric (Either Integer Double)
+          | NTString  B.ByteString
+          | NTVar     v
  deriving (Eq,Ord,Show)
-type FDT = TermF DVar NT
+
+-- | Normalized Term over 'DVar' (that is, either a primitive or a variable)
+type NTV = NT DVar
+
+-- | Flat Dyna Term (that is, either a primitive or a term built up from a
+-- functor over primitives and variables)
+type FDT = TermF DVar NTV
+
+-- | Either a 'DVar' or a flat Dyna term
 type EVF = Either DVar FDT
 
-{- This stage of ANF does not actually link evaluations to
- - their semantic interpretation.  That is, we have not yet
- - resolved foreign function calls.
- -}
 data ANFState = AS
               { as_next  :: !Int
               , as_evals :: M.Map DVar EVF
@@ -213,13 +219,10 @@ dynaFunctorSelfDispositions x = case x of
 -- Normalize a Term                                                     {{{
 
 -- | Convert a syntactic term into ANF; while here, move to a
--- Control.Unification term representation.
+-- flattened representation.
 --
 -- The ANFState ensures that variables are unique; we additionally give them
 -- \"semi-meaningful\" prefixes, but these should not be relied upon.
---
--- XXX On second thought, we should just move to a @TermF B.ByteString
--- Var@ representation, since we want everything flattened.
 --
 -- XXX This sheds span information entirely, which is probably not what we
 -- actually want.  Note that we're careful to keep a stack of contexts
@@ -229,7 +232,7 @@ normTerm_ :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
                => EvalCtx       -- ^ In an evaluation context?
                -> [T.Span]      -- ^ List of spans traversed
                -> P.Term        -- ^ Term being digested
-               -> m NT
+               -> m NTV
 
 -- Variables only evaluate in explicit context
 --
@@ -301,7 +304,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => Bool               -- ^ In an evaluation context?
          -> T.Spanned P.Term   -- ^ Term to digest
-         -> m NT
+         -> m NTV
 normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
                                   [s] t
 
