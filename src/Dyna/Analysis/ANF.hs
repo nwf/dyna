@@ -69,7 +69,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT(..), FDT, EVF, FDR, 
+    ANFState(..), NT(..), FDT, EVF, FDR(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -291,7 +291,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
     let dispos = mergeDispositions selfdispos c
-    
+
     fmap NTVar $
      case dispos of
        ADEval  -> newEval "_$f" . Right
