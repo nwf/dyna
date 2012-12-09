@@ -69,7 +69,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT, FDT, ENT, EVF, FDR, 
+    ANFState(..), NT(..), FDT, EVF, FDR, 
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -127,13 +127,13 @@ mergeDispositions = md
   md SDQuote   (ECExplicit,ADEval)  = ADEval
   md SDQuote   (_,_)                = ADQuote
 
+-- The Ord instance is solely for Data.Set's use
 data NT = NTNumeric (Either Integer Double)
         | NTString  B.ByteString
         | NTVar     DVar
- deriving (Show)
+ deriving (Eq,Ord,Show)
 type FDT = TermF DVar NT
 type EVF = Either DVar FDT
-type ENT = Either NT FDT
 
 {- This stage of ANF does not actually link evaluations to
  - their semantic interpretation.  That is, we have not yet
@@ -142,7 +142,7 @@ type ENT = Either NT FDT
 data ANFState = AS
               { as_next  :: !Int
               , as_evals :: M.Map DVar EVF
-              , as_unifs :: M.Map DVar ENT
+              , as_unifs :: M.Map DVar FDT
               , as_annot :: M.Map DVar [T.Spanned (Annotation DTerm)]
               , as_warns :: [(B.ByteString, [T.Span])]
               }
@@ -161,13 +161,16 @@ newEval pfx t = do
     modify (\s -> s { as_evals = M.insert n t evs })
     return n
 
-newUnif :: (MonadState ANFState m) => String -> ENT -> m DVar
-newUnif pfx (Left (NTVar x)) = return x
+newUnif :: (MonadState ANFState m) => String -> FDT -> m DVar
 newUnif pfx t = do
     n   <- nextVar pfx
     uns <- gets as_unifs
     modify (\s -> s { as_unifs = M.insert n t uns })
     return n
+
+newUnifNT _   (NTVar x)     = return x
+newUnifNT pfx (NTString x)  = newUnif pfx (TString x)
+newUnifNT pfx (NTNumeric x) = newUnif pfx (TNumeric x)
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
@@ -292,7 +295,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
     fmap NTVar $
      case dispos of
        ADEval  -> newEval "_$f" . Right
-       ADQuote -> newUnif "_$u" . Right
+       ADQuote -> newUnif "_$u"
       $ TFunctor f normas
 
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
@@ -306,15 +309,16 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 -- Normalize a Rule                                                     {{{
 
 data FDR = FRule DVar B.ByteString [DVar] DVar
+ deriving (Show)
 
 -- XXX
 normRule :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => T.Spanned P.Rule   -- ^ Term to digest
          -> m FDR
 normRule (P.Rule h a es r T.:~ _) = do
-    nh  <- normTerm False h >>= newUnif "_$h" . Left
-    nr  <- normTerm True  r >>= newUnif "_$r" . Left
-    nes <- mapM (\e -> normTerm True e >>= newUnif "_$c" . Left) es
+    nh  <- normTerm False h >>= newUnifNT "_$h"
+    nr  <- normTerm True  r >>= newUnifNT "_$r"
+    nes <- mapM (\e -> normTerm True e >>= newUnifNT "_$c") es
     return $ FRule nh a nes nr
 
 ------------------------------------------------------------------------}}}
@@ -343,7 +347,7 @@ printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
   where
     pnt (NTNumeric (Left x))        = pretty x
     pnt (NTNumeric (Right x))       = pretty x
-    pnt (NTString s)                = pretty s
+    pnt (NTString s)                = dquotes (pretty s)
     pnt (NTVar v)                   = pretty v
 
     pft (TFunctor fn args)   = parens $ hcat $ punctuate (text " ")
@@ -359,6 +363,6 @@ printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
     pet (Right t)  = pft t
 
     pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pef z) $ M.toList x
-    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> pet z) $ M.toList x
+    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> pft z) $ M.toList x
 
 ------------------------------------------------------------------------}}}
