@@ -7,6 +7,9 @@
 --
 -- TODO (XXX):
 --
+--   * There is certainly too much special handling of the comma operator,
+--     but see COMMAOP below for why it's not so easy to fix.
+--
 --   * We might want to use T.T.Literate, too, in the end.
 --
 --   * Doesn't understand dynabase literals ("{ ... }")
@@ -262,10 +265,14 @@ bf f = do
 --
 --   > TFunctor "f" [TFunctor "," [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _] :~ _]
 --
+-- COMMAOP
 -- We can fix this, but it means that we should have a separate expression
 -- parser for contexts where "comma means argument separation" and "comma
 -- means evaluation separator".  I don't yet know how I feel about
 -- the "whenever" (and "is"?) operator(s) being available in the former table.
+--
+-- XXX timv suggests that this should be assocnone for binops as a quick
+-- fix.  Eventually we should still do this properly.
 termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
              , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
              , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
