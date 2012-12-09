@@ -304,7 +304,7 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data FDR = FRule DVar B.ByteString [DVar] DVar
+data FDR = FRule DVar DAgg [DVar] DVar
  deriving (Show)
 
 -- XXX

@@ -18,10 +18,10 @@ module Dyna.Term.TTerm (
     Annotation(..),
 
         -- * Terms
-    TermF(..), DTermV, DVar, DFunct, DTerm,
+    TermF(..), DTermV, DVar, DFunct, DFunctAr, DTerm,
 
         -- * Rules
-    DRule(..),
+    DAgg, DRule(..),
 
         -- * Convenience re-export
     UTerm(..)
@@ -44,6 +44,7 @@ data TermF a t = TFunctor !a ![t]
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 type DFunct = B.ByteString
+type DFunctAr = (DFunct,Int)
 type DTermV v = UTerm (TermF DFunct) v
 
 type DVar  = B.ByteString
@@ -61,7 +62,9 @@ instance (Eq a) => Unifiable (TermF a) where
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
-data DRule = Rule !DTerm !B.ByteString ![DTerm] !DTerm
+type DAgg = B.ByteString
+
+data DRule = Rule !DTerm !DAgg ![DTerm] !DTerm
  deriving (Show)
 
 ------------------------------------------------------------------------}}}

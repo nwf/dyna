@@ -33,6 +33,7 @@ testNormRule :: B.ByteString -> (FDR, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
 
 
+{-
 e1 = testNormRule "f(X)."
 e2 = testNormRule "f(X) := 1."
 
@@ -46,7 +47,7 @@ t4 = unsafeParse P.dlines e4
 e3 = "f(X,Y) += (g(X,\"str\",d) - h(X,X,Y) - c)^2 + f(Y,Z)/exp(3.0) whenever ?c, (d < 10), e(f(h(X)), g(X))"
 t3 = testNormRule e3
 p3 = printANF $ t3
-
+-}
 
 normalizeFile file = do
     contents <- B.readFile file

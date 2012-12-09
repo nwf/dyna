@@ -13,26 +13,21 @@
 module Dyna.Analysis.RuleMode where
 
 import           Control.Monad
-import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as BC
-import           Data.Char
--- import           Data.Either
 import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 import qualified Data.Ord                   as O
 import qualified Data.Set                   as S
-import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as DP
-import           Dyna.XXX.PPrint
 import           Dyna.XXX.TrifectaTest
-import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
+filterNTs :: [NT v] -> [v]
 filterNTs = MA.mapMaybe isNTVar
  where
   isNTVar (NTVar x) = Just x
@@ -48,8 +43,8 @@ type BindChart = S.Set DVar
 
 varMode :: BindChart -> NTV -> Mode
 varMode c (NTVar v) = if v `S.member` c then MBound else MFree
-varMode c (NTString _) = MBound
-varMode c (NTNumeric _) = MBound
+varMode _ (NTString _) = MBound
+varMode _ (NTNumeric _) = MBound
 
 type ModedVar = (Mode,DVar)
 
@@ -88,7 +83,7 @@ type Crux n = (CFunct,[n],n)
 cruxMode :: Crux NTV -> BindChart -> Crux ModedNT
 cruxMode (f,is,o) c = (f, map (mode c) is, mode c o)
  where
-  mode c x@(NTVar v)   = case varMode c x of
+  mode b x@(NTVar v)   = case varMode b x of
                            MBound -> MB x
                            MFree  -> MF v
   mode _ (NTString s)  = MB (NTString s)
@@ -172,40 +167,44 @@ possible (f,is,o) = case f of
                            : map (\(c,x) -> (OPCheck c x)) cis
                          ]
          where
-          mkChks n (MF i) = (i, Nothing)
+          mkChks _ (MF i) = (i, Nothing)
           mkChks n (MB v) = let chk = BC.pack $ "_chk_" ++ (show n)
                             in (chk, Just (chk, v))
 
-          (is',mcis) = unzip $ zipWith mkChks [0..] is
+          (is',mcis) = unzip $ zipWith mkChks [0::Int ..] is
           cis        = MA.catMaybes mcis
+
+        MB _ -> []   -- XXX shouldn't happen
           
     -- Backward-chainable mathematics (this is such a hack XXX)
-  CFCall f | isMath f ->
+  CFCall funct | isMath funct ->
       if not $ all isBound is
-       then case inv f is o of
+       then case inv funct is o of
               Nothing -> []
               Just (f',is',o') -> [[OPCall o' is' f']]
        else let is' = map ntvOfMNT is in
             case o of
-              MF o' ->  [[OPCall o' is' f]]
+              MF o' ->  [[OPCall o' is' funct]]
               MB o' -> let cv = "_chk"
-                       in [[OPCall  cv is' f
+                       in [[OPCall  cv is' funct
                            ,OPCheck cv o'
                            ]]
 
-  CFCall f | otherwise -> [[OPIter o is f ]]
+    -- Otherwise, we assume it's an extensional table and ask to iterate
+    -- over it.
+  CFCall funct | otherwise -> [[OPIter o is funct]]
 
  where
-  inv "+" is o | length is == 2 && isBound o
-               = case L.partition isFree is of
-                   ([MF fi],bis) -> Just ("-",map ntvOfMNT $ o:bis,fi)
+  inv "+" is' (MB o') | length is' == 2
+               = case L.partition isFree is' of
+                   ([MF fi],bis) -> Just ("-",o':map ntvOfMNT bis,fi)
                    _ -> Nothing
 
-  inv "-" [(MB x),(MF y)] (MB o)
-                  = Just ("-",[x,o],y)
+  inv "-" [(MB x),(MF y)] (MB o')
+                  = Just ("-",[x,o'],y)
 
-  inv "-" [(MF x),(MB y)] (MB o)
-                  = Just ("+",[o,y],x)
+  inv "-" [(MF x),(MB y)] (MB o')
+                  = Just ("+",[o',y],x)
   inv _   _  _  = Nothing
 
 
@@ -268,17 +267,20 @@ simpleCost (PP { pp_score = osc }) act =
 ------------------------------------------------------------------------}}}
 -- ANF to Cruxes                                                        {{{
 
+eval_cruxes :: ANFState -> [Crux NTV]
 eval_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_evals
  where
   crux :: DVar -> EVF -> Crux NTV
   crux o (Left v) = (CFEval,[NTVar v],NTVar o)
   crux o (Right (TFunctor n as)) = (CFCall n,as,NTVar o)
+  -- XXX Missing cases
 
+unif_cruxes :: ANFState -> [Crux NTV]
 unif_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_unifs
  where
   crux :: DVar -> FDT -> Crux NTV
-  crux o t@(TString s) = (CFAssign,[NTString s], NTVar o)
-  crux o t@(TNumeric n) = (CFAssign,[NTNumeric n], NTVar o)
+  crux o (TString s) = (CFAssign,[NTString s], NTVar o)
+  crux o (TNumeric n) = (CFAssign,[NTNumeric n], NTVar o)
   crux o (TFunctor x as) = (CFUnif x, as, NTVar o)
 
 -- | Given a normalized form and an initial crux, saturate the graph and
@@ -288,7 +290,7 @@ plan :: (Crux ModedNT -> [Action])
      -> (FDR, ANFState)
      -> Crux NTV
      -> (Cost, Action)
-plan st sc (fr, anfs) cr@(c,ci,co) = 
+plan st sc (_, anfs) cr@(_,ci,co) = 
   let cruxes =    eval_cruxes anfs
                ++ unif_cruxes anfs
       initPlan = PP { pp_cruxes = S.delete cr (S.fromList cruxes)
