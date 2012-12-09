@@ -50,15 +50,8 @@
 --     always want strong Boolean values (i.e. none of that three-values null
 --     stuff).
 --
---     it might be nice if terms came in with a type that verified that they are
---     "flat term" -- they've been normalized.
---
 --     It would also be nice if spans were killed... maybe there is an argument
 --     against this.
---
---     ANF Rule, `result` always the name of a variable -- it would be nice for
---     its type were string in that case. Similarly, side conditions are always
---     variables.
 --
 
 
