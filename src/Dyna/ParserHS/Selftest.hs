@@ -181,19 +181,32 @@ case_ruleSimple :: Assertion
 case_ruleSimple = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
-                   "+=" 
+                   "+="
                    []
                    (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
             :~ ts)
            :~ ts
   ts = Span (Columns 0 0) (Columns 10 10) sr
   sr = "goal += 1."
-  
+
+-- XXX for some reason parser is fine with "1." but not "0."
+case_ruleSimple0 :: Assertion
+case_ruleSimple0 = e @=? (progline sr)
+ where
+  e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
+                   "+="
+                   []
+                   (TNumeric (Left 0) :~ Span (Columns 8 8) (Columns 9 9) sr)
+            :~ ts)
+           :~ ts
+  ts = Span (Columns 0 0) (Columns 10 10) sr
+  sr = "goal += 0."
+
 case_ruleExpr :: Assertion
 case_ruleExpr = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
-                   "+=" 
+                   "+="
                    []
                    (TFunctor "+"
                       [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 12 12) sr
@@ -210,7 +223,7 @@ case_ruleDotExpr :: Assertion
 case_ruleDotExpr = e @=? (progline sr)
  where
   e  = LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
-                   "+=" 
+                   "+="
                    []
                    (TFunctor "."
                       [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 11 11) sr
@@ -316,7 +329,7 @@ case_rulesDotExpr :: Assertion
 case_rulesDotExpr = e @=? (proglines sr)
  where
   e  = [ LRule (Rule (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
-                      "+=" 
+                      "+="
                       []
                       (TFunctor "."
                          [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 11 11) sr
@@ -327,10 +340,10 @@ case_rulesDotExpr = e @=? (proglines sr)
                      :~ s1)
                     :~ s1
        , LRule (Rule (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
-                      "+=" 
+                      "+="
                       []
                       (TNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
-                     :~ s2) 
+                     :~ s2)
                     :~ s2
        ]
   s1 = Span (Columns 0 0) (Columns 16 16) sr
@@ -351,13 +364,13 @@ main = $(defaultMainGenerator)
 
 {-
 runParser :: (Show a) => (forall r . Language (Parser r String) a) -> B.ByteString -> Result TermDoc a
-runParser p = parseByteString (dynafy p <* eof) M.mempty 
+runParser p = parseByteString (dynafy p <* eof) M.mempty
 
 testParser :: (Show a) => (forall r . Language (Parser r String) a) -> String -> IO ()
 testParser p = parseTest (dynafy p <* eof)
 
 testDyna :: (Show a) => (forall r . Language (Parser r String) a) -> String -> Result TermDoc a
-testDyna p i = runParser p (BU.fromString i) 
+testDyna p i = runParser p (BU.fromString i)
 
 cs r e = case r of
            Success w s | S.null w -> assertEqual "XXX" e s
