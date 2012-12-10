@@ -22,6 +22,8 @@ def parse_sexpr(e):
     based on implementation by George Sakkis
     http://mail.python.org/pipermail/python-list/2005-March/312004.html
     """
+    e = re.compile('^\s*;.*?\n', re.M).sub('', e)  # remove comments
+
     es, stack = [], []
     for token in re.split(r'([()])|\s+', e):
         if token == '(':
