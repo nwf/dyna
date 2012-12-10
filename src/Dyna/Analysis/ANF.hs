@@ -245,9 +245,9 @@ normTerm_ :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
 -- While here, replace bare underscores with unique names.
 -- XXX is this the right place for that?
 normTerm_ c _ (P.TVar v) = do
-    v' <- if v == "_" then nextVar "_$w" else return v
+    v' <- if v == "_" then nextVar "_w" else return v
     case c of
-       (ECExplicit,ADEval) -> NTVar `fmap` newEval "_$v" (Left v')
+       (ECExplicit,ADEval) -> NTVar `fmap` newEval "_v" (Left v')
        _                   -> return $ NTVar v'
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
@@ -275,7 +275,7 @@ normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
     normTerm_ (ECExplicit,ADEval) (st:ss) t
     >>= \nt -> case c of
                 (_,ADEval) -> case nt of
-                                NTVar v -> NTVar `fmap` newEval "_$s" (Left v)
+                                NTVar v -> NTVar `fmap` newEval "_s" (Left v)
                                 _       -> do
                                             newWarn "Ignoring * of literal" ss
                                             return nt
@@ -297,7 +297,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
-    normas' <- mapM (newUnifNT "_$x") normas
+    normas' <- mapM (newUnifNT "_x") normas
 
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
@@ -305,8 +305,8 @@ normTerm_ c   ss (P.TFunctor f as) = do
 
     fmap NTVar $
      case dispos of
-       ADEval  -> newEval "_$f" . Right
-       ADQuote -> newUnif "_$u" . Right
+       ADEval  -> newEval "_f" . Right
+       ADQuote -> newUnif "_u" . Right
       $ (f,normas')
 
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
@@ -319,7 +319,7 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data FDR = FRule DVar DAgg [DVar] DVar
+data FDR = FRule DVar DAgg [DVar] DVar   -- timv: rename type to FRule?
  deriving (Show)
 
 -- XXX
@@ -327,9 +327,9 @@ normRule :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => T.Spanned P.Rule   -- ^ Term to digest
          -> m FDR
 normRule (P.Rule h a es r T.:~ _) = do
-    nh  <- normTerm False h >>= newUnifNT "_$h"
-    nr  <- normTerm True  r >>= newUnifNT "_$r"
-    nes <- mapM (\e -> normTerm True e >>= newUnifNT "_$c") es
+    nh  <- normTerm False h >>= newUnifNT "_h"
+    nr  <- normTerm True  r >>= newUnifNT "_r"
+    nes <- mapM (\e -> normTerm True e >>= newUnifNT "_c") es
     return $ FRule nh a nes nr
 
 ------------------------------------------------------------------------}}}
