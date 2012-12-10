@@ -21,7 +21,7 @@ import           Dyna.XXX.DataUtils
 type AggMap = M.Map DFunctAr DAgg
 
 ------------------------------------------------------------------------}}}
--- Processing                                                           {{{
+-- Associate each item with an aggregator                               {{{
 
 -- XXX These functions really would like to have span information, so they
 -- could report which line of the source caused an error.
@@ -31,9 +31,8 @@ procANF (FRule h a _ _, AS { as_unifs = us }) =
   case M.lookup h us of
     Nothing       -> Left $ "I can't process head-variables"
     Just t -> case t of
-                TString _     -> Left $ "Malformed rule with string head"
-                TNumeric _    -> Left $ "Malformed rule with numeric head"
-                TFunctor f as -> Right ((f,length as),a)
+                Left _       -> Left "Malformed head"
+                Right (f,as) -> Right ((f,length as),a)
 
 buildAggMap :: [(FDR, ANFState)] -> Either String AggMap
 buildAggMap = go (M.empty)

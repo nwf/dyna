@@ -37,6 +37,9 @@
 -- special at all, but every Dyna program is defined to include
 -- @is(X,Y) :- X = *Y.@.  Is that something we should be normalizing out
 -- here or should be waiting for some further unfolding optimization phase?
+--
+-- XXX We really should do some CSE/GVN somewhere right after this pass, but
+-- be careful about linearity!
 
 -- FIXME: "str" is the same a constant str.
 
@@ -62,7 +65,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT(..), FDT, NTV, EVF, FDR(..),
+    ANFState(..), NT(..), FDT, NTV, ENF, EVF, FDR(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -131,17 +134,19 @@ data NT v = NTNumeric (Either Integer Double)
 -- | Normalized Term over 'DVar' (that is, either a primitive or a variable)
 type NTV = NT DVar
 
--- | Flat Dyna Term (that is, either a primitive or a term built up from a
--- functor over primitives and variables)
-type FDT = TermF DVar NTV
+-- | Flat Dyna Term (that is, a functor over variables)
+type FDT = (DFunct,[DVar])
 
--- | Either a 'DVar' or a flat Dyna term
+-- | Either a variable or a functor of variables)
 type EVF = Either DVar FDT
+
+-- | Either a constant, another variable, or a flat Dyna term
+type ENF = Either NTV FDT
 
 data ANFState = AS
               { as_next  :: !Int
               , as_evals :: M.Map DVar EVF
-              , as_unifs :: M.Map DVar FDT
+              , as_unifs :: M.Map DVar ENF
               , as_annot :: M.Map DVar [T.Spanned (Annotation DTerm)]
               , as_warns :: [(B.ByteString, [T.Span])]
               }
@@ -160,16 +165,17 @@ newEval pfx t = do
     modify (\s -> s { as_evals = M.insert n t evs })
     return n
 
-newUnif :: (MonadState ANFState m) => String -> FDT -> m DVar
+newUnif :: (MonadState ANFState m) => String -> ENF -> m DVar
 newUnif pfx t = do
     n   <- nextVar pfx
     uns <- gets as_unifs
     modify (\s -> s { as_unifs = M.insert n t uns })
     return n
 
+newUnifNT :: (MonadState ANFState m) => String -> NTV -> m DVar
 newUnifNT _   (NTVar x)     = return x
-newUnifNT pfx (NTString x)  = newUnif pfx (TString x)
-newUnifNT pfx (NTNumeric x) = newUnif pfx (TNumeric x)
+newUnifNT pfx (NTString x)  = newUnif pfx (Left $ NTString x)
+newUnifNT pfx (NTNumeric x) = newUnif pfx (Left $ NTNumeric x)
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
@@ -284,6 +290,8 @@ normTerm_ c   ss (P.TFunctor f as) = do
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
+    normas' <- mapM (newUnifNT "_$x") normas
+
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
     let dispos = mergeDispositions selfdispos c
@@ -291,8 +299,8 @@ normTerm_ c   ss (P.TFunctor f as) = do
     fmap NTVar $
      case dispos of
        ADEval  -> newEval "_$f" . Right
-       ADQuote -> newUnif "_$u"
-      $ TFunctor f normas
+       ADQuote -> newUnif "_$u" . Right
+      $ (f,normas')
 
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => Bool               -- ^ In an evaluation context?
@@ -341,24 +349,24 @@ printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
                       , parens $ text "result" <+> (pretty result)
                       ]
   where
+    pnt :: (Pretty v) => NT v -> Doc e
     pnt (NTNumeric (Left x))        = pretty x
     pnt (NTNumeric (Right x))       = pretty x
     pnt (NTString s)                = dquotes (pretty s)
     pnt (NTVar v)                   = pretty v
 
-    pft (TFunctor fn args)   = parens $ hcat $ punctuate (text " ")
-                                             $ (pretty fn : (map pnt args))
-    pft (TNumeric (Left x))  = pretty x
-    pft (TNumeric (Right x)) = pretty x
-    pft (TString s)          = pretty s
+    pft :: FDT -> Doc e
+    pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
 
-    pef (Left v)   = pretty v
-    pef (Right t)  = pft t
+    pevf :: EVF -> Doc e
+    pevf (Left v)   = pretty v
+    pevf (Right t)  = pft t
 
-    pet (Left n)   = pnt n
-    pet (Right t)  = pft t
+    penf :: ENF -> Doc e
+    penf (Left n)   = pnt n
+    penf (Right t)  = pft t
 
-    pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pef z) $ M.toList x
-    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> pft z) $ M.toList x
+    pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pevf z) $ M.toList x
+    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> penf z) $ M.toList x
 
 ------------------------------------------------------------------------}}}
