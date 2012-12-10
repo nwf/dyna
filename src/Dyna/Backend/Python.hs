@@ -12,6 +12,8 @@
 
 module Dyna.Backend.Python where
 
+import Control.Applicative ((<*))
+
 import qualified Control.Arrow              as A
 import           Control.Exception
 import           Control.Monad
@@ -52,29 +54,34 @@ instance Exception TopLevelException
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
 
--- XXX This is ripped out of Dyna.Analysis.RuleModeTest and ported over.
--- Sorry, Tim.
-
 pdope :: DOpAMine -> Doc e
 pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
 pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
 pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
-pdope (OPGetArgsIf vs id f a) =
+pdope (OPGetArgsIf vs id f a) =                                         -- XXX: arity is implied; drop extra variable to avoid possible inconsistencies?
        tupled (map pretty vs)
    <+> equals
-   <+> "peel" <> parens (pretty f <> "/" <> pretty a)
-              <> (parens $ pretty id)
-pdope (OPBuild v vs f) = pretty v <+> equals <+> "build" <+> pf f vs
-pdope (OPCall v vs f) = pretty v <+> equals <+> "call" <+> pf f vs
+   <+> functorIndirect "peel" f vs <> (parens $ pretty id)
+
+pdope (OPBuild v vs f) = pretty v <+> equals
+      <+> functorIndirect "build" f vs
+      <> (tupled $ map pretty vs)
+
+pdope (OPCall v vs f) = pretty v <+> equals
+      <+> functorIndirect "call" f vs
+      <> (tupled $ map pretty vs)
+
 pdope (OPIter o m f) =
       let mo = m ++ [o] in
           "for" <+> (tupled $ filterBound mo)
-                <+> "in" <+> pretty f <> pslice mo
+                <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
 pslice = brackets . sepBy ","
          . map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v)
 
 filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
+
+functorIndirect table f vs = table <> (brackets $ dquotes $ (pretty f <> "/" <> (text $ show $ length vs)))
 
 pf f vs = pretty f <> (tupled $ map pretty vs)
 
@@ -84,8 +91,12 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 -- XXX This belongs elsewhere.
 --
 -- XXX This guy wants span information.
+--
+-- timv: might want to fuse these into one circuit
+--
 combinePlans :: [(FDR,[(DFunctAr, Maybe (Cost,Action))])] ->
-                Either String (M.Map DFunctAr [(Cost,Action)])
+                Either String (M.Map DFunctAr [(FDR, Cost, Action)])    -- all plans for functor/arity
+                                                                        -- XXX are FDR's unique keys? what if a rule is repeated?
 combinePlans = go (M.empty)
  where
   go m []             = Right m
@@ -94,9 +105,9 @@ combinePlans = go (M.empty)
   go' xs _  []           m = go m xs
   go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> Left $ "No plan for " ++ (show fa)
+      Nothing -> Left $ "No plan for " ++ (show fa)    -- timv: throw error here?
                             ++ " in " ++ (show fr)
-      Just ca -> go' xs fr ys $ iora fa ca m
+      Just (c,a) -> go' xs fr ys $ iora fa (fr,c,a) m
 
   -- Insert OR Append
   iora :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
@@ -105,29 +116,52 @@ combinePlans = go (M.empty)
     nel Nothing  = []
     nel (Just x) = x
 
+
+-- timv: consider flattening FRUle and ANFState
+
+py (cruxf,cruxa) (FRule h _ _ r) dope =
+           "@register" <> (parens $ dquotes $ pretty cruxf <> "/" <> (text $ show cruxa))
+   `above` "def _(_H, _V):"
+   `above` (indent 4 $ go dope)
+
+ where
+   go [x] = pdope x `above` emit
+   go (x:xs) = let px = pdope x
+                   pxstr = (show $ px)
+                   indents = ((pxstr !! (length pxstr - 1)) == ':')
+               in
+                   px `above` (if indents then indent 4 $ go xs else go xs)
+
+   emit = "emit" <> tupled [pretty h, pretty r]
+
+
 processFile fileName = do
-  pr <- T.parseFromFileEx (P.dlines) fileName
+  pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
   case pr of
     T.Failure td -> T.display td
     T.Success rs ->
       let urs  = map (\(P.LRule x T.:~ _) -> x) rs
-          franfs = map (runNormalize . normRule) urs
+          anfs = map (runNormalize . normRule) urs
       in do
-         aggm <- case buildAggMap franfs of
-                   Left e -> throw $ TLEAggPlan e
+         aggm <- case buildAggMap anfs of             -- only used for error checking?
+                   Left e -> throw $ TLEAggPlan e     -- multiple aggregators
                    Right a -> return a
-         cPlans <- case combinePlans
+         cPlans <- case combinePlans                  -- crux plans
                       $ map (A.second $ planEachEval headVar valVar)
-                            franfs of
-                    Left e -> throw $ TLEUpdPlan e
+                            anfs of
+                    Left e -> throw $ TLEUpdPlan e    -- no plan found
                     Right a -> return a
-         forM_ (M.toList cPlans) $ \(c,ps) -> do
-            print c
-            forM_ ps $ \(c,p) -> do
-                putStrLn $ "# Cost: " ++ (show c)
-                displayIO stdout $ renderPretty 1.0 100 $ vsep $ map pdope p
+         forM_ (M.toList cPlans) $ \(fa, ps) -> do
+            putStrLn $ "\n# =============="
+            putStrLn $ "# " ++ show fa
+            forM_ ps $ \(r, cost, dope) -> do   -- plans for the functor/arity
+                                                                  -- XXX why has body disappeared?
+                putStrLn $ "# --"
+                putStrLn $ "# Cost: " ++ (show cost)
+                displayIO stdout $ renderPretty 1.0 100
+                          $ py fa r dope
                 putStrLn ""
-                putStrLn ";"
+
             putStrLn ""
  where
   headVar = "_H"
