@@ -124,10 +124,10 @@ cruxVars cr = case cr of
 data DOpAMine = OPAssign        DVar        NTV                     --  -+
               | OPCheck         DVar        DVar                    --  ++
 
-              | OPGetArgsIf     [DVar]      DVar        DFunct Int  --  -+
+              | OPGetArgsIf     [DVar]      DVar        DFunct      --  -+
               | OPBuild         DVar        [DVar]      DFunct      --  -+
 
-              | OPCall          DVar        [NTV]       DFunct      --  -+
+              | OPCall          DVar        [DVar]      DFunct      --  -+
               | OPIter          (ModedVar)  [ModedVar]  DFunct      --  ??
               | OPIndirEval     DVar        DVar                    --  -+
  deriving (Eq,Ord,Show)
@@ -139,13 +139,13 @@ data Det = Det          -- ^ Exactly one answer
 
 detOfDop :: DOpAMine -> Det
 detOfDop x = case x of
-               OPAssign _ _         -> Det
-               OPCheck _ _          -> DetSemi
-               OPGetArgsIf _ _ _ _  -> DetSemi
-               OPBuild _ _ _        -> Det
-               OPIndirEval _ _      -> DetSemi
-               OPCall _ _ _         -> Det
-               OPIter o is _        -> -- XXX
+               OPAssign _ _        -> Det
+               OPCheck _ _         -> DetSemi
+               OPGetArgsIf _ _ _   -> DetSemi
+               OPBuild _ _ _       -> Det
+               OPIndirEval _ _     -> DetSemi
+               OPCall _ _ _        -> Det
+               OPIter o is _       -> -- XXX
                  case (modeOf o, foldr min MBound (map modeOf is)) of
                    (MFree, MBound) -> DetSemi
                    _               -> DetNon
@@ -186,7 +186,7 @@ possible cr = case cr of
                    else []
         -- On the other hand, if the output is known, then any subset
         -- of the inputs may be known and will be checked.
-        MB o' -> [   (OPGetArgsIf is' o' funct $ length is)
+        MB o' -> [   (OPGetArgsIf is' o' funct)
                    : map (\(c,x) -> (OPCheck c x)) cis
                  ]
          where
@@ -201,7 +201,7 @@ possible cr = case cr of
   CFCall o is funct | isMath funct ->
       if not $ all isBound is
        then inv funct is o
-       else let is' = map (NTVar . varOfMV) is in
+       else let is' = map varOfMV is in
             case o of
               MF o' ->  [[OPCall o' is' funct]]
               MB o' -> let cv = "_chk"
@@ -215,18 +215,21 @@ possible cr = case cr of
 
  where
 
- {-
-  inv "+" is' (MB o') | length is' == 2
-               = case L.partition isFree is' of
-                   ([MF fi],bis) -> Just ("-",o':map ntvOfMNT bis,fi)
-                   _ -> Nothing
+  -- XXX this really ought to be done some other way
+  inv :: DFunct -> [ModedVar] -> ModedVar -> [Action]
+  inv "+" is (MB o)
+               = case L.partition isFree is of
+                   ([MF fi],bis) -> let cv = "_tmp"
+                                        bis' = map varOfMV bis
+                                    in  [[ OPCall cv bis' "+"
+                                         , OPCall fi [o, cv] "-"]]
+                   _ -> []
 
-  inv "-" [(MB x),(MF y)] (MB o')
-                  = Just ("-",[x,o'],y)
+  inv "-" [(MB x),(MF y)] (MB o)
+                  = [[ OPCall y [x,o] "-" ]]
 
-  inv "-" [(MF x),(MB y)] (MB o')
-                  = Just ("+",[o',y],x)
-                  -}
+  inv "-" [(MF x),(MB y)] (MB o)
+                  = [[ OPCall x [o,y] "+" ]]
 
   inv _   _  _  = []
 
@@ -267,7 +270,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
   stepCost x = case x of
     OPAssign _ _        -> 1
     OPCheck _ _         -> 2
-    OPGetArgsIf _ _ _ _ -> 1
+    OPGetArgsIf _ _ _   -> 1
     OPBuild _ _ _       -> 1
     OPCall _ _ _        -> 1
     OPIter o is _       -> 2 * (fromIntegral $ length $ filter isFree (o:is))
@@ -316,7 +319,7 @@ stepAgenda st sc = go
 
 initialPlanForCrux :: DVar -> DVar -> Crux DVar a -> Action
 initialPlanForCrux hi v cr = case cr of
-  CFCall o is f -> [ OPGetArgsIf is hi f $ length is, OPAssign o (NTVar v) ]
+  CFCall o is f -> [ OPGetArgsIf is hi f, OPAssign o (NTVar v) ]
   _             -> error "Don't know how to initially plan !CFCall"
 
 -- | Given a normalized form and an initial crux, saturate the graph and

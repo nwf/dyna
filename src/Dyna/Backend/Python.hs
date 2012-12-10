@@ -58,7 +58,7 @@ pdope :: DOpAMine -> Doc e
 pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
 pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
 pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
-pdope (OPGetArgsIf vs id f a) =                                         -- XXX: arity is implied; drop extra variable to avoid possible inconsistencies?
+pdope (OPGetArgsIf vs id f) =
        tupled (map pretty vs)
    <+> equals
    <+> functorIndirect "peel" f vs <> (parens $ pretty id)
