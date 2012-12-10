@@ -4,7 +4,7 @@ Generates a visual representation of a Dyna program rules after the
 normalization process.
 """
 
-import os
+import re, os
 from collections import defaultdict, namedtuple
 from utils import magenta, red, green, yellow, white, toANF, read_anf
 
@@ -12,7 +12,6 @@ Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "
 
 def edge_code(x):
     return '%s = %s(%s)' % (x.head, x.label, ', '.join(x.body)) if x.body else x.label
-
 Edge.__repr__ = edge_code
 
 
@@ -155,7 +154,7 @@ class Hypergraph(object):
 
         while q:
             [chart, history] = q.pop()
-            print chart
+#            print chart
 
             visited_edges = {e for e, _ in history}
 
@@ -185,26 +184,34 @@ def consistent(e, chart):
 
     h = e.head
 
-    print 'reversible?', e
-    print '  chart:  ', display_mode(C, chart[h])
+#    print 'reversible?', e
+#    print '  chart:  ', display_mode(C, chart[h])
 
     for M, o in modes(e.label, len(e.body)):
 
         if all((c or not m) for m, c in zip(M, C)) and (chart[h] or not o):
 
-            B = [(c or m) for m, c in zip(M, C)]
+            B = tuple((c or m) for m, c in zip(M, C))
             b = chart[h] or o
 
-            print
-            print '    witness:', display_mode(M, o)
-            print '    runs:  ', display_mode(B, b)
+#            print
+#            print '    witness:', display_mode(M, o)
+#            print '    runs:  ', display_mode(B, b)
 
             yield B, b
 
-    print
+#    print
+
 
 
 def modes(f, arity):
+    """
+    Query modes supported for functor, f/arity.
+
+    TODO: annotate query modes with determinism and a handle to a function which
+    will execute the query (e.g, addition in mode "+ - -> +" is deterministic
+    and the query performs subtraction)
+    """
 
     if f.startswith('& '):                  # Unification
         yield [True] * arity, False
@@ -233,6 +240,9 @@ def display_mode_nocolor(inputs, output):
     return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
                            z[output])
 
+def show_slice(e, M):
+    return [(b if bind else ':') for b, bind in zip(e.body, M)]
+
 
 def isvar(x):
     return isinstance(x,str) and (x.isupper() or x.startswith('_$'))
@@ -248,7 +258,8 @@ def circuit(anf):
         g.edge(head=var, label=op, body=args)
 
     for var, op, args in unifs:
-        g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
+#        g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
+        g.edge(head=var, label='& %s' % op, body=args)
 
     g.head = head
     g.result = result
@@ -317,43 +328,60 @@ def main(dynafile):
         print >> html, '<h2>Hyperedge templates</h2>'
 
         rules = [circuit(x) for x in read_anf(anf)]
+
         for i, g in enumerate(rules):
             sty = graph_styles(g)
             svg = g.render(dynafile + '.d/rule-%s' % i, sty)
             print >> html, '<div class="box">%s</div>' % svg
 
-
         # find "update plans" -- every term (edge) in a rule must have code to
-        # handle and update to it's value.
+        # handle an update to it's value.
 
         print >> html, '<h2>Update plans<h2>'
 
+        modes_needed = set()
+
         for i, r in enumerate(rules):
 
-            print red % '#________________________________________________'
-            print red % '# rule %s' % i
+            print '#________________________________________________'
+            print '# rule %s' % i
 
             print >> html, '<h2 style="color:red;">%s</h2>' % '# rule %s' % i
 
-            for e in r.edges:
+            for u in r.edges:
 
                 # suppose we receive an update to e
                 print
-                print green % 'Update %s' % (e,)
+                print '# Update %s' % (u,)
 
-                plan = r.find_update_plans(e)
+                plan = r.find_update_plans(u)
 
-                #print
-                #print yellow % 'Update %s' % (e,)
-                #for e, mode in reversed(plan):
-                #    if mode is None:
-                #        continue
-                #    (M, o) = mode
-                #    d = display_mode(M, o)
-                #    print '%-40s  %s' % (e, d)
+                print 'def update_rule%s_%s(%s,%s):' % (i, u.label, ','.join(u.body), u.head)
+                indent = '    '
+                for e, mode in reversed(plan):
+                    if mode is None:
+                        continue
+                    (M, o) = mode
+                    d = display_mode(M, o)
 
-                print >> html, '<h3>Update %s</h3>' % (e,)
+                    modes_needed.add((e.label, M, o))
 
+                    assign = []
+                    for i, (b, bind) in enumerate(zip(e.body, M)):
+                        if not bind:
+                            assign.append(b)
+
+                    if assign:
+                        print '%sfor (%s) in %s[%s]:' % (indent, ','.join(assign), e.label,
+                                                         ','.join(show_slice(e, M)))
+                        indent += '    '
+
+                    print '%s%s = %s(%s)' % (indent, e.head, e.label, ','.join(e.body))
+
+                print '%semit(%s, %s)' % (indent, r.head, r.result)
+
+
+                print >> html, '<h3>Update %s</h3>' % (u,)
                 print >> html, '<table style="font-family: Courier;">'
                 for e, mode in reversed(plan):
                     if mode is None:
@@ -363,14 +391,20 @@ def main(dynafile):
                     print >> html, '<tr><td>%s</td><td>%s</td></tr>' % (e, d)
                 print >> html, '</table>'
 
-
                 # TODO: plate notation for loop structure.
 
                 #svg = uplan_graph.render('/tmp/tmp')
 
-                #print >> html, '<h3>Update %s</h3>' % (e,)
+                #print >> html, '<h3>Update %s</h3>' % (u,)
                 #print >> html, '<div class="box">%s</div>' % svg
 
+        print
+        print red % '#________________'
+        print red % '# storage'
+        for label, M, o in modes_needed:
+            print label, display_mode_nocolor(M, o)
+
+    print
     print 'wrote', html.name
 
     if argv.browser:
