@@ -10,9 +10,9 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Dyna.Analysis.RuleMode (
+module Dyna.Analysis.RuleMode {-(
     Det(..), DOpAMine(..), detOfDop, planEachEval
-) where
+)-} where
 
 import           Control.Monad
 import qualified Data.ByteString.Char8      as BC
@@ -55,7 +55,7 @@ data ModedNT = MF DVar
  deriving (Eq,Ord,Show)
 
 modeOfMNT :: ModedNT -> Mode
-modeOfMNT (MF _) = MFree 
+modeOfMNT (MF _) = MFree
 modeOfMNT (MB _) = MBound
 
 ntvOfMNT :: ModedNT -> NTV
@@ -152,7 +152,7 @@ possible (f,is,o) = case f of
                     _   -> []
 
     -- Unification
-  CFUnif funct -> 
+  CFUnif funct ->
       case o of
         -- If the output is free, the only supported case is when all
         -- inputs are known.
@@ -177,7 +177,7 @@ possible (f,is,o) = case f of
           cis        = MA.catMaybes mcis
 
         MB _ -> []   -- XXX shouldn't happen
-          
+
     -- Backward-chainable mathematics (this is such a hack XXX)
   CFCall funct | isMath funct ->
       if not $ all isBound is
@@ -292,7 +292,7 @@ plan :: (Crux ModedNT -> [Action])
      -> ANFState
      -> Crux NTV
      -> Maybe (Cost, Action)
-plan st sc anf cr@(_,ci,co) = 
+plan st sc anf cr@(_,ci,co) =
   let cruxes =    eval_cruxes anf
                ++ unif_cruxes anf
       initPlan = PP { pp_cruxes = S.delete cr (S.fromList cruxes)
@@ -330,6 +330,6 @@ main = mapM_ (\(c,msp) -> do
        $ testPlanRule
        -- $ "fib(X) :- fib(X-1) + fib(X-2)"
        $ "path(pair(Y,Z),V) min= path(pair(X,Y),U) + cost(X,Y,Z,U,V)."
-       -- $ "goal += f(&pair(Y,Y))." -- 
+       -- $ "goal += f(&pair(Y,Y))." --
 
 ------------------------------------------------------------------------}}}
