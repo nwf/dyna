@@ -131,6 +131,13 @@ data NT v = NTNumeric (Either Integer Double)
           | NTVar     v
  deriving (Eq,Ord,Show)
 
+instance (Pretty v) => Pretty (NT v) where
+    pretty (NTNumeric (Left x))  = pretty x
+    pretty (NTNumeric (Right x)) = pretty x
+    pretty (NTString s)          = dquotes (pretty s)
+    pretty (NTVar v)             = pretty v
+
+
 -- | Normalized Term over 'DVar' (that is, either a primitive or a variable)
 type NTV = NT DVar
 
@@ -349,11 +356,6 @@ printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
                       , parens $ text "result" <+> (pretty result)
                       ]
   where
-    pnt :: (Pretty v) => NT v -> Doc e
-    pnt (NTNumeric (Left x))        = pretty x
-    pnt (NTNumeric (Right x))       = pretty x
-    pnt (NTString s)                = dquotes (pretty s)
-    pnt (NTVar v)                   = pretty v
 
     pft :: FDT -> Doc e
     pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
@@ -363,7 +365,7 @@ printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
     pevf (Right t)  = pft t
 
     penf :: ENF -> Doc e
-    penf (Left n)   = pnt n
+    penf (Left n)   = pretty n
     penf (Right t)  = pft t
 
     pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pevf z) $ M.toList x

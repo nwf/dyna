@@ -122,10 +122,10 @@ cruxVars cr = case cr of
 
 --              Opcode          Out         In          Ancillary
 data DOpAMine = OPAssign        DVar        NTV                     --  -+
-              | OPCheck         DVar        NTV                     --  ++
+              | OPCheck         DVar        DVar                    --  ++
 
               | OPGetArgsIf     [DVar]      DVar        DFunct Int  --  -+
-              | OPBuild         DVar        [NTV]       DFunct      --  -+
+              | OPBuild         DVar        [DVar]      DFunct      --  -+
 
               | OPCall          DVar        [NTV]       DFunct      --  -+
               | OPIter          (ModedVar)  [ModedVar]  DFunct      --  ??
@@ -172,7 +172,7 @@ possible cr = case cr of
                     (Left _, MF _)   -> []
                     (Right _, MB o') -> let chk = "_chk" in
                                        [[ OPAssign chk ni
-                                        , OPCheck  chk (NTVar o')]]
+                                        , OPCheck  chk o']]
                     (Left i', MB o') -> [[OPAssign i' (NTVar o')]]
                     (Right _, MF o') -> [[OPAssign o' ni]]
 
@@ -182,12 +182,12 @@ possible cr = case cr of
         -- If the output is free, the only supported case is when all
         -- inputs are known.
         MF o'  -> if all isBound is
-                   then [[OPBuild o' (map (NTVar . varOfMV) is) funct]]
+                   then [[OPBuild o' (map varOfMV is) funct]]
                    else []
         -- On the other hand, if the output is known, then any subset
         -- of the inputs may be known and will be checked.
         MB o' -> [   (OPGetArgsIf is' o' funct $ length is)
-                   : map (\(c,x) -> (OPCheck c (NTVar x))) cis
+                   : map (\(c,x) -> (OPCheck c x)) cis
                  ]
          where
           mkChks _ (MF i) = (i, Nothing)
@@ -206,7 +206,7 @@ possible cr = case cr of
               MF o' ->  [[OPCall o' is' funct]]
               MB o' -> let cv = "_chk"
                        in [[OPCall  cv is' funct
-                           ,OPCheck cv (NTVar o')
+                           ,OPCheck cv o'
                            ]]
 
     -- Otherwise, we assume it's an extensional table and ask to iterate
@@ -255,19 +255,28 @@ unif_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_unifs
 
 type Cost = Double
 
+-- XXX I don't understand why this heuristic works, but it seems to exclude
+-- some of the... less intelligent plans.
 simpleCost :: PartialPlan -> Action -> Cost
-simpleCost (PP { pp_score = osc }) act =
-    osc + sum (map stepCost act)
+simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
+    2 * osc + (1 + loops pfx) * actCost act
  where
+  actCost = sum . map stepCost
+
   stepCost :: DOpAMine -> Double
   stepCost x = case x of
-    OPAssign _ _         -> 0
-    OPCheck _ _          -> 1
-    OPGetArgsIf _ _ _ _  -> 0
-    OPBuild _ _ _        -> 0
-    OPCall _ _ _         -> 0
-    OPIter o is _        -> fromIntegral $ length $ filter isFree (o:is)
-    OPIndirEval _ _      -> 10
+    OPAssign _ _        -> 1
+    OPCheck _ _         -> 2
+    OPGetArgsIf _ _ _ _ -> 1
+    OPBuild _ _ _       -> 1
+    OPCall _ _ _        -> 1
+    OPIter o is _       -> 2 * (fromIntegral $ length $ filter isFree (o:is))
+    OPIndirEval _ _     -> 100
+
+  loops = fromIntegral . length . filter isLoop
+
+  isLoop :: DOpAMine -> Bool
+  isLoop = (== DetNon) . detOfDop
 
 ------------------------------------------------------------------------}}}
 -- Planning                                                             {{{
@@ -315,14 +324,14 @@ initialPlanForCrux hi v cr = case cr of
 --
 -- XXX If the intial entrypoint is nonlinear, we need to insert some
 -- checks into the plan.  Fixing that is moderately invasive...
-plan :: (Crux (ModedVar) (ModedNT) -> [Action]) -- ^ Available steps
-     -> (PartialPlan -> Action -> Cost)             -- ^ Scoring function
-     -> ANFState                                    -- ^ Normal form
-     -> Crux DVar NTV                               -- ^ Initial crux
-     -> DVar                                        -- ^ Head Intern
-     -> DVar                                        -- ^ Value
-     -> Maybe (Cost, Action)                        -- ^ If there's a plan...
-plan st sc anf cr hi v =
+plan_ :: (Crux (ModedVar) (ModedNT) -> [Action]) -- ^ Available steps
+      -> (PartialPlan -> Action -> Cost)             -- ^ Scoring function
+      -> ANFState                                    -- ^ Normal form
+      -> Crux DVar NTV                               -- ^ Initial crux
+      -> DVar                                        -- ^ Head Intern
+      -> DVar                                        -- ^ Value
+      -> [(Cost, Action)]                            -- ^ If there's a plan...
+plan_ st sc anf cr hi v =
   let cruxes =    eval_cruxes anf
                ++ unif_cruxes anf
       initPlan = PP { pp_cruxes = S.delete cr (S.fromList cruxes)
@@ -330,9 +339,13 @@ plan st sc anf cr hi v =
                     , pp_score  = 0
                     , pp_plan   = initialPlanForCrux hi v cr
                     }
-  in case stepAgenda st sc [initPlan] of
-       [] -> Nothing
-       plans -> Just $ L.minimumBy (O.comparing fst) plans
+  in stepAgenda st sc [initPlan]
+
+plan st sc anf cr hi v =
+  (\x -> case x of
+                [] -> Nothing
+                plans -> Just $ L.minimumBy (O.comparing fst) plans)
+  $ plan_ st sc anf cr hi v
 
 planEachEval :: DVar -> DVar -> ANFState -> [(DFunctAr, Maybe (Cost,Action))]
 planEachEval hi v anf =
@@ -380,14 +393,14 @@ main :: IO ()
 main = mapM_ (\(c,msp) -> do
                 putStrLn $ show c
                 case msp of
-                  Just (s,p) -> do
-                     putStrLn $ "SCORE: " ++ show s
-                     forM_ p (putStrLn . show)
-                  Nothing -> putStrLn "NO PLAN"
+                  Nothing  -> putStrLn "NO PLAN"
+                  Just sps -> forM_ [sps] $ \(s,p) -> do
+                                        putStrLn $ "SCORE: " ++ show s
+                                        forM_ p (putStrLn . show)
                 putStrLn "")
-       $ testPlanRule
+       $ take 1 $ testPlanRule
        -- "fib(X) :- fib(X-1) + fib(X-2)"
-       -- "path(pair(Y,Z),V) min= path(pair(X,Y),U) + cost(X,Y,Z,U,V)."
-       "goal += f(&pair(Y,Y))."
+       "path(pair(Y,Z),V) min= path(pair(X,Y),1,U) + cost(X,Y,Z,U,V)."
+       -- "goal += f(&pair(Y,Y))."
 
 ------------------------------------------------------------------------}}}

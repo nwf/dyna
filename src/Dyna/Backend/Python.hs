@@ -12,7 +12,7 @@
 
 module Dyna.Backend.Python where
 
-import           Control.Arrow
+import qualified Control.Arrow              as A
 import           Control.Exception
 import           Control.Monad
 import qualified Data.ByteString            as B
@@ -33,6 +33,7 @@ import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.TrifectaTest
+import           System.IO
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
@@ -49,24 +50,53 @@ data TopLevelException = TLEAggPlan String
 instance Exception TopLevelException
 
 ------------------------------------------------------------------------}}}
+-- DOpAMine Printout                                                    {{{
+
+-- XXX This is ripped out of Dyna.Analysis.RuleModeTest and ported over.
+-- Sorry, Tim.
+
+pdope :: DOpAMine -> Doc e
+pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
+pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
+pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
+pdope (OPGetArgsIf vs id f a) =
+       tupled (map pretty vs)
+   <+> equals
+   <+> "peel" <> parens (pretty f <> "/" <> pretty a)
+              <> (parens $ pretty id)
+pdope (OPBuild v vs f) = pretty v <+> equals <+> "build" <+> pf f vs
+pdope (OPCall v vs f) = pretty v <+> equals <+> "call" <+> pf f vs
+pdope (OPIter o m f) =
+      let mo = m ++ [o] in
+          "for" <+> (tupled $ filterBound mo)
+                <+> "in" <+> pretty f <> pslice mo
+
+pslice = brackets . sepBy ","
+         . map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v)
+
+filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
+
+pf f vs = pretty f <> (tupled $ map pretty vs)
+
+------------------------------------------------------------------------}}}
 -- Experimental Detritus                                                {{{
 
 -- XXX This belongs elsewhere.
 --
 -- XXX This guy wants span information.
 combinePlans :: [(FDR,[(DFunctAr, Maybe (Cost,Action))])] ->
-                Either String (M.Map DFunctAr [Action])
+                Either String (M.Map DFunctAr [(Cost,Action)])
 combinePlans = go (M.empty)
  where
   go m []             = Right m
   go m ((fr,cmca):xs) = go' xs fr cmca m
 
   go' xs _  []           m = go m xs
-  go' xs fr ((c,mca):ys) m =
+  go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> Left $ "No plan for " ++ (show c)
+      Nothing -> Left $ "No plan for " ++ (show fa)
                             ++ " in " ++ (show fr)
-      Just (_,a) -> go' xs fr ys $ iora c a m
+      Just ca -> go' xs fr ys $ iora fa ca m
 
   -- Insert OR Append
   iora :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
@@ -87,18 +117,23 @@ processFile fileName = do
                    Left e -> throw $ TLEAggPlan e
                    Right a -> return a
          cPlans <- case combinePlans
-                      $ map (second $ planEachEval headVar valVar)
+                      $ map (A.second $ planEachEval headVar valVar)
                             franfs of
                     Left e -> throw $ TLEUpdPlan e
                     Right a -> return a
          forM_ (M.toList cPlans) $ \(c,ps) -> do
             print c
-            forM_ ps $ \p -> do
-                print ps
+            forM_ ps $ \(c,p) -> do
+                putStrLn $ "# Cost: " ++ (show c)
+                displayIO stdout $ renderPretty 1.0 100 $ vsep $ map pdope p
                 putStrLn ""
+                putStrLn ";"
+            putStrLn ""
  where
   headVar = "_H"
   valVar  = "_V"
+
+-- TEST: processFile "examples/cky.dyna"
 
 ------------------------------------------------------------------------}}}
 -- Experimental Residuals?                                              {{{
