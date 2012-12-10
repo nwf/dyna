@@ -72,6 +72,7 @@ module Dyna.Analysis.ANF (
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Unification
+import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
@@ -228,7 +229,10 @@ dynaFunctorSelfDispositions x = case x of
 -- flattened representation.
 --
 -- The ANFState ensures that variables are unique; we additionally give them
--- \"semi-meaningful\" prefixes, but these should not be relied upon.
+-- \"semi-meaningful\" prefixes, but these should not be relied upon for
+-- anything actually meaningful (but they serve as great debugging aids!).
+-- While here, we stick a prefix on user variables to ensure that they are
+-- disjoint from the variables we generate and use internally.
 --
 -- XXX This sheds span information entirely, which is probably not what we
 -- actually want.  Note that we're careful to keep a stack of contexts
@@ -242,10 +246,13 @@ normTerm_ :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
 
 -- Variables only evaluate in explicit context
 --
--- While here, replace bare underscores with unique names.
+-- While here, replace bare underscores with unique names and rename all
+-- remaining user variables to ensure that they do not collide with internal
+-- names.
+--
 -- XXX is this the right place for that?
 normTerm_ c _ (P.TVar v) = do
-    v' <- if v == "_" then nextVar "_w" else return v
+    v' <- if v == "_" then nextVar "_w" else return (BC.cons 'u' v)
     case c of
        (ECExplicit,ADEval) -> NTVar `fmap` newEval "_v" (Left v')
        _                   -> return $ NTVar v'
