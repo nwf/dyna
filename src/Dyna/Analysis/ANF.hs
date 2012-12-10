@@ -65,7 +65,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT(..), FDT, NTV, ENF, EVF, FDR(..),
+    ANFState(..), NT(..), FDT, NTV, ENF, EVF, FRule(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -319,18 +319,22 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data FDR = FRule DVar DAgg [DVar] DVar   -- timv: rename type to FRule?
+data FRule = FRule { fr_functor :: DVar      -- timv: rename type to FRule?
+                   , fr_aggregator :: DAgg
+                   , fr_side :: [DVar]
+                   , fr_result :: DVar
+                   , fr_span :: T.Span
+                   , fr_anf :: ANFState }
  deriving (Show)
 
 -- XXX
-normRule :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
-         => T.Spanned P.Rule   -- ^ Term to digest
-         -> m FDR
-normRule (P.Rule h a es r T.:~ _) = do
+normRule :: T.Spanned P.Rule   -- ^ Term to digest
+         -> FRule
+normRule (P.Rule h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
     nh  <- normTerm False h >>= newUnifNT "_h"
     nr  <- normTerm True  r >>= newUnifNT "_r"
     nes <- mapM (\e -> normTerm True e >>= newUnifNT "_c") es
-    return $ FRule nh a nes nr
+    return $ FRule nh a nes nr span
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -346,15 +350,17 @@ runNormalize =
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
-printANF :: (FDR, ANFState) -> Doc e
-printANF ((FRule h a e result), AS {as_evals = evals, as_unifs = unifs}) =
-  parens $ (pretty a)
-           <+> valign [ (pretty h)
-                      , parens $ text "side"   <+> (valign $ map pretty e)
-                      , parens $ text "evals"  <+> (pev evals)
-                      , parens $ text "unifs"  <+> (pun unifs)
-                      , parens $ text "result" <+> (pretty result)
-                      ]
+printANF :: FRule -> Doc e
+printANF (FRule h a s result span (AS {as_evals = evals, as_unifs = unifs})) =
+ ";;" <+> (text $ show span) `above` (
+   parens $ (pretty a)
+            <+> valign [ (pretty h)
+                       , parens $ text "side"   <+> (valign $ map pretty s)
+                       , parens $ text "evals"  <+> (pev evals)
+                       , parens $ text "unifs"  <+> (pun unifs)
+                       , parens $ text "result" <+> (pretty result)
+                       ]
+   )
   where
 
     pft :: FDT -> Doc e

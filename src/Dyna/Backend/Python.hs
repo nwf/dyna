@@ -94,9 +94,9 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 --
 -- timv: might want to fuse these into one circuit
 --
-combinePlans :: [(FDR,[(DFunctAr, Maybe (Cost,Action))])] ->
-                Either String (M.Map DFunctAr [(FDR, Cost, Action)])    -- all plans for functor/arity
-                                                                        -- XXX are FDR's unique keys? what if a rule is repeated?
+combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
+                Either String (M.Map DFunctAr [(FRule, Cost, Action)])    -- all plans for functor/arity
+                                                                          -- XXX: are FDR's unique keys? suppose a rule is repeated?
 combinePlans = go (M.empty)
  where
   go m []             = Right m
@@ -119,7 +119,7 @@ combinePlans = go (M.empty)
 
 -- timv: consider flattening FRUle and ANFState
 
-py (cruxf,cruxa) (FRule h _ _ r) dope =
+py (cruxf,cruxa) (FRule h _ _ r span _) dope =
            "@register" <> (parens $ dquotes $ pretty cruxf <> "/" <> (text $ show cruxa))
    `above` "def _(_H, _V):"
    `above` (indent 4 $ go dope)
@@ -135,37 +135,48 @@ py (cruxf,cruxa) (FRule h _ _ r) dope =
    emit = "emit" <> tupled [pretty h, pretty r]
 
 
+
 processFile fileName = do
+  fh <- openFile (fileName ++ ".plan") WriteMode
+  processFile_ fileName fh
+  hClose fh
+
+
+processFileStdout fileName = do
+  processFile_ fileName stdout
+
+
+processFile_ fileName fh = do
   pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
+
   case pr of
     T.Failure td -> T.display td
     T.Success rs ->
       let urs  = map (\(P.LRule x T.:~ _) -> x) rs
-          anfs = map (runNormalize . normRule) urs
+          anfs = map normRule urs
       in do
          aggm <- case buildAggMap anfs of             -- only used for error checking?
                    Left e -> throw $ TLEAggPlan e     -- multiple aggregators
                    Right a -> return a
          cPlans <- case combinePlans                  -- crux plans
-                      $ map (A.second $ planEachEval headVar valVar)
-                            anfs of
+                      $ map (\x -> (x, planEachEval headVar valVar x)) anfs of
                     Left e -> throw $ TLEUpdPlan e    -- no plan found
                     Right a -> return a
-         forM_ (M.toList cPlans) $ \(fa, ps) -> do
-            putStrLn $ "\n# =============="
-            putStrLn $ "# " ++ show fa
-            forM_ ps $ \(r, cost, dope) -> do   -- plans for the functor/arity
-                                                                  -- XXX why has body disappeared?
-                putStrLn $ "# --"
-                putStrLn $ "# Cost: " ++ (show cost)
-                displayIO stdout $ renderPretty 1.0 100
+         forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity
+            hPutStrLn fh $ "\n# =============="
+            hPutStrLn fh $ "# " ++ show fa
+            forM_ ps $ \(r, cost, dope) -> do         -- display plan
+                hPutStrLn fh $ "# --"
+                hPutStrLn fh $ "# Cost: " ++ (show cost)
+                displayIO fh $ renderPretty 1.0 100
                           $ py fa r dope
-                putStrLn ""
+                hPutStrLn fh ""
+--            hPutStrLn fh ""
 
-            putStrLn ""
  where
   headVar = "_H"
   valVar  = "_V"
+
 
 -- TEST: processFile "examples/cky.dyna"
 
@@ -180,7 +191,7 @@ normalizeFile file = do
     contents <- B.readFile file
     writeFile (file ++ ".anf")
               (show $ vcat (map (\(P.LRule x T.:~ _) ->
-                                printANF $ runNormalize $ normRule x)
+                                printANF $ normRule x)
                                 (unsafeParse P.dlines contents))
                       <> line)
     return ()

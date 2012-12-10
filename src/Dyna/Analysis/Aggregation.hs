@@ -26,15 +26,15 @@ type AggMap = M.Map DFunctAr DAgg
 -- XXX These functions really would like to have span information, so they
 -- could report which line of the source caused an error.
 
-procANF :: (FDR, ANFState) -> Either String (DFunctAr, DAgg)
-procANF (FRule h a _ _, AS { as_unifs = us }) =
+procANF :: FRule -> Either String (DFunctAr, DAgg)
+procANF (FRule h a _ _ _ (AS { as_unifs = us })) =
   case M.lookup h us of
     Nothing       -> Left $ "I can't process head-variables"
     Just t -> case t of
                 Left _       -> Left "Malformed head"
                 Right (f,as) -> Right ((f,length as),a)
 
-buildAggMap :: [(FDR, ANFState)] -> Either String AggMap
+buildAggMap :: [FRule] -> Either String AggMap
 buildAggMap = go (M.empty)
  where
   go m []      = Right m

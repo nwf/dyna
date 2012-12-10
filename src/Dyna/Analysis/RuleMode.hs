@@ -16,7 +16,7 @@ module Dyna.Analysis.RuleMode (
     Crux(..),
 
     DOpAMine(..), detOfDop,
- 
+
     Action, Cost, Det(..), planEachEval,
 
     adornedQueries
@@ -347,8 +347,8 @@ plan st sc anf cr hi v =
                 plans -> Just $ L.minimumBy (O.comparing fst) plans)
   $ plan_ st sc anf cr hi v
 
-planEachEval :: DVar -> DVar -> ANFState -> [(DFunctAr, Maybe (Cost,Action))]
-planEachEval hi v anf =
+planEachEval :: DVar -> DVar -> FRule -> [(DFunctAr, Maybe (Cost,Action))]
+planEachEval hi v (FRule { fr_anf = anf })  =
   map (\(c,fa) -> (fa, plan possible simpleCost anf c hi v))
     $ MA.mapMaybe (\c -> case c of
                            CFCall _ is f | not $ isMath f
@@ -385,9 +385,7 @@ ntMode _ (NTString _) = MBound
 ntMode _ (NTNumeric _) = MBound
 -}
 
-testPlanRule x =
- let (_,anf) = runNormalize $ normRule (unsafeParse DP.drule x)
- in  planEachEval "HEAD" "VALUE" anf
+testPlanRule x = planEachEval "HEAD" "VALUE" $ normRule (unsafeParse DP.drule x)
 
 main :: IO ()
 main = mapM_ (\(c,msp) -> do
