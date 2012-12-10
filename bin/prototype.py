@@ -398,11 +398,16 @@ def main(dynafile):
                 #print >> html, '<h3>Update %s</h3>' % (u,)
                 #print >> html, '<div class="box">%s</div>' % svg
 
+
         print
         print red % '#________________'
         print red % '# storage'
         for label, M, o in modes_needed:
             print label, display_mode_nocolor(M, o)
+
+        cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dynafile
+        assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
+
 
     print
     print 'wrote', html.name

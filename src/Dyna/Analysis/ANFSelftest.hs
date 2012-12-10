@@ -29,7 +29,7 @@ import           Dyna.XXX.TrifectaTest
 testNormTerm :: Bool -> B.ByteString -> (NTV, ANFState)
 testNormTerm c = runNormalize . normTerm c . unsafeParse P.dterm
 
-testNormRule :: B.ByteString -> (FDR, ANFState)
+testNormRule :: B.ByteString -> (FRule, ANFState)
 testNormRule = runNormalize . normRule . unsafeParse P.drule
 
 
