@@ -10,7 +10,9 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Dyna.Analysis.RuleMode where
+module Dyna.Analysis.RuleMode (
+    Det(..), DOpAMine(..), detOfDop, planEachEval
+) where
 
 import           Control.Monad
 import qualified Data.ByteString.Char8      as BC
@@ -287,35 +289,43 @@ unif_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_unifs
 --   get a plan for doing so.
 plan :: (Crux ModedNT -> [Action])
      -> (PartialPlan -> Action -> Cost)
-     -> (FDR, ANFState)
+     -> ANFState
      -> Crux NTV
-     -> (Cost, Action)
-plan st sc (_, anfs) cr@(_,ci,co) = 
-  let cruxes =    eval_cruxes anfs
-               ++ unif_cruxes anfs
+     -> Maybe (Cost, Action)
+plan st sc anf cr@(_,ci,co) = 
+  let cruxes =    eval_cruxes anf
+               ++ unif_cruxes anf
       initPlan = PP { pp_cruxes = S.delete cr (S.fromList cruxes)
                     , pp_binds  = S.fromList $ filterNTs (co:ci)
                     , pp_score  = 0
                     , pp_plan   = []
                     }
-  in L.minimumBy (O.comparing fst) $ stepAgenda st sc [initPlan]
+  in case stepAgenda st sc [initPlan] of
+       [] -> Nothing
+       plans -> Just $ L.minimumBy (O.comparing fst) plans
+
+planEachEval anf =
+  map (\c -> (c, plan possible simpleCost anf c))
+    $ filter (\(f,_,_) -> case f of
+                            CFCall f' -> not $ isMath f'
+                            _         -> False )
+    $ eval_cruxes anf
 
 ------------------------------------------------------------------------}}}
 -- Experimental Detritus                                                {{{
 
-
 testPlanRule x =
- let (fr,anfs) = runNormalize $ normRule (unsafeParse DP.drule x)
-     updatePlans = map (\c -> (c, plan possible simpleCost (fr,anfs) c))
-       $ filter (\(f,_,_) -> case f of { CFCall f' -> not $ isMath f' ; _ -> False })
-       $ eval_cruxes anfs
-  in updatePlans
+ let (_,anf) = runNormalize $ normRule (unsafeParse DP.drule x)
+ in  planEachEval anf
 
 main :: IO ()
-main = mapM_ (\(c,(s,p)) -> do
+main = mapM_ (\(c,msp) -> do
                 putStrLn $ show c
-                putStrLn $ "SCORE: " ++ show s
-                forM_ p (putStrLn . show)
+                case msp of
+                  Just (s,p) -> do
+                     putStrLn $ "SCORE: " ++ show s
+                     forM_ p (putStrLn . show)
+                  Nothing -> putStrLn "NO PLAN"
                 putStrLn "")
        $ testPlanRule
        -- $ "fib(X) :- fib(X-1) + fib(X-2)"

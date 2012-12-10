@@ -48,11 +48,3 @@ e3 = "f(X,Y) += (g(X,\"str\",d) - h(X,X,Y) - c)^2 + f(Y,Z)/exp(3.0) whenever ?c,
 t3 = testNormRule e3
 p3 = printANF $ t3
 -}
-
-normalizeFile file = do
-    contents <- B.readFile file
-    writeFile (file ++ ".anf")
-              (show $ vcat (map (\(P.LRule x T.:~ _) -> printANF $ runNormalize $ normRule x)
-                                (unsafeParse P.dlines contents))
-                      <> text "\n") -- add newline at end of file...
-    return ()
