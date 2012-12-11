@@ -40,6 +40,12 @@
 --
 -- XXX We really should do some CSE/GVN somewhere right after this pass, but
 -- be careful about linearity!
+--
+-- XXX Maybe we should be doing something differently for the head variable
+-- of the ANF -- we know (or should know, anyway) that it's either the
+-- result of evaluation (in the tricky examples like @*f += 1@) or a
+-- structured term.  None of our as_* fields give us that guarantee.  See
+-- "Dyna.Backend.Python"'s @findHeadFA@ function.
 
 -- FIXME: "str" is the same a constant str.
 

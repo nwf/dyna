@@ -119,20 +119,51 @@ combinePlans = go (M.empty)
 
 -- timv: consider flattening FRUle and ANFState
 
-py (cruxf,cruxa) (FRule h _ _ r span _) dope =
-           "@register" <> (parens $ dquotes $ pretty cruxf <> "/" <> (text $ show cruxa))
-   `above` "def _(_h, _v):"
-   `above` (indent 4 $ go dope)
+py (f,a) mu (FRule h _ _ r span _) dope =
+           case mu of
+             Just (hv,v) ->
+                         "@register"
+                 <>      pfsa
+                 `above` "def" <+> char '_'
+                               <+> tupled (map pretty [hv,v])
+                               <+> colon
+             Nothing -> "@initializer" <> pfsa
+                 `above` "def _():"
+   `above` (indent 4 $ go dope emit)
 
  where
-   go [x] = pdope x `above` emit
+   pfsa = (parens $ dquotes $
+            pretty f <> "/" <> (text $ show a))
+
+   go []  = id
    go (x:xs) = let px = pdope x
-                   pxstr = (show $ px)
-                   indents = ((pxstr !! (length pxstr - 1)) == ':')
+                   indents = case x of OPIter _ _ _ -> True ; _ -> False
                in
-                   px `above` (if indents then indent 4 $ go xs else go xs)
+                   above px . (if indents then indent 4 else id) . go xs
 
    emit = "emit" <> tupled [pretty h, pretty r]
+
+
+printPlan :: Handle
+          -> (DFunct,Int)                    -- ^ Functor & arity
+          -> Maybe (DVar,DVar)               -- ^ if update, input intern & value
+          -> (FRule, Cost, Action)           -- ^ rule and plan
+          -> IO ()
+printPlan fh fa mu (r, cost, dope) = do         -- display plan
+  hPutStrLn fh $ "# --"
+  displayIO fh $ prefixSD "# " $ renderPretty 1.0 100
+                 $ (renderSpan $ fr_span r) <> line
+  hPutStrLn fh $ "# Cost: " ++ (show cost)
+  displayIO fh $ renderPretty 1.0 100
+                 $ py fa mu r dope <> line
+  hPutStrLn fh ""
+ where
+  renderSpan (T.Span s e bs) =
+         T.prettyTerm s
+     <+> char '-'
+     <+> T.prettyTerm e
+     <+> colon
+     `above` (indent 2 (T.prettyTerm $ T.rendering s bs))
 
 
 
@@ -152,28 +183,35 @@ processFile_ fileName fh = do
   case pr of
     T.Failure td -> T.display td
     T.Success rs ->
-      let urs  = map (\(P.LRule x T.:~ _) -> x) rs
-          anfs = map normRule urs
+      let urs = map (\(P.LRule x T.:~ _) -> x) rs
+          frs = map normRule urs
+          initializers = MA.mapMaybe (\(f,mca) -> (\(c,a) -> (f,c,a)) `fmap` mca)
+                         $ map (\x -> (x, planInitializer x)) frs
       in do
-         aggm <- case buildAggMap anfs of             -- only used for error checking?
+         aggm <- case buildAggMap frs of
                    Left e -> throw $ TLEAggPlan e     -- multiple aggregators
                    Right a -> return a
          cPlans <- case combinePlans                  -- crux plans
-                      $ map (\x -> (x, planEachEval headVar valVar x)) anfs of
+                      $ map (\x -> (x, planEachEval headVar valVar x)) frs of
                     Left e -> throw $ TLEUpdPlan e    -- no plan found
                     Right a -> return a
          forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity
-            hPutStrLn fh $ "\n# =============="
+            hPutStrLn fh ""
+            hPutStrLn fh $ "# =============="
             hPutStrLn fh $ "# " ++ show fa
-            forM_ ps $ \(r, cost, dope) -> do         -- display plan
-                hPutStrLn fh $ "# --"
-                hPutStrLn fh $ "# Cost: " ++ (show cost)
-                displayIO fh $ renderPretty 1.0 100
-                          $ py fa r dope
-                hPutStrLn fh ""
---            hPutStrLn fh ""
+            forM_ ps $ printPlan fh fa (Just (headVar,valVar))
+         hPutStrLn fh ""
+         hPutStrLn fh $ "# =============="
+         hPutStrLn fh $ "# Initializers"
+         forM_ initializers $ \(f,c,a) -> printPlan fh (findHeadFA f) Nothing (f,c,a)
 
  where
+  findHeadFA (FRule h _ _ _ _ (AS { as_unifs = us })) =
+    case M.lookup h us of
+      Nothing            -> error "No unification for head variable?"
+      Just (Left _)      -> error "NTVar head?"
+      Just (Right (f,a)) -> (f, length a)
+
   headVar = "_h"
   valVar  = "_v"
 

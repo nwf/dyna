@@ -17,7 +17,7 @@ module Dyna.Analysis.RuleMode (
 
     DOpAMine(..), detOfDop,
 
-    Action, Cost, Det(..), planEachEval,
+    Action, Cost, Det(..), planInitializer, planEachEval,
 
     adornedQueries
 ) where
@@ -317,8 +317,8 @@ stepAgenda st sc = go
                     Left df -> df : (go ps)
                     Right ps' -> go (ps'++ps)
 
-initialPlanForCrux :: DVar -> DVar -> Crux DVar a -> Action
-initialPlanForCrux hi v cr = case cr of
+initialPlanForCrux :: (Crux DVar a, DVar, DVar) -> Action
+initialPlanForCrux (cr, hi, v) = case cr of
   CFCall o is f -> [ OPGetArgsIf is hi f, OPAssign o (NTVar v) ]
   _             -> error "Don't know how to initially plan !CFCall"
 
@@ -327,32 +327,38 @@ initialPlanForCrux hi v cr = case cr of
 --
 -- XXX If the intial entrypoint is nonlinear, we need to insert some
 -- checks into the plan.  Fixing that is moderately invasive...
+--
+-- XXX This has no idea what to do about non-range-restricted rules.
 plan_ :: (Crux (ModedVar) (ModedNT) -> [Action]) -- ^ Available steps
       -> (PartialPlan -> Action -> Cost)             -- ^ Scoring function
       -> ANFState                                    -- ^ Normal form
-      -> Crux DVar NTV                               -- ^ Initial crux
-      -> DVar                                        -- ^ Head Intern
-      -> DVar                                        -- ^ Value
+      -> Maybe (Crux DVar NTV, DVar, DVar)           -- ^ Initial crux,
+                                                     --   item intern, and
+                                                     --   value, if any.
       -> [(Cost, Action)]                            -- ^ If there's a plan...
-plan_ st sc anf cr hi v =
+plan_ st sc anf mi =
   let cruxes =    eval_cruxes anf
                ++ unif_cruxes anf
-      initPlan = PP { pp_cruxes = S.delete cr (S.fromList cruxes)
-                    , pp_binds  = cruxVars cr
+      initPlan = PP { pp_cruxes = maybe id (\(c,_,_) -> S.delete c) mi
+                                  $ S.fromList cruxes
+                    , pp_binds  = maybe S.empty (\(c,_,_) -> cruxVars c) mi
                     , pp_score  = 0
-                    , pp_plan   = initialPlanForCrux hi v cr
+                    , pp_plan   = maybe [] initialPlanForCrux mi
                     }
   in stepAgenda st sc [initPlan]
 
-plan st sc anf cr hi v =
+plan st sc anf mi =
   (\x -> case x of
                 [] -> Nothing
                 plans -> Just $ L.minimumBy (O.comparing fst) plans)
-  $ plan_ st sc anf cr hi v
+  $ plan_ st sc anf mi
+
+planInitializer :: FRule -> Maybe (Cost,Action)
+planInitializer (FRule { fr_anf = anf }) = plan possible simpleCost anf Nothing
 
 planEachEval :: DVar -> DVar -> FRule -> [(DFunctAr, Maybe (Cost,Action))]
 planEachEval hi v (FRule { fr_anf = anf })  =
-  map (\(c,fa) -> (fa, plan possible simpleCost anf c hi v))
+  map (\(c,fa) -> (fa, plan possible simpleCost anf $ Just (c,hi,v)))
     $ MA.mapMaybe (\c -> case c of
                            CFCall _ is f | not $ isMath f
                                          -> Just $ (c,(f,length is))
