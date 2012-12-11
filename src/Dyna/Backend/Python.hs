@@ -64,8 +64,7 @@ pdope (OPGetArgsIf vs id f) =
    <+> "peel" <> (parens $ fa f vs <> comma <> pretty id)
 
 pdope (OPBuild v vs f) = pretty v <+> equals
-      <+> functorIndirect "build" f vs
-      <> (tupled $ map pretty vs)
+      <+> "build" <> (parens $ fa f vs <> comma <> (sepBy "," $ map pretty vs))
 
 pdope (OPCall v vs f) = pretty v <+> equals
       <+> functorIndirect "call" f vs
