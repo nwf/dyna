@@ -27,8 +27,8 @@ type AggMap = M.Map DFunctAr DAgg
 -- could report which line of the source caused an error.
 
 procANF :: FRule -> Either String (DFunctAr, DAgg)
-procANF (FRule h a _ _ _ (AS { as_unifs = us })) =
-  case M.lookup h us of
+procANF (FRule h a _ _ _ (AS { as_assgn = as })) =
+  case M.lookup h as of
     Nothing       -> Left $ "I can't process head-variables"
     Just t -> case t of
                 Left _       -> Left "Malformed head"

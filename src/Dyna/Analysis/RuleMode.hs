@@ -91,7 +91,8 @@ ntvOfMNT (NTNumeric n) = NTNumeric n
 -- Cruxes                                                               {{{
 
 data Crux v n = CFCall   v [v] DFunct
-              | CFUnif   v [v] DFunct
+              | CFStruct v [v] DFunct
+              | CFUnif   v  v
               | CFAssign v  n
               | CFEval   v  v
  deriving (Eq,Ord,Show)
@@ -99,19 +100,21 @@ data Crux v n = CFCall   v [v] DFunct
 cruxMode :: BindChart -> Crux DVar NTV -> Crux (ModedVar) (ModedNT)
 cruxMode c cr = case cr of
   CFCall   o is f -> CFCall   (mv o) (map mv is) f
-  CFUnif   o is f -> CFUnif   (mv o) (map mv is) f
+  CFStruct o is f -> CFStruct (mv o) (map mv is) f
   CFAssign o i    -> CFAssign (mv o) (modedNT c i)
   CFEval   o i    -> CFEval   (mv o) (mv i)
+  CFUnif   o i    -> CFUnif   (mv o) (mv i)
  where
   mv = modedVar c
 
 cruxVars :: Crux DVar NTV -> S.Set DVar
 cruxVars cr = case cr of
   CFCall   o is        _ -> S.fromList (o:is)
-  CFUnif   o is        _ -> S.fromList (o:is)
+  CFStruct o is        _ -> S.fromList (o:is)
   CFAssign o (NTVar i)   -> S.fromList [o,i]
   CFAssign o _           -> S.singleton o
   CFEval   o i           -> S.fromList [o,i]
+  CFUnif   o i           -> S.fromList [o,i]
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine                                                             {{{
@@ -156,7 +159,14 @@ detOfDop x = case x of
 type Action = [DOpAMine]
 
 -- XXX we shouldn't need to know this
-isMath f = f `elem` ["^", "+", "-", "*", "/"]
+--
+-- XXX please observe duplication of knowledge with
+-- Dyna.Analysis.ANF.dynaFunctorArgDispositions
+--
+-- XXX Also cross-reference python backend
+isMath f = f `elem` [ "^", "+", "-", "*", "/", "&", "|", "~"
+                    , "%", "**", "<", ">", "<<", ">>"
+                    , "log", "exp", "and", "or", "not"]
 
 -- XXX This function really ought to be generated from some declarations in
 -- the source program, rather than hard-coded in quite the way it is.
@@ -176,8 +186,8 @@ possible cr = case cr of
                     (Left i', MB o') -> [[OPAssign i' (NTVar o')]]
                     (Right _, MF o') -> [[OPAssign o' ni]]
 
-    -- Unification
-  CFUnif o is funct ->
+    -- Structure building
+  CFStruct o is funct ->
       case o of
         -- If the output is free, the only supported case is when all
         -- inputs are known.
@@ -196,6 +206,12 @@ possible cr = case cr of
 
           (is',mcis) = unzip $ zipWith mkChks [0::Int ..] is
           cis        = MA.catMaybes mcis
+
+    -- Unification
+  CFUnif (MF _) (MF _) -> []
+  CFUnif (MB x) (MB y) -> [[OPCheck x y]]
+  CFUnif (MB x) (MF y) -> [[OPAssign y (NTVar x)]]
+  CFUnif (MF y) (MB x) -> [[OPAssign y (NTVar x)]]
 
     -- Backward-chainable mathematics (this is such a hack XXX)
   CFCall o is funct | isMath funct ->
@@ -245,13 +261,15 @@ eval_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_evals
   -- XXX Missing cases
 
 unif_cruxes :: ANFState -> [Crux DVar NTV]
-unif_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_unifs
+unif_cruxes (AS { as_assgn = assigns, as_unifs = unifs }) =
+     M.foldrWithKey (\o i -> (crux o i :)) [] assigns
+  ++ map (uncurry CFUnif) unifs
  where
   crux :: DVar -> ENF -> Crux DVar NTV
   crux o (Left (NTString s))    = CFAssign o $ NTString s
   crux o (Left (NTNumeric n))   = CFAssign o $ NTNumeric n
   crux o (Left (NTVar i))       = CFAssign o $ NTVar i
-  crux o (Right (f,as))         = CFUnif o as f
+  crux o (Right (f,as))         = CFStruct o as f
 
 ------------------------------------------------------------------------}}}
 -- Costing Plans                                                        {{{
@@ -310,12 +328,13 @@ stepPartialPlan steps score p =
                  ) ++ ps
                ) [] rc
 
-stepAgenda st sc = go
+stepAgenda st sc = go []
  where
-  go []     = []
-  go (p:ps) = case stepPartialPlan st sc p of
-                    Left df -> df : (go ps)
-                    Right ps' -> go (ps'++ps)
+  go [] []     = []
+  go (r:rs) [] = go rs r
+  go rs (p:ps) = case stepPartialPlan st sc p of
+                    Left df -> df : (go rs ps)
+                    Right ps' -> go (ps':rs) ps
 
 initialPlanForCrux :: (Crux DVar a, DVar, DVar) -> Action
 initialPlanForCrux (cr, hi, v) = case cr of
@@ -347,6 +366,11 @@ plan_ st sc anf mi =
                     }
   in stepAgenda st sc [initPlan]
 
+plan :: (Crux (ModedVar) (ModedNT) -> [Action])
+     -> (PartialPlan -> Action -> Cost)
+     -> ANFState
+     -> Maybe (Crux DVar NTV, DVar, DVar)
+     -> Maybe (Cost, Action)
 plan st sc anf mi =
   (\x -> case x of
                 [] -> Nothing
@@ -394,20 +418,26 @@ ntMode _ (NTString _) = MBound
 ntMode _ (NTNumeric _) = MBound
 -}
 
-testPlanRule x = planEachEval "HEAD" "VALUE" $ normRule (unsafeParse DP.drule x)
+planEachEval_ hi v (FRule { fr_anf = anf })  =
+  map (\(c,fa) -> (fa, plan_ possible simpleCost anf $ Just (c,hi,v)))
+    $ MA.mapMaybe (\c -> case c of
+                           CFCall _ is f | not $ isMath f
+                                         -> Just $ (c,(f,length is))
+                           _             -> Nothing )
+    $ eval_cruxes anf
 
-main :: IO ()
-main = mapM_ (\(c,msp) -> do
+
+
+testPlanRule x = planEachEval_ "HEAD" "VALUE" $ normRule (unsafeParse DP.drule x)
+
+run = mapM_ (\(c,msp) -> do
                 putStrLn $ show c
                 case msp of
-                  Nothing  -> putStrLn "NO PLAN"
-                  Just sps -> forM_ [sps] $ \(s,p) -> do
-                                        putStrLn $ "SCORE: " ++ show s
+                  []  -> putStrLn "NO PLAN"
+                  sps -> forM_ sps $ \(s,p) -> do
+                                        putStrLn $ "\n\nSCORE: " ++ show s
                                         forM_ p (putStrLn . show)
                 putStrLn "")
-       $ take 1 $ testPlanRule
-       -- "fib(X) :- fib(X-1) + fib(X-2)"
-       "path(pair(Y,Z),V) min= path(pair(X,Y),1,U) + cost(X,Y,Z,U,V)."
-       -- "goal += f(&pair(Y,Y))."
+       . take 1 . testPlanRule
 
 ------------------------------------------------------------------------}}}

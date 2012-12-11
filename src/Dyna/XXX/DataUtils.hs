@@ -4,6 +4,8 @@ module Dyna.XXX.DataUtils (
   mapExists, mapForall,
   -- ** Upsertion
   mapUpsert,
+  -- ** Insertion into a map of lists
+  mapInOrApp,
   -- * 'Data.Set' utilities
   -- ** Quantification
   setExists, setForall
@@ -35,3 +37,10 @@ mapUpsert k v m =
  let (mo, m') = M.insertLookupWithKey (\_ _ _ -> v) k v m
      r        = Right m'
  in maybe r (\o -> if o == v then r else Left o) mo
+
+-- XXX maybe consider generalizing this to any collection type?
+mapInOrApp :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
+mapInOrApp k v m = M.alter (\mv -> Just $ v:nel mv) k m
+ where
+  nel Nothing  = []
+  nel (Just x) = x

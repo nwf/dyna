@@ -33,6 +33,7 @@ import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.RuleMode
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as P
+import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.TrifectaTest
 import           System.IO
@@ -40,14 +41,39 @@ import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
 ------------------------------------------------------------------------}}}
+-- Utilities                                                            {{{
+
+renderSpan (T.Span s e bs) =
+       T.prettyTerm s
+   <+> char '-'
+   <+> T.prettyTerm e
+   <+> colon
+   `above` (indent 2 (T.prettyTerm $ T.rendering s bs))
+
+------------------------------------------------------------------------}}}
 -- Top Level Exceptions                                                 {{{
 --
 -- Make the control flow a little cleaner by bailing out rather than
 -- anything right-branching.  Probably not what we actually want.
 
-data TopLevelException = TLEAggPlan String
-                       | TLEUpdPlan String
- deriving (DT.Typeable,Eq,Show)
+data TopLevelException = TLEAggPlan    String
+                       | TLENoUpdPlan  FRule  (DFunct,Int)
+ deriving (DT.Typeable)
+
+instance Eq TopLevelException where
+  (==) (TLENoUpdPlan (FRule h1 a1 e1 r1 s1 _) f1)
+       (TLENoUpdPlan (FRule h2 a2 e2 r2 s2 _) f2) =
+        h1 == h2 && a1 == a2 && e1 == e2
+     && r1 == r2 && s1 == s2 && f1 == f2
+
+  (==) (TLEAggPlan s1) (TLEAggPlan s2) = s1 == s2
+  (==) _ _ = False
+
+instance Show TopLevelException where
+  show (TLEAggPlan s) = "TLEAggPlan: " ++ s
+  show (TLENoUpdPlan r fa) = show $
+       text "TLENoUpdPlan" <+> text "for" <+> pretty fa <> line
+    <> printANF r
 
 instance Exception TopLevelException
 
@@ -88,34 +114,25 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 ------------------------------------------------------------------------}}}
 -- Experimental Detritus                                                {{{
 
+-- | Return all plans for each functor/arity
+--
 -- XXX This belongs elsewhere.
 --
 -- XXX This guy wants span information.
 --
 -- timv: might want to fuse these into one circuit
---
 combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
-                Either String (M.Map DFunctAr [(FRule, Cost, Action)])    -- all plans for functor/arity
-                                                                          -- XXX: are FDR's unique keys? suppose a rule is repeated?
+                M.Map DFunctAr [(FRule, Cost, Action)]   
 combinePlans = go (M.empty)
  where
-  go m []             = Right m
+  go m []             = m
   go m ((fr,cmca):xs) = go' xs fr cmca m
 
   go' xs _  []           m = go m xs
   go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> Left $ "No plan for " ++ (show fa)    -- timv: throw error here?
-                            ++ " in " ++ (show fr)
-      Just (c,a) -> go' xs fr ys $ iora fa (fr,c,a) m
-
-  -- Insert OR Append
-  iora :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
-  iora k v m = M.alter (\mv -> Just $ v:nel mv) k m
-   where
-    nel Nothing  = []
-    nel (Just x) = x
-
+      Nothing -> throw $ TLENoUpdPlan fr fa 
+      Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
 
 -- timv: consider flattening FRUle and ANFState
 
@@ -157,13 +174,6 @@ printPlan fh fa mu (r, cost, dope) = do         -- display plan
   displayIO fh $ renderPretty 1.0 100
                  $ py fa mu r dope <> line
   hPutStrLn fh ""
- where
-  renderSpan (T.Span s e bs) =
-         T.prettyTerm s
-     <+> char '-'
-     <+> T.prettyTerm e
-     <+> colon
-     `above` (indent 2 (T.prettyTerm $ T.rendering s bs))
 
 
 
@@ -189,12 +199,10 @@ processFile_ fileName fh = do
                          $ map (\x -> (x, planInitializer x)) frs
       in do
          aggm <- case buildAggMap frs of
-                   Left e -> throw $ TLEAggPlan e     -- multiple aggregators
-                   Right a -> return a
-         cPlans <- case combinePlans                  -- crux plans
-                      $ map (\x -> (x, planEachEval headVar valVar x)) frs of
-                    Left e -> throw $ TLEUpdPlan e    -- no plan found
-                    Right a -> return a
+                   Left e -> throw $ TLEAggPlan e
+                   Right x -> return x
+         cPlans <- return $! combinePlans                  -- crux plans
+                      $ map (\x -> (x, planEachEval headVar valVar x)) frs
          forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity
             hPutStrLn fh ""
             hPutStrLn fh $ "# =============="
@@ -206,8 +214,8 @@ processFile_ fileName fh = do
          forM_ initializers $ \(f,c,a) -> printPlan fh (findHeadFA f) Nothing (f,c,a)
 
  where
-  findHeadFA (FRule h _ _ _ _ (AS { as_unifs = us })) =
-    case M.lookup h us of
+  findHeadFA (FRule h _ _ _ _ (AS { as_assgn = as })) =
+    case M.lookup h as of
       Nothing            -> error "No unification for head variable?"
       Just (Left _)      -> error "NTVar head?"
       Just (Right (f,a)) -> (f, length a)

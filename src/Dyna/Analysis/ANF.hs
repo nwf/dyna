@@ -33,10 +33,8 @@
 -- we need to end up.  Especially of note is that we do not yet parse any
 -- sort of pragmas for augmenting our disposition list.
 --
--- XXX The handling for "is/2" is probably wrong.  Right now it's not
--- special at all, but every Dyna program is defined to include
--- @is(X,Y) :- X = *Y.@.  Is that something we should be normalizing out
--- here or should be waiting for some further unfolding optimization phase?
+-- XXX The handling for "is/2" is probably wrong, but differently wrong than
+-- before, at least.
 --
 -- XXX We really should do some CSE/GVN somewhere right after this pass, but
 -- be careful about linearity!
@@ -87,6 +85,7 @@ import qualified Text.Trifecta              as T
 
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
+import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint (valign)
 -- import           Dyna.Test.Trifecta         -- XXX
 
@@ -160,7 +159,8 @@ type ENF = Either NTV FDT
 data ANFState = AS
               { as_next  :: !Int
               , as_evals :: M.Map DVar EVF
-              , as_unifs :: M.Map DVar ENF
+              , as_assgn :: M.Map DVar ENF
+              , as_unifs :: [(DVar,DVar)]
               , as_annot :: M.Map DVar [T.Spanned (Annotation DTerm)]
               , as_warns :: [(B.ByteString, [T.Span])]
               }
@@ -179,17 +179,27 @@ newEval pfx t = do
     modify (\s -> s { as_evals = M.insert n t evs })
     return n
 
-newUnif :: (MonadState ANFState m) => String -> ENF -> m DVar
-newUnif pfx t = do
+newAssign :: (MonadState ANFState m) => String -> ENF -> m DVar
+newAssign pfx t = do
     n   <- nextVar pfx
-    uns <- gets as_unifs
-    modify (\s -> s { as_unifs = M.insert n t uns })
+    uns <- gets as_assgn
+    modify (\s -> s { as_assgn = M.insert n t uns })
     return n
 
-newUnifNT :: (MonadState ANFState m) => String -> NTV -> m DVar
-newUnifNT _   (NTVar x)     = return x
-newUnifNT pfx (NTString x)  = newUnif pfx (Left $ NTString x)
-newUnifNT pfx (NTNumeric x) = newUnif pfx (Left $ NTNumeric x)
+newAnnot :: (MonadState ANFState m)
+         => DVar -> T.Spanned (Annotation DTerm) -> m ()
+newAnnot v a = do
+    modify (\s -> s { as_annot = mapInOrApp v a (as_annot s) })
+
+newAssignNT :: (MonadState ANFState m) => String -> NTV -> m DVar
+newAssignNT _   (NTVar x)     = return x
+newAssignNT pfx (NTString x)  = newAssign pfx (Left $ NTString x)
+newAssignNT pfx (NTNumeric x) = newAssign pfx (Left $ NTNumeric x)
+
+doUnif :: (MonadState ANFState m) => DVar -> DVar -> m ()
+doUnif v w = if v == w
+              then return ()
+              else modify (\s -> s { as_unifs = (v,w):(as_unifs s) })
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
@@ -200,7 +210,6 @@ newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
 -- XXX These should be read from declarations
 dynaFunctorArgDispositions :: (DFunct, Int) -> [ArgDispos]
 dynaFunctorArgDispositions x = case x of
-    ("is", 2)  -> [ADQuote,ADEval]
     -- evaluate arithmetic / math
     ("exp", 1) -> [ADEval]
     ("log", 1) -> [ADEval]
@@ -294,6 +303,21 @@ normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
                                             return nt
                 _          -> return nt
 
+-- "is/2" is sort of exciting.  We normalize the second argument in an
+-- evaluation context and the first in a quoted context.  Then, if the
+-- result is quoted, we simply build up some structure.  If it's evaluated,
+-- on the other hand, we reduce it to a unification of these two pieces and
+-- return (XXX what ought to be) a unit.
+normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
+    nx <- normTerm_ (ECFunctor, ADQuote) (sx:ss) x >>= newAssign "_i" . Left
+    nv <- normTerm_ (ECFunctor, ADEval ) (sv:ss) v >>= newAssign "_i" . Left
+    case c of
+        (_,ADEval) -> do
+                       _ <- doUnif nx nv
+                       return $ NTNumeric (Left 42)  -- XXX ought to be NTUnit
+        _          -> do
+                       NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
+
 -- Annotations are stripped of their span information
 --
 -- XXX this is probably the wrong thing to do
@@ -310,7 +334,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
-    normas' <- mapM (newUnifNT "_x") normas
+    normas' <- mapM (newAssignNT "_x") normas
 
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
@@ -319,7 +343,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
     fmap NTVar $
      case dispos of
        ADEval  -> newEval "_f" . Right
-       ADQuote -> newUnif "_u" . Right
+       ADQuote -> newAssign "_u" . Right
       $ (f,normas')
 
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
@@ -344,9 +368,9 @@ data FRule = FRule { fr_functor :: DVar      -- timv: rename type to FRule?
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
          -> FRule
 normRule (P.Rule h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
-    nh  <- normTerm False h >>= newUnifNT "_h"
-    nr  <- normTerm True  r >>= newUnifNT "_r"
-    nes <- mapM (\e -> normTerm True e >>= newUnifNT "_c") es
+    nh  <- normTerm False h >>= newAssignNT "_h"
+    nr  <- normTerm True  r >>= newAssignNT "_r"
+    nes <- mapM (\e -> normTerm True e >>= newAssignNT "_c") es
     return $ FRule nh a nes nr span
 
 ------------------------------------------------------------------------}}}
@@ -357,25 +381,25 @@ normRule (P.Rule h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
 -- Use as @runNormalize nRule
 runNormalize :: ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize =
-  flip runState   (AS 0 M.empty M.empty M.empty []) .
+  flip runState   (AS 0 M.empty M.empty [] M.empty []) .
   flip runReaderT (AD dynaFunctorArgDispositions dynaFunctorSelfDispositions)
 
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
 printANF :: FRule -> Doc e
-printANF (FRule h a s result span (AS {as_evals = evals, as_unifs = unifs})) =
+printANF (FRule h a s result span
+            (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
  ";;" <+> (text $ show span) `above` (
    parens $ (pretty a)
             <+> valign [ (pretty h)
                        , parens $ text "side"   <+> (valign $ map pretty s)
-                       , parens $ text "evals"  <+> (pev evals)
-                       , parens $ text "unifs"  <+> (pun unifs)
+                       , parens $ text "evals"  <+> pev
+                       , parens $ text "unifs"  <+> pun
                        , parens $ text "result" <+> (pretty result)
                        ]
    )
   where
-
     pft :: FDT -> Doc e
     pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
 
@@ -387,7 +411,12 @@ printANF (FRule h a s result span (AS {as_evals = evals, as_unifs = unifs})) =
     penf (Left n)   = pretty n
     penf (Right t)  = pft t
 
-    pev x = valign $ map (\(y,z)-> parens $ pretty y <+> pevf z) $ M.toList x
-    pun x = valign $ map (\(y,z)-> parens $ pretty y <+> penf z) $ M.toList x
+    pev = valign $ map (\(y,z)-> parens $ pretty y <+> pevf z)
+                 $ M.toList evals
+
+    pun = valign $    map (\(y,z)-> parens $ pretty y <+> penf z)
+                          (M.toList assgn)
+                   ++ map (\(y,z) -> parens $ pretty y <+> pretty z)
+                          unifs
 
 ------------------------------------------------------------------------}}}
