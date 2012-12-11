@@ -87,11 +87,10 @@ pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
 pdope (OPGetArgsIf vs id f) =
        tupled (map pretty vs)
    <+> equals
-   <+> functorIndirect "peel" f vs <> (parens $ pretty id)
+   <+> "peel" <> (parens $ fa f vs <> comma <> pretty id)
 
 pdope (OPBuild v vs f) = pretty v <+> equals
-      <+> functorIndirect "build" f vs
-      <> (tupled $ map pretty vs)
+      <+> "build" <> (parens $ fa f vs <> comma <> (sepBy "," $ map pretty vs))
 
 pdope (OPCall v vs f) = pretty v <+> equals
       <+> functorIndirect "call" f vs
@@ -101,6 +100,8 @@ pdope (OPIter o m f) =
       let mo = m ++ [o] in
           "for" <+> (tupled $ filterBound mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
+
+fa f a = dquotes $ pretty f <> "/" <> (text $ show $ length a)
 
 pslice = brackets . sepBy ","
          . map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v)
@@ -118,9 +119,10 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 --
 -- XXX This belongs elsewhere.
 --
--- XXX This guy wants span information.
+-- XXX This guy wants span information; he's got it now use it.
 --
 -- timv: might want to fuse these into one circuit
+--
 combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
                 M.Map DFunctAr [(FRule, Cost, Action)]   
 combinePlans = go (M.empty)
@@ -133,8 +135,6 @@ combinePlans = go (M.empty)
     case mca of
       Nothing -> throw $ TLENoUpdPlan fr fa 
       Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
-
--- timv: consider flattening FRUle and ANFState
 
 py (f,a) mu (FRule h _ _ r span _) dope =
            case mu of

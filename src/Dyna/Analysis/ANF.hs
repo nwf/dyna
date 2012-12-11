@@ -356,7 +356,7 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data FRule = FRule { fr_functor :: DVar      -- timv: rename type to FRule?
+data FRule = FRule { fr_functor :: DVar
                    , fr_aggregator :: DAgg
                    , fr_side :: [DVar]
                    , fr_result :: DVar
