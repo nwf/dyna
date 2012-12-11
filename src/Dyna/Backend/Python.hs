@@ -18,7 +18,7 @@ import qualified Control.Arrow              as A
 import           Control.Exception
 import           Control.Monad
 import qualified Data.ByteString            as B
-import qualified Data.ByteString.Char8      as BC
+import qualified Data.ByteString.UTF8       as BU
 import           Data.Char
 -- import           Data.Either
 import qualified Data.List                  as L
@@ -119,7 +119,7 @@ combinePlans = go (M.empty)
 
 py (cruxf,cruxa) (FRule h _ _ r span _) dope =
            "@register" <> (parens $ dquotes $ pretty cruxf <> "/" <> (text $ show cruxa))
-   `above` "def _(_H, _V):"
+   `above` "def _(_h, _v):"
    `above` (indent 4 $ go dope)
 
  where
@@ -171,8 +171,8 @@ processFile_ fileName fh = do
                 hPutStrLn fh ""
 
  where
-  headVar = "_H"
-  valVar  = "_V"
+  headVar = "_h"
+  valVar  = "_v"
 
 
 -- TEST: processFile "examples/cky.dyna"
