@@ -42,6 +42,8 @@ call = {'*/2': operator.mul,
 # Update handler indirection -- a true hack. Allow us to have many handlers on
 # the same functor/arity
 
+# TODO: fuse update handlers instead of dispatching to each one independently.
+
 def register(functor_arity):
     """
     Decorator for registering update handlers. Used by update dispatcher.
@@ -73,12 +75,12 @@ def register(functor_arity):
 register.handlers = defaultdict(list)
 
 
-def update_dispatcher(functor_arity, idx, value):
+def update_dispatcher(fn, idx, value):
     """
     Passes update to relevant handlers.
     """
-    print 'dispatching update', (functor_arity, idx, value)
-    for handler in register.handlers[functor_arity]:
+    print 'dispatching update', (fn, idx, value)
+    for handler in register.handlers[fn]:
         print 'sending update to handler'
         handler(idx, value)
 
@@ -91,6 +93,7 @@ def emit(item, value):
 
     print 'emit: %s %s%s <== %s    (current value: %s)' % (item, fn, args, value, was)
     aggregator[item][value] += 1            # timv: retract passes in -1?
+    agenda.append(item)
 
 
 def peel(fn, (fa, idx)):
@@ -105,37 +108,47 @@ def peel(fn, (fa, idx)):
 
 def build(fn, *args):
 
-    idx = chart[fn].lookup(*args)
+    idx = chart[fn].lookup(*args)   # lookup doesn't require value?
 
     if idx is None:
-        idx = chart[fn].next_id()
-        chart[fn].update(idx, args + (None,))   # don't know value yet.
+        idx = chart[fn].insert(args + (None,))   # don't know value yet.
 
     return (fn, idx)
 
 
+# TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
     def __missing__(self, key):
         print 'creating chart indirect for:', key
         arity = int(key.split('/')[-1])
-        c = self[key] = Chart(ncols = arity + 1)  # add one for output variable
+        c = self[key] = Chart(name = key,
+                              ncols = arity + 1)  # add one for output variable
         return c
 
-
 chart = chart_indirect()
+
+def dump_charts():
+    print
+    print 'Charts'
+    print '============'
+    for x in chart:
+        print x
+        for idx, row in chart[x].data.items():
+            print '%-30s := %s' % (pretty((x,idx)), row[-1])
+        print
 
 
 class Chart(object):
 
-    def __init__(self, ncols):
+    def __init__(self, name, ncols):
+        self.name = name
         self.ncols = ncols
         self.data = {}
         self._id = 0
 
     def __getitem__(self, item):
-
         assert isinstance(item, tuple) and len(item) == self.ncols, \
-            'item width miss match: ncols %s, item %s' % (self.ncols, len(item))
+            'item width mismatch: ncols %s, item %s' % (self.ncols, len(item))
 
         nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
         slices = [i for i, val in enumerate(item) if isinstance(val, slice)]
@@ -146,17 +159,19 @@ class Chart(object):
 
     def lookup(self, *args):
         "find index for these args"
-        assert len(args) == self.ncols - 1
+        assert len(args) == self.ncols - 1                    # XXX: lookup doesn't want value?
         for idx, row in self.data.iteritems():                # XXX: very inefficient
             if row[:-1] == args:
-                return idx
+                return idx             # stop on first
 
     def update(self, ix, args):
         "Update chart"
         self.data[ix] = args
 
     def insert(self, args):
-        self.update(self.next_id(), args)
+        idx = self.next_id()
+        self.update(idx, list(args))
+        return idx
 
     def next_id(self):
         idx = self._id
@@ -164,14 +179,77 @@ class Chart(object):
         return idx
 
 
+# TODO: (functor, idx) pairs aren't nice to look at.
+def pretty(item):
+    "Pretty print a term. Will retrieve the complete (ground) term for the chart."
+    (fn, idx) = item
+    row = chart[fn].data[idx]
+    args = row[:-1]
+    fn = ''.join(fn.split('/')[:-1])  # drop arity from name.
+    return '%s%s' % (fn, tuple(args))    # TODO: need to recurse.
+
+def prettify(x):
+
+    if isinstance(x, tuple):
+        return pretty(x)
+    elif isinstance(x, list):
+        return map(pretty, x)
+    elif isinstance(x, Chart):
+        return {pretty((x.name, k)): v for k,v in x.data.iteritems()}
+    else:
+        raise ValueError("Don't know what to do with %r" % x)
 
 
-map(chart['f/2'].insert,
-    [(1, 1, 1),
-     (1, 1, 2),
-     (1, 2, 2),
-     (1, 2, ("g/1", 0xDEADBEEF)),
-     ("foo", "bar", "baz")])
+aggregator = defaultdict(Counter)
+agenda = []
+
+
+def run_agenda():
+    "the main loop"
+    while agenda:
+        item = agenda.pop()
+        new = aggregate(item)   # compute new value for item
+        propagate(item, new)
+
+
+def aggregate(item):
+    print 'aggregate:', pretty(item), aggregator[item],
+
+    val = 0.0
+    for k,v in aggregator[item].iteritems():
+        val += k*v                # value*multiplicity; TODO: use correct aggregator
+
+    print 'result:', val
+
+    return val
+
+
+def delete(item, val):
+    print 'TODO: implement deletion.'
+
+
+
+def propagate(item, now):
+
+    fn, idx = item
+
+    was = chart[fn].data[idx][-1]  # last is value
+
+    print 'propagate: %-30s   was %s  now %s' % (pretty(item), was, now)
+
+    if was == now:
+        return
+
+    if was is not None:
+        delete(item, was)
+
+    chart[fn].data[idx][-1] = now
+    aggregator[item][now] += 1
+
+    # enqueue work to the agenda
+    agenda.append(item)
+
+
 
 def papa_example():
 
@@ -193,57 +271,16 @@ def papa_example():
          ("Det",    "the", 1),
          ("Det",      "a", 1)])
 
-    for i, word in enumerate("Papa ate the caviar with a spoon .".split()):
-        chart['phrase/3'].insert((word, i, i + 1, 1))
+    for i, word in enumerate('Papa ate the caviar with a spoon .'.split()):
+        idx = chart['phrase/3'].insert((word, i, i + 1, None))
+        propagate(('phrase/3', idx), 1)
 
-
-papa_example()
-
-
-# --
-# Cost: 19.0
-@register("phrase/3")
-def _(_H, _V):
-    (Y,I,K) = peel("phrase/3", _H)
-    _f1 = _V
-    for (X,_f2) in chart["rewrite/2"][:,Y,:]:
-        _f3 = call["*/2"](_f1,_f2)
-        _u0 = build("phrase/3",X,I,K)
-        emit(_u0,_f3)
 
 
 execfile('examples/cky.dyna.plan')
 
+papa_example()
 
-# Agg :: item ==> [value]
-aggregator = defaultdict(Counter)
+run_agenda()
 
-# agenda hold pending work
-agenda = {}
-
-def run_agenda():
-    "the main loop"
-    while agenda:
-        item = agenda.pop()
-        new = aggregate(item)   # compute new value for item
-        propagate(item, new)
-
-
-def aggregate(item):
-    print 'aggregate', item
-    return 0.0
-
-
-def delete(item):
-    pass
-
-
-def propagate(item, new):
-
-    old = chart[item]
-
-    delete(item, old)
-
-    chart[item] = new
-
-    # enqueue work to the agenda
+dump_charts()
