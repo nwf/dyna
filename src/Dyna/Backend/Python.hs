@@ -61,7 +61,7 @@ pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
 pdope (OPGetArgsIf vs id f) =
        tupled (map pretty vs)
    <+> equals
-   <+> functorIndirect "peel" f vs <> (parens $ pretty id)
+   <+> "peel" <> (parens $ fa f vs <> comma <> pretty id)
 
 pdope (OPBuild v vs f) = pretty v <+> equals
       <+> functorIndirect "build" f vs
@@ -75,6 +75,8 @@ pdope (OPIter o m f) =
       let mo = m ++ [o] in
           "for" <+> (tupled $ filterBound mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
+
+fa f a = dquotes $ pretty f <> "/" <> (text $ show $ length a)
 
 pslice = brackets . sepBy ","
          . map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v)
@@ -90,13 +92,12 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 
 -- XXX This belongs elsewhere.
 --
--- XXX This guy wants span information.
+-- XXX This guy wants span information; he's got it now use it.
 --
 -- timv: might want to fuse these into one circuit
 --
 combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
                 Either String (M.Map DFunctAr [(FRule, Cost, Action)])    -- all plans for functor/arity
-                                                                          -- XXX: are FDR's unique keys? suppose a rule is repeated?
 combinePlans = go (M.empty)
  where
   go m []             = Right m
@@ -116,8 +117,6 @@ combinePlans = go (M.empty)
     nel Nothing  = []
     nel (Just x) = x
 
-
--- timv: consider flattening FRUle and ANFState
 
 py (cruxf,cruxa) (FRule h _ _ r span _) dope =
            "@register" <> (parens $ dquotes $ pretty cruxf <> "/" <> (text $ show cruxa))
@@ -171,7 +170,6 @@ processFile_ fileName fh = do
                 displayIO fh $ renderPretty 1.0 100
                           $ py fa r dope
                 hPutStrLn fh ""
---            hPutStrLn fh ""
 
  where
   headVar = "_H"
