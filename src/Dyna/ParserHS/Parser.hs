@@ -136,6 +136,19 @@ dynaOperStyle = IdentifierStyle
   , styleReservedHighlight = ReservedOperator
   }
 
+dynaAggStyle :: TokenParsing m => IdentifierStyle m
+dynaAggStyle = IdentifierStyle
+  { styleName = "Aggregator"
+  , styleStart   =     (oneOfSet $ CS.delete '.' usualpunct)
+                   <|> lower
+  , styleLetter  =     (oneOfSet $ usualpunct)
+                   <|> alphaNum
+  , styleReserved = mempty
+  , styleHighlight = Operator
+  , styleReservedHighlight = ReservedOperator
+  }
+
+
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
   { styleName = "Atom"
@@ -302,10 +315,7 @@ dtexpr = unDL texpr
 rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
 rulepfx = Rule <$> term
                <*  whiteSpace
-               -- XXX probably a better way to do this..
-               -- probably want aggregators have suffix =
-               <*> ((bsf $ some $ satisfy $ not . isSpace) <?> "Aggregator")
-               <*  whiteSpace
+               <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
 
 rule :: DeltaParsing m => m Rule
 rule = choice [
