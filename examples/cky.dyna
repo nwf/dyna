@@ -1,4 +1,3 @@
 % CKY-like parsing
 phrase(X,I,K) += phrase(Y,I,K) * rewrite(X,Y).
 phrase(X,I,K) += phrase(Y,I,J) * phrase(Z,J,K) * rewrite(X,Y,Z).
-

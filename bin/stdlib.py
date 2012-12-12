@@ -159,7 +159,7 @@ def prettify(x):
 
 # TODO: fuse update handlers instead of dispatching to each one independently.
 
-def register(functor_arity):
+def register(fn):
     """
     Decorator for registering update handlers. Used by update dispatcher.
 
@@ -179,7 +179,7 @@ def register(functor_arity):
     """
 
     def wrap(handler):
-        register.handlers[functor_arity].append(handler)
+        register.handlers[fn].append(handler)
         # you can't call these guys directly. Must go thru handler
         # indirection table
         return None
@@ -188,6 +188,18 @@ def register(functor_arity):
 
 # NOTE: global & mutable
 register.handlers = defaultdict(list)
+
+
+
+def initializer(_):
+
+    def wrap(handler):
+        initializer.handlers.append(handler)
+        return None
+
+    return wrap
+
+initializer.handlers = []
 
 
 def update_dispatcher((fn, idx), val):
@@ -282,38 +294,40 @@ def delete(item, val):
     _delete = False
 
 
+#def papa_example():
+#
+#    map(chart['rewrite/3'].insert,
+#        [( "S",   "S",  ".", 1.),
+#         ( "S",  "NP", "VP", 1.),
+#         ("NP", "Det",  "N", 1.),
+#         ("NP",  "NP", "PP", 1.),
+#         ("VP",   "V", "NP", 1.),
+#         ("VP",  "VP", "PP", 1.),
+#         ("PP",   "P", "NP", 1.)])
+#
+#    map(chart['rewrite/2'].insert,
+#        [( "NP",   "Papa", 1.),
+#         (  "N", "caviar", 1.),
+#         (  "N",  "spoon", 1.),
+#         (  "V",    "ate", 1.),
+#         (  "P",   "with", 1.),
+#         ("Det",    "the", 1.),
+#         ("Det",      "a", 1.)])
+#
+#    for i, word in enumerate('Papa ate the caviar with a spoon .'.split()):
+#        idx = chart['phrase/3'].insert((word, i, i + 1, None))
+#
+#        emit(('phrase/3', idx), 1.0)
+#
+#execfile('examples/cky.dyna.plan')
+#papa_example()
 
 
-def papa_example():
-
-    map(chart['rewrite/3'].insert,
-        [( "S",   "S",  ".", 1.),
-         ( "S",  "NP", "VP", 1.),
-         ("NP", "Det",  "N", 1.),
-         ("NP",  "NP", "PP", 1.),
-         ("VP",   "V", "NP", 1.),
-         ("VP",  "VP", "PP", 1.),
-         ("PP",   "P", "NP", 1.)])
-
-    map(chart['rewrite/2'].insert,
-        [( "NP",   "Papa", 1.),
-         (  "N", "caviar", 1.),
-         (  "N",  "spoon", 1.),
-         (  "V",    "ate", 1.),
-         (  "P",   "with", 1.),
-         ("Det",    "the", 1.),
-         ("Det",      "a", 1.)])
-
-    for i, word in enumerate('Papa ate the caviar with a spoon .'.split()):
-        idx = chart['phrase/3'].insert((word, i, i + 1, None))
-
-        emit(('phrase/3', idx), 1.0)
+execfile('examples/papa.dyna.plan')
 
 
-
-execfile('examples/cky.dyna.plan')
-
-papa_example()
+for xxx in initializer.handlers:
+    xxx()
 
 run_agenda()
 
