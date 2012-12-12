@@ -76,11 +76,17 @@ instance Exception TopLevelException
 pdope :: DOpAMine -> Doc e
 pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
 pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
-pdope (OPCheck v val) = hsep ["assert", pretty v, "==", pretty val]
+pdope (OPCheck v val) = "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
 pdope (OPGetArgsIf vs id f) =
-       tupled (map pretty vs)
-   <+> equals
-   <+> "peel" <> (parens $ fa f vs <> comma <> pretty id)
+
+    "try:" `above` (indent 4 $
+           tupledOrUnderscore vs
+            <+> equals <> " "
+                <> "peel" <> (parens $ fa f vs <> comma <> pretty id)
+     )
+
+    `above` "except TypeError: continue"   -- you'll get a "TypeError: 'NoneType' is not iterable."
+
 
 pdope (OPBuild v vs f) = pretty v <+> equals
       <+> "build" <> (parens $ fa f vs <> comma <> (sepBy "," $ map pretty vs))
@@ -91,13 +97,17 @@ pdope (OPCall v vs f) = pretty v <+> equals
 
 pdope (OPIter o m f) =
       let mo = m ++ [o] in
-          "for" <+> (tupled $ filterBound mo)
+          "for" <+> (tupledOrUnderscore $ filterBound mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
 fa f a = dquotes $ pretty f <> "/" <> (text $ show $ length a)
 
-pslice = brackets . sepBy ","
-         . map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v)
+-- this comes up because can't assign to ()
+tupledOrUnderscore vs = if length vs > 0 then tupled (map pretty vs) else text "_"
+
+pslice vs = brackets $
+       sepBy "," (map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v) vs)
+       <+> "," -- add a list comma to ensure getitem is always passed a tuple.
 
 filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 
@@ -117,7 +127,7 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 -- timv: might want to fuse these into one circuit
 --
 combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
-                M.Map DFunctAr [(FRule, Cost, Action)]   
+                M.Map DFunctAr [(FRule, Cost, Action)]
 combinePlans = go (M.empty)
  where
   go m []             = m
@@ -126,7 +136,7 @@ combinePlans = go (M.empty)
   go' xs _  []           m = go m xs
   go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> throw $ TLENoUpdPlan fr fa 
+      Nothing -> throw $ TLENoUpdPlan fr fa
       Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
 
 py (f,a) mu (FRule h _ _ r span _) dope =
@@ -139,7 +149,8 @@ py (f,a) mu (FRule h _ _ r span _) dope =
                                <+> colon
              Nothing -> "@initializer" <> pfsa
                  `above` "def _():"
-   `above` (indent 4 $ go dope emit)
+   `above` (indent 4 $ "for _ in [None]:")
+   `above` (indent 8 $ go dope emit)
 
  where
    pfsa = (parens $ dquotes $
@@ -194,6 +205,11 @@ processFile_ fileName fh = do
          aggm <- case buildAggMap frs of
                    Left e -> throw $ TLEAggPlan e
                    Right x -> return x
+
+         forM (M.toList aggm) $ \(k,v) -> do {
+             hPutStrLn fh $ "# " ++ (show k) ++ "->" ++ show v
+           }
+
          cPlans <- return $! combinePlans                  -- crux plans
                       $ map (\x -> (x, planEachEval headVar valVar x)) frs
          forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity

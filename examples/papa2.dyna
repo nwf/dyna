@@ -4,6 +4,10 @@
 phrase(X,I,K,t(X,TY)) += phrase(Y,I,K,TY) * rewrite(X,Y).
 phrase(X,I,K,t(X,TY,TZ)) += phrase(Y,I,J,TY) * phrase(Z,J,K,TZ) * rewrite(X,Y,Z).
 
+goal(P) = phrase("S",0,*length,P).
+
+length max= word(_, I), I.
+
 % grammar rules
 rewrite( "S",   "S",  ".") += 1.
 rewrite( "S",  "NP", "VP") += 1.
@@ -23,13 +27,15 @@ rewrite("Det",      "a") += 1.
 
 % sentence
 % "Papa at the caviar with the spoon ."
-word(  "Papa", 0) .
-word(   "ate", 1) .
-word(   "the", 2) .
-word("caviar", 3) .
-word(  "with", 4) .
-word(     "a", 5) .
-word( "spoon", 6) .
-word(     ".", 7) .
+word(  "Papa", 0) += 1.
+word(   "ate", 1) += 1.
+word(   "the", 2) += 1.
+word("caviar", 3) += 1.
+word(  "with", 4) += 1.
+word(     "a", 5) += 1.
+word( "spoon", 6) += 1.
+word(     ".", 7) += 1.
+
+% for fun, try making the above words facts instead of +=1's.
 
 phrase(W, I, I+1, W) += 1 whenever word(W, I).
