@@ -25,7 +25,7 @@ Call indirection
 
 """
 
-import math, operator
+import os, sys, math, operator
 from collections import defaultdict, Counter
 from utils import red, green, blue, magenta
 
@@ -323,7 +323,14 @@ def delete(item, val):
 #papa_example()
 
 
-execfile('examples/papa.dyna.plan')
+# 'examples/papa.dyna.plan'
+[dyna] = sys.argv[1:]
+
+cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
+assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
+
+
+execfile(dyna + '.plan')
 
 
 for xxx in initializer.handlers:
