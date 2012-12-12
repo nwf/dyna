@@ -24,6 +24,12 @@ class Hypergraph(object):
         self.nodes = set()
 
     def edge(self, head, label, body):
+
+        label = re.sub('"', r'\\"', label)
+        head = re.sub('"', r'\\"', head)
+        body = map(lambda b: re.sub('"', r'\\"', b), body)
+
+
         e = Edge(head, label, tuple(body))
         self.edges.append(e)
 
@@ -73,12 +79,12 @@ class Hypergraph(object):
             # node styles
             for x in self.nodes:
                 sty[x].update({'shape': 'circle'})
-                print >> f, '"%s" [%s]' % (x, ','.join('%s=%s' % (k,v) for k,v in sty[x].items()))
+                print >> f, '"%s" [%s]' % (x, ','.join('%s="%s"' % (k,v) for k,v in sty[x].items()))
 
             # edge styles
             for e in self.edges:
                 sty[e].update({'shape': 'rectangle'})
-                print >> f, '"%s" [%s]' % (id(e), ','.join('%s=%s' % (k,v) for k,v in sty[e].items()))
+                print >> f, '"%s" [%s]' % (id(e), ','.join('%s="%s"' % (k,v) for k,v in sty[e].items()))
 
             print >> f, '}'
 
