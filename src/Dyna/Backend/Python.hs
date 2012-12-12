@@ -12,8 +12,7 @@
 
 module Dyna.Backend.Python where
 
-import Control.Applicative ((<*))
-
+import           Control.Applicative ((<*))
 import qualified Control.Arrow              as A
 import           Control.Exception
 import           Control.Monad
@@ -40,7 +39,7 @@ import           System.IO
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
-import Dyna.XXX.Trifecta (renderSpan)
+import Dyna.XXX.Trifecta (prettySpanLoc)
 
 
 ------------------------------------------------------------------------}}}
@@ -77,6 +76,7 @@ pdope :: DOpAMine -> Doc e
 pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
 pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
 pdope (OPCheck v val) = "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
+pdope (OPCheckNE v val) = "if" <+> pretty v <+> "==" <+> pretty val <> ": continue"
 pdope (OPGetArgsIf vs id f) =
 
     "try:" `above` (indent 4 $
@@ -173,27 +173,22 @@ printPlan :: Handle
 printPlan fh fa mu (r, cost, dope) = do         -- display plan
   hPutStrLn fh $ "# --"
   displayIO fh $ prefixSD "# " $ renderPretty 1.0 100
-                 $ (renderSpan $ fr_span r) <> line
+                 $ (prettySpanLoc $ fr_span r) <> line
   hPutStrLn fh $ "# Cost: " ++ (show cost)
   displayIO fh $ renderPretty 1.0 100
                  $ py fa mu r dope <> line
   hPutStrLn fh ""
 
-
-
-processFile fileName = do
-  fh <- openFile (fileName ++ ".plan") WriteMode
-  processFile_ fileName fh
-  hClose fh
-
+processFile fileName = bracket
+  (openFile (fileName ++ ".plan") WriteMode)
+  hClose
+  $ processFile_ fileName
 
 processFileStdout fileName = do
   processFile_ fileName stdout
 
-
 processFile_ fileName fh = do
   pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
-
   case pr of
     T.Failure td -> T.display td
     T.Success rs ->
@@ -235,21 +230,6 @@ processFile_ fileName fh = do
   valVar  = "_v"
 
 
--- TEST: processFile "examples/cky.dyna"
+-- TEST: processFileStdout "examples/cky.dyna"
 
-------------------------------------------------------------------------}}}
--- Experimental Residuals?                                              {{{
-
--- | Normalize all the rules in a file and emit S-exprs for the ANF
--- normalized form.
---
--- NOTE: This is used by bin/prototype.py
-normalizeFile file = do
-    contents <- B.readFile file
-    writeFile (file ++ ".anf")
-              (show $ vcat (map (\(P.LRule x T.:~ _) ->
-                                printANF $ normRule x)
-                                (unsafeParse P.dlines contents))
-                      <> line)
-    return ()
 ------------------------------------------------------------------------}}}

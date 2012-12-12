@@ -2,8 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- XXX contribute back to trifecta
 
+-- Header material                                                      {{{
 module Dyna.XXX.Trifecta (
-    identNL, pureSpanned, stringLiteralSQ, triInteract, renderSpan
+    identNL, pureSpanned, stringLiteralSQ, triInteract, prettySpanLoc
 ) where
 
 import           Control.Applicative
@@ -18,9 +19,12 @@ import           Text.Parser.Token.Highlight
 import           Text.Trifecta
 import           Text.Trifecta.Delta
 
-import           Text.PrettyPrint.Free ((<+>), above, indent)
+import qualified Text.PrettyPrint.Free               as PP
 
 -- import Debug.Trace
+
+------------------------------------------------------------------------}}}
+-- identNL                                                              {{{
 
 -- | Just like ident but without the "token $" prefix
 --
@@ -31,6 +35,9 @@ identNL s = try $ do
   name <- highlight (styleHighlight s) ((:) <$> styleStart s <*> many (styleLetter s) <?> styleName s)
   when (HashSet.member name (styleReserved s)) $ unexpected $ "reserved " ++ styleName s ++ " " ++ show name
   return name
+
+------------------------------------------------------------------------}}}
+-- String literal variants                                              {{{
 
 -- | Just like stringLiteral but with single quotes.
 --
@@ -87,6 +94,8 @@ number :: TokenParsing m => Integer -> m Char -> m Integer
 number base baseDigit =
   foldl' (\x d -> base*x + toInteger (digitToInt d)) 0 <$> some baseDigit
 
+------------------------------------------------------------------------}}}
+-- pureSpanned                                                          {{{
 
 -- | Just like "pure" but right here in the parsing state
 --
@@ -94,6 +103,8 @@ number base baseDigit =
 pureSpanned :: DeltaParsing m => a -> m (Spanned a)
 pureSpanned r = (liftA (r :~) $ Span <$> position <*> position <*> line)
 
+------------------------------------------------------------------------}}}
+-- Interaction                                                          {{{
 
 -- | A multi-line interaction mechanism, for the REPL.
 --
@@ -119,11 +130,13 @@ triInteract p c s f i = loop (feed (BU.fromString i) $ stepParser (release dd *>
 
 
 ------------------------------------------------------------------------}}}
--- Utilities                                                            {{{
+-- Diagnostic utilities                                                 {{{
 
-renderSpan (Span s e bs) =
-       prettyTerm s
-   <+> "-"
-   <+> prettyTerm e
-   <+> ":"
-   `above` (indent 2 (prettyTerm $ rendering s bs))
+-- XXX I'd really like (but cannot seem to get) the ability to suppress the
+-- file name if it's the same in both cases.  Stripping Directed to Lines
+-- results in the lie of "(interactive)".  In any case, this function is
+-- here as a placeholder for doing the right thing.
+prettySpanLoc :: Span -> PP.Doc e
+prettySpanLoc (Span s e l) = PP.pretty s PP.<> PP.char '-' PP.<> PP.pretty e
+
+------------------------------------------------------------------------}}}

@@ -92,7 +92,7 @@ import           Dyna.XXX.PPrint (valign)
 
 import qualified Data.Char as C
 
-import Dyna.XXX.Trifecta (renderSpan)
+import           Dyna.XXX.Trifecta (prettySpanLoc)
 
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
@@ -346,7 +346,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
                        x@(NTVar v) | v `elem` vs -> do
                             v' <- newAssign   "_x" (Left x)
                             return (vs,v':r)
-                       x@(NTVar v) -> do
+                       NTVar v -> do
                             return (v:vs,v:r)
                        _ -> do
                             v' <- newAssignNT "_x" x
@@ -404,19 +404,19 @@ runNormalize =
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
-printANF :: FRule -> Doc T.Effect
+printANF :: FRule -> Doc e
 printANF (FRule h a s result span
             (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
- --";;" <+> (renderSpan span) `above` 
- (
-   parens $ (pretty a)
+          text ";;" <+> prettySpanLoc span
+  `above`
+  ( parens $ (pretty a)
             <+> valign [ (pretty h)
                        , parens $ text "side"   <+> (valign $ map pretty s)
                        , parens $ text "evals"  <+> pev
                        , parens $ text "unifs"  <+> pun
                        , parens $ text "result" <+> (pretty result)
                        ]
-   )
+  ) <> line
   where
     pft :: FDT -> Doc e
     pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
