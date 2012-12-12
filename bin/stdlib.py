@@ -25,44 +25,14 @@ Call indirection
 
 """
 
-from debug import ultraTB2; ultraTB2.enable()
+#from debug import ultraTB2; ultraTB2.enable()
 #from debug import saverr; saverr.enable(editor=True)
 
-import os, sys, math, operator
+import os, sys
 from collections import defaultdict, Counter
 from utils import red, green, blue, magenta
 
-
-# Call indirection tables defines mathematical operators and the like.
-call = {'*/2': operator.mul,
-        '//2': operator.div,
-        '-/2': operator.sub,
-        '+/2': operator.add,
-
-        '-/1': operator.neg,
-
-#        '~/1': operator.inv,   # differs
-#        '|/1': operator.or_,
-#        '&/2': operator.and_,
-
-        # comparisons
-        '</2': operator.lt,
-        '<=/2': operator.le,
-        '>/2': operator.gt,
-        '>=/2': operator.ge,
-        '!=/2': operator.ne,
-        '==/2': operator.eq,
-
-#        '<</2': operator.lshift,
-#        '>>/2': operator.rshift,
-
-        'mod/1': operator.mod,
-        'abs/1': operator.abs,
-        'log': math.log,
-        'exp': math.exp,
-
-        '**/2': math.pow,
-        '^/2': math.pow}   # differs from python
+from defn import agg_bind, call
 
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
@@ -254,6 +224,22 @@ def emit(item, val):
 
 
 aggregator = defaultdict(Counter)
+
+def aggregate(item):
+    (fn, _) = item
+    return agg[fn](item)   # agg is defined after updates are loaded
+
+
+def delete(item, val):
+    # XXX: very ugly handling of deletion by global variable; should probably
+    # target only handler at a time, because this will get called more times
+    # than it should.
+    global _delete
+    _delete = True
+    update_dispatcher(item, val)
+    _delete = False
+
+
 agenda = set()
 
 
@@ -283,70 +269,6 @@ def run_agenda():
         update_dispatcher(item, now)
 
 
-agg = {}
-
-def aggregate(item):
-    (fn, _) = item
-    return aggr[agg[fn]](item)
-
-
-def max_equals(item):
-    return max(k for k, m in aggregator[item].iteritems() if m > 0)
-
-def min_equals(item):
-    return min(k for k, m in aggregator[item].iteritems() if m > 0)
-
-def plus_equals(item):
-    return reduce(operator.add,
-                  [k*m for k, m in aggregator[item].iteritems()])
-
-def times_equals(item):
-    return reduce(operator.mul,
-                  [k**m for k, m in aggregator[item].iteritems()])
-
-def and_equals(item):
-    return reduce(operator.and_,
-                  [k for k, m in aggregator[item].iteritems() if m > 0])
-
-def or_equals(item):
-    return reduce(operator.or_,
-                  [k for k, m in aggregator[item].iteritems() if m > 0])
-
-
-aggr = {
-    'max=': max_equals,
-    'min=': min_equals,
-    '+=': plus_equals,
-    '*=': times_equals,
-    '&=': and_equals,
-    '|=': or_equals,
-}
-
-
-def delete(item, val):
-    # XXX: very ugly handling of deletion by global variable; should probably
-    # target only handler at a time, because this will get called more times
-    # than it should.
-    global _delete
-    _delete = True
-    update_dispatcher(item, val)
-    _delete = False
-
-
-# Example of reactivity
-#  >>> emit(('rewrite/3', 5), -1000)
-#  >>> run_agenda()
-
-[dyna] = sys.argv[1:]
-
-cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
-assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
-
-execfile(dyna + '.plan')
-
-for xxx in initializer.handlers:
-    xxx()
-
 def run():
     try:
         run_agenda()
@@ -355,4 +277,29 @@ def run():
     finally:
         dump_charts()
 
+
+# Example of reactivity
+#  >>> emit(('rewrite/3', 5), -1000)
+#  >>> run_agenda()
+
+
+[dyna] = sys.argv[1:]
+
+cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
+assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
+
+agg_decl = None # filled in after exec, this only here to satisfy lint checker.
+
+
+execfile(dyna + '.plan')
+
+
+# bind aggregators to definitions
+agg = agg_bind(agg_decl, aggregator)
+
+# run initializers
+for init in initializer.handlers:
+    init()
+
+# start running the agenda
 run()
