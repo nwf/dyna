@@ -237,9 +237,6 @@ def _run():
 
         was = chart[fn].data[idx][-1]  # last cell is val
 
-        if was is not None:
-            delete(item, was)
-
         now = aggregate(item)   # compute new val for item
 
         print '    was %s  now %s' % (was, now)
@@ -247,6 +244,9 @@ def _run():
         if was == now:
             print '    unchanged'
             continue
+
+        if was is not None:
+            delete(item, was)
 
         chart[fn].data[idx][-1] = now
 
