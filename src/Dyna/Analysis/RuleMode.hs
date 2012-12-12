@@ -22,6 +22,7 @@ module Dyna.Analysis.RuleMode (
     adornedQueries
 ) where
 
+import           Control.Arrow (first)
 import           Control.Monad
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.List                  as L
@@ -133,12 +134,22 @@ cruxIsEval _              = False
 data DOpAMine = OPAssign        DVar        NTV                     --  -+
               | OPCheck         DVar        DVar                    --  ++
 
+              -- | Check that two dvars are not equal.  This is used to
+              -- prevent double-counting of hyper-edges when any of their
+              -- tails can be made to be the same item by specialization.
+              -- 
+              -- XXX While inspired by Blatz & Eisner 2006, it's unclear
+              -- that this is actually what we should be doing.  Oh well,
+              -- live and learn.
+              | OPCheckNE       DVar        DVar                    --  ++
+
               | OPGetArgsIf     [DVar]      DVar        DFunct      --  -+
               | OPBuild         DVar        [DVar]      DFunct      --  -+
 
                 -- XXX OPCall and OPIter are actually the same thing,
-                --     in the end.  OPCall is just the all-MB variant
-                --     of OPIner
+                --     in the end.  OPCall is just the MF+[MB] variant
+                --     of OPIter; at the moment we use them to distinguish
+                --     builtins, but that's wrong.
               | OPCall          DVar        [DVar]      DFunct      --  -+
               | OPIter          (ModedVar)  [ModedVar]  DFunct      --  ??
               | OPIndirEval     DVar        DVar                    --  -+
@@ -153,6 +164,7 @@ detOfDop :: DOpAMine -> Det
 detOfDop x = case x of
                OPAssign _ _        -> Det
                OPCheck _ _         -> DetSemi
+               OPCheckNE _ _       -> DetSemi
                OPGetArgsIf _ _ _   -> DetSemi
                OPBuild _ _ _       -> Det
                OPIndirEval _ _     -> DetSemi
@@ -299,6 +311,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
     OPCheck _ _         -> -1 -- Checks are issued with Assigns, so
                               -- counter-act the cost to encourage them
                               -- to be earlier in the plan.
+    OPCheckNE _ _       -> 0
     OPGetArgsIf _ _ _   -> 0
     OPBuild _ _ _       -> 1  -- Upweight building due to side-effects
                               -- in the intern table
@@ -315,23 +328,38 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 ------------------------------------------------------------------------}}}
 -- Planning                                                             {{{
 
-data PartialPlan = PP { pp_cruxes :: S.Set (Crux DVar NTV)
-                      , pp_binds  :: BindChart
-                      , pp_restricted :: Bool
-                      , pp_score  :: Cost
-                      , pp_plan   :: Action
+data PartialPlan = PP { pp_cruxes         :: S.Set (Crux DVar NTV)
+                      , pp_binds          :: BindChart
+                      , pp_restrictSearch :: Bool
+                      , pp_score          :: Cost
+                      , pp_plan           :: Action
                       }
 
-stepPartialPlan :: (Crux (ModedVar) (ModedNT) -> [Action])
+stepPartialPlan ::
+                   -- | Possible actions
+                   (Crux (ModedVar) (ModedNT) -> [Action])
+
+                   -- | Plan scoring function
                 -> (PartialPlan -> Action -> Cost)
+
+                    -- | The 'DFunctAr', intern representation, and
+                    -- result variable of the
+                    -- initial /evaluation/ crux, if any.  This is used to
+                    -- avoid double-counting during updates.
+                    --
+                    -- Cruxes are implicitly ordered by the name of their
+                    -- evaluation variable, so we can easily look to see if
+                    -- a given crux is "before" or "after" the initial one
+                    -- in this ordering.
+                -> Maybe (DFunctAr, DVar, DVar)
                 -> PartialPlan
                 -> Either (Cost, Action) [PartialPlan]
-stepPartialPlan steps score p =
+stepPartialPlan steps score mic p =
   if S.null (pp_cruxes p)
    then Left $ (pp_score p, pp_plan p)
    else Right $
     let rc = pp_cruxes p
-    in if pp_restricted p
+    in if pp_restrictSearch p
        -- XXX I am not sure this is right
        --
        --     force consideration of non-evaluation cruxes if
@@ -353,30 +381,47 @@ stepPartialPlan steps score p =
                       plans = steps (cruxMode bc crux)
                       bc' = bc `S.union` cruxVars crux
                       rc' = S.delete crux (pp_cruxes p)
-                      r'  = (not $ cruxIsEval crux) || (pp_restricted p)
-                  in map (\act -> PP rc' bc' r' (score p act) (pl ++ act))
+                      r'  = (not $ cruxIsEval crux) || (pp_restrictSearch p)
+                  in map (\act -> let act' = handleConflictors act
+                                  in PP rc' bc' r' (score p act') (pl ++ act'))
                          plans
                    ) ++ ps
                 ) []
 
-stepAgenda st sc = go [] . (\x -> [x])
+   handleConflictors =
+     case mic of
+       Nothing -> id
+       Just ((f,a),i,ov) -> concatMap $ \dop ->
+         case dop of
+           OPIter ov' ivs' f' |  f' == f
+                              && length ivs' == a
+                              && ov > varOfMV ov'
+                              -> let cv = "_chk"
+                                 in [ dop
+                                    , OPBuild cv (map varOfMV ivs') f'
+                                    , OPCheckNE i cv
+                                    ]
+           _ -> [dop]
+
+stepAgenda st sc mic = go [] . (\x -> [x])
  where
   go [] []     = []
   go (r:rs) [] = go rs r
-  go rs (p:ps) = case stepPartialPlan st sc p of
+  go rs (p:ps) = case stepPartialPlan st sc mic p of
                     Left df -> df : (go rs ps)
                     Right ps' -> go (ps':rs) ps
 
-initialPlanForCrux :: (Crux DVar a, DVar, DVar) -> Action
-initialPlanForCrux (cr, hi, v) = case cr of
-  CFCall o is f -> [ OPGetArgsIf is hi f, OPAssign o (NTVar v) ]
+-- XXX we're going to need to initially plan a unification crux as part of
+-- backward chaining, but we don't yet.
+initializeForCrux :: (Crux DVar a, DVar, DVar)
+                  -> ((DFunctAr, DVar, DVar), Action)
+initializeForCrux (cr, hi, v) = case cr of
+  CFCall o is f -> ( ((f,length is), hi, o)
+                   , [ OPGetArgsIf is hi f, OPAssign o (NTVar v) ])
   _             -> error "Don't know how to initially plan !CFCall"
 
 -- | Given a normalized form and an initial crux, saturate the graph and
 --   get a plan for doing so.
---
--- XXX If the intial entrypoint is nonlinear, we need to insert some
--- checks into the plan.  Fixing that is moderately invasive...
 --
 -- XXX This has no idea what to do about non-range-restricted rules.
 plan_ :: (Crux (ModedVar) (ModedNT) -> [Action]) -- ^ Available steps
@@ -389,14 +434,15 @@ plan_ :: (Crux (ModedVar) (ModedNT) -> [Action]) -- ^ Available steps
 plan_ st sc anf mi =
   let cruxes =    eval_cruxes anf
                ++ unif_cruxes anf
+      (mic,ip) = maybe (Nothing, []) (first Just . initializeForCrux) mi
       initPlan = PP { pp_cruxes = maybe id (\(c,_,_) -> S.delete c) mi
                                   $ S.fromList cruxes
                     , pp_binds  = maybe S.empty (\(c,_,_) -> cruxVars c) mi
-                    , pp_restricted = False
+                    , pp_restrictSearch = False
                     , pp_score  = 0
-                    , pp_plan   = maybe [] initialPlanForCrux mi
+                    , pp_plan   = ip
                     }
-  in stepAgenda st sc initPlan
+  in stepAgenda st sc mic initPlan
 
 plan :: (Crux (ModedVar) (ModedNT) -> [Action])
      -> (PartialPlan -> Action -> Cost)

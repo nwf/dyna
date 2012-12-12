@@ -77,6 +77,7 @@ pdope :: DOpAMine -> Doc e
 pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
 pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
 pdope (OPCheck v val) = "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
+pdope (OPCheckNE v val) = "if" <+> pretty v <+> "==" <+> pretty val <> ": continue"
 pdope (OPGetArgsIf vs id f) =
 
     "try:" `above` (indent 4 $
