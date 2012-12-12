@@ -136,6 +136,9 @@ data DOpAMine = OPAssign        DVar        NTV                     --  -+
               | OPGetArgsIf     [DVar]      DVar        DFunct      --  -+
               | OPBuild         DVar        [DVar]      DFunct      --  -+
 
+                -- XXX OPCall and OPIter are actually the same thing,
+                --     in the end.  OPCall is just the all-MB variant
+                --     of OPIner
               | OPCall          DVar        [DVar]      DFunct      --  -+
               | OPIter          (ModedVar)  [ModedVar]  DFunct      --  ??
               | OPIndirEval     DVar        DVar                    --  -+
@@ -156,8 +159,8 @@ detOfDop x = case x of
                OPCall _ _ _        -> Det
                OPIter o is _       -> -- XXX
                  case (modeOf o, foldr min MBound (map modeOf is)) of
-                   (MFree, MBound) -> DetSemi
-                   _               -> DetNon
+                   (_, MBound) -> DetSemi
+                   _           -> DetNon
 
 ------------------------------------------------------------------------}}}
 -- Actions                                                              {{{
@@ -296,10 +299,12 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
     OPCheck _ _         -> -1 -- Checks are issued with Assigns, so
                               -- counter-act the cost to encourage them
                               -- to be earlier in the plan.
-    OPGetArgsIf _ _ _   -> 1
-    OPBuild _ _ _       -> 1
-    OPCall _ _ _        -> 1
-    OPIter o is _       -> 2 * (fromIntegral $ length $ filter isFree (o:is))
+    OPGetArgsIf _ _ _   -> 0
+    OPBuild _ _ _       -> 1  -- Upweight building due to side-effects
+                              -- in the intern table
+    OPCall _ _ _        -> 0
+    OPIter o is _       -> 2 ** (fromIntegral $ length $ filter isFree (o:is))
+                           - 1
     OPIndirEval _ _     -> 100
 
   loops = fromIntegral . length . filter isLoop
@@ -312,6 +317,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 
 data PartialPlan = PP { pp_cruxes :: S.Set (Crux DVar NTV)
                       , pp_binds  :: BindChart
+                      , pp_restricted :: Bool
                       , pp_score  :: Cost
                       , pp_plan   :: Action
                       }
@@ -325,7 +331,7 @@ stepPartialPlan steps score p =
    then Left $ (pp_score p, pp_plan p)
    else Right $
     let rc = pp_cruxes p
-    in 
+    in if pp_restricted p
        -- XXX I am not sure this is right
        --
        --     force consideration of non-evaluation cruxes if
@@ -336,9 +342,10 @@ stepPartialPlan steps score p =
        --     This prevents us from considering the multitude
        --     stupid plans that begin by evaluating when they
        --     don't have to.
-       case step (S.filter (not . cruxIsEval) rc) of
-         [] -> step (S.filter cruxIsEval rc)
-         xs -> [argmin (flip score []) xs]
+       then case step (S.filter (not . cruxIsEval) rc) of
+              [] -> step (S.filter cruxIsEval rc)
+              xs -> [argmin (flip score []) xs]
+       else step rc
  where
    step = S.fold (\crux ps -> (
                   let bc = pp_binds p
@@ -346,12 +353,13 @@ stepPartialPlan steps score p =
                       plans = steps (cruxMode bc crux)
                       bc' = bc `S.union` cruxVars crux
                       rc' = S.delete crux (pp_cruxes p)
-                  in map (\act -> PP rc' bc' (score p act) (pl ++ act))
+                      r'  = (not $ cruxIsEval crux) || (pp_restricted p)
+                  in map (\act -> PP rc' bc' r' (score p act) (pl ++ act))
                          plans
                    ) ++ ps
                 ) []
 
-stepAgenda st sc = go []
+stepAgenda st sc = go [] . (\x -> [x])
  where
   go [] []     = []
   go (r:rs) [] = go rs r
@@ -384,10 +392,11 @@ plan_ st sc anf mi =
       initPlan = PP { pp_cruxes = maybe id (\(c,_,_) -> S.delete c) mi
                                   $ S.fromList cruxes
                     , pp_binds  = maybe S.empty (\(c,_,_) -> cruxVars c) mi
+                    , pp_restricted = False
                     , pp_score  = 0
                     , pp_plan   = maybe [] initialPlanForCrux mi
                     }
-  in stepAgenda st sc [initPlan]
+  in stepAgenda st sc initPlan
 
 plan :: (Crux (ModedVar) (ModedNT) -> [Action])
      -> (PartialPlan -> Action -> Cost)
@@ -457,13 +466,10 @@ run = mapM_ (\(c,msp) -> do
                 putStrLn $ show c
                 case msp of
                   []  -> putStrLn "NO PLAN"
-                  sps -> putStrLn $ show $ length sps
-                  {-
-                         forM_ sps $ \(s,p) -> do
+                  sps -> forM_ sps $ \(s,p) -> do
                                         putStrLn $ "\n\nSCORE: " ++ show s
                                         forM_ p (putStrLn . show)
-                  -}
                 putStrLn "")
-       . take 1 . testPlanRule
+       . testPlanRule
 
 ------------------------------------------------------------------------}}}
