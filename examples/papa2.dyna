@@ -4,9 +4,9 @@
 phrase(X,I,K,t(X,TY)) += phrase(Y,I,K,TY) * rewrite(X,Y).
 phrase(X,I,K,t(X,TY,TZ)) += phrase(Y,I,J,TY) * phrase(Z,J,K,TZ) * rewrite(X,Y,Z).
 
-goal(P) = phrase("S",0,*length,P).
+goal(P) += phrase("S", 0, *length, P).
 
-length max= word(_, I), I.
+length max= word(_, I), I+1.
 
 % grammar rules
 rewrite( "S",   "S",  ".") += 1.

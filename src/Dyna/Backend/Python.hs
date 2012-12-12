@@ -206,8 +206,10 @@ processFile_ fileName fh = do
                    Left e -> throw $ TLEAggPlan e
                    Right x -> return x
 
-         forM (M.toList aggm) $ \(k,v) -> do {
-             hPutStrLn fh $ "# " ++ (show k) ++ "->" ++ show v
+         hPutStrLn fh $ "agg = {}"
+         forM (M.toList aggm) $ \((f,a),v) -> do {
+             hPutStrLn fh $ show $ "agg" <> brackets (dquotes $ pretty f <> "/" <> pretty a)
+                <+> equals <+> (dquotes $ pretty v)
            }
 
          cPlans <- return $! combinePlans                  -- crux plans

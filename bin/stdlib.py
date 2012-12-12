@@ -83,7 +83,7 @@ def dump_charts():
     for x in chart:
         print x
         for idx, row in chart[x].data.items():
-            print '%-30s := %s' % (pretty((x,idx)), row[-1])
+            print '%s: %-30s := %s' % (idx, pretty((x,idx)), row[-1])
         print
 
 
@@ -285,28 +285,34 @@ def run_agenda():
         update_dispatcher(item, now)
 
 
+agg = {}
+
 def aggregate(item):
-    print '    aggregate:', pretty(item), aggregator[item],
-    val = 0.0  # need identity element or do a "fold1"
-    for k, multiplicity in aggregator[item].iteritems():
-        assert multiplicity >= 0, "negative multiplicity: this should never happen."
-        val += k*multiplicity         # val*multiplicity; TODO: use correct aggregator
-    print 'result:', val
-    return val
+    (fn, _) = item
+    return aggr[agg[fn]](item)
 
 
 def max_equals(item):
-    raise NotImplementedError
+    return max(k for k, m in aggregator[item].iteritems() if m > 0)
+
 def min_equals(item):
-    raise NotImplementedError
+    return min(k for k, m in aggregator[item].iteritems() if m > 0)
+
 def plus_equals(item):
-    raise NotImplementedError
+    return reduce(operator.add,
+                  [k*m for k, m in aggregator[item].iteritems()])
+
 def times_equals(item):
-    raise NotImplementedError
+    return reduce(operator.mul,
+                  [k**m for k, m in aggregator[item].iteritems()])
+
 def and_equals(item):
-    raise NotImplementedError
+    return reduce(operator.and_,
+                  [k for k, m in aggregator[item].iteritems() if m > 0])
+
 def or_equals(item):
-    raise NotImplementedError
+    return reduce(operator.or_,
+                  [k for k, m in aggregator[item].iteritems() if m > 0])
 
 
 aggr = {
@@ -326,6 +332,10 @@ def delete(item, val):
     update_dispatcher(item, val)
     _delete = False
 
+
+# Example of reactivity
+#  >>> emit(('rewrite/3', 5), -1000)
+#  >>> run_agenda()
 
 [dyna] = sys.argv[1:]
 
