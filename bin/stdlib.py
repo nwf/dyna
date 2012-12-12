@@ -1,28 +1,6 @@
 """
 Work in progress: standard library of "stuff" the "dyna executable" will make
 use of.
-
-Misc doctests
--------------
-
-Call indirection
-================
-
- >>> call['*/2'](3,4)
- 12
-
- >>> call['*/2']('a',4)   # string*int
- 'aaaa'
-
- >>> call['+/2']('a','b')   # string+string
- 'ab'
-
- >>> call['//2'](3,4)    # integer division
- 0
-
- >>> call['//2'](3.0,4)
- 0.75
-
 """
 
 #from debug import ultraTB2; ultraTB2.enable()
@@ -52,8 +30,12 @@ def dump_charts():
     print '============'
     for x in chart:
         print x
-        for idx, row in chart[x].data.items():
-            print '%s: %-30s := %s' % (idx, pretty((x,idx)), row[-1])
+
+        zzz = [(pretty((x,idx)), idx, row, row[-1]) for idx, row in chart[x].data.items()]
+        zzz.sort()
+
+        for p, i, _, v in zzz:
+            print '%s: %-30s := %s' % (i, p, v)
         print
 
 
@@ -93,7 +75,7 @@ class Chart(object):
 
     def insert(self, args):
 
-        # debug: simple integrity check
+        # debugging check: row is not already in chart.
         assert self.lookup(*args[:-1]) is None, '%s already in chart' % (args,)
 
         idx = self.next_id()
@@ -106,7 +88,6 @@ class Chart(object):
         return idx
 
 
-# TODO: (functor, idx) pairs aren't nice to look at.
 def pretty(item):
     "Pretty print a term. Will retrieve the complete (ground) term for the chart."
     if not isinstance(item, tuple):
@@ -166,6 +147,7 @@ register.handlers = defaultdict(list)
 
 
 def initializer(_):
+    "Same idea as register"
 
     def wrap(handler):
         initializer.handlers.append(handler)
@@ -176,21 +158,21 @@ def initializer(_):
 initializer.handlers = []
 
 
-def update_dispatcher((fn, idx), val):
+def update_dispatcher(item, val):
     """
     Passes update to relevant handlers.
     """
-    print 'dispatch', pretty((fn, idx)), '=', val
+    (fn, _) = item
+    print 'dispatch', pretty(item), '=', val
     for handler in register.handlers[fn]:
         print 'handler'
-        handler((fn, idx), val)
+        handler(item, val)
 
 
 def peel(fn, x):
     """
-    Lookup `idx` in the intern table. Asserts that idx matches
-    `functor_arity`. Returns arguments of term as a arity-tuple of intern idxs and
-    constants.
+    Lookup `idx` in the intern table. Asserts that idx matches functor/arity,
+    `fn`. Returns the arguments of term as a tuple of intern idxs and constants.
     """
     assert isinstance(x, tuple)
     (fa, idx) = x
@@ -223,13 +205,6 @@ def emit(item, val):
     agenda.add(item)
 
 
-aggregator = defaultdict(Counter)
-
-def aggregate(item):
-    (fn, _) = item
-    return agg[fn](item)   # agg is defined after updates are loaded
-
-
 def delete(item, val):
     # XXX: very ugly handling of deletion by global variable; should probably
     # target only handler at a time, because this will get called more times
@@ -240,10 +215,19 @@ def delete(item, val):
     _delete = False
 
 
+
+aggregator = defaultdict(Counter)
+
+def aggregate(item):
+    (fn, _) = item
+    return agg[fn](item)   # agg is defined after updates are loaded
+
+
+
 agenda = set()
 
 
-def run_agenda():
+def _run():
     "the main loop"
     while agenda:
         (fn, idx) = item = agenda.pop()
@@ -271,7 +255,7 @@ def run_agenda():
 
 def run():
     try:
-        run_agenda()
+        _run()
     except KeyboardInterrupt:
         pass
     finally:

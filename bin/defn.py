@@ -1,4 +1,28 @@
+"""
+Misc doctests
+-------------
+
+Call indirection
+================
+
+ >>> call['*/2'](3,4)
+ 12
+
+ >>> call['*/2']('a',4)   # string*int
+ 'aaaa'
+
+ >>> call['+/2']('a','b')   # string+string
+ 'ab'
+
+ >>> call['//2'](3,4)    # integer division
+ 0
+
+ >>> call['//2'](3.0,4)
+ 0.75
+"""
+
 import math, operator
+from collections import defaultdict, Counter
 
 # Call indirection tables defines mathematical operators and the like.
 call = {'*/2': operator.mul,
