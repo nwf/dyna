@@ -205,12 +205,42 @@ def main(dynafile):
         print >> html, '<style>'
         print >> html, '.box, pre { border: 1px solid #eee; margin: 10px; padding: 10px;}'
         print >> html, 'h2 { margin-top: 40px; }'
+        print >> html, 'a { cursor: pointer; }'
         print >> html, '</style>'
+
+        print >> html, """\
+<script type="text/javascript" language="javascript" src="../../bin/prototype.js"></script>
+
+<script type="text/javascript" language="javascript">
+
+function selectline(lineno) {
+  $("update-handler-pane").innerHTML = "";
+  $$(".handler-" + lineno).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
+}
+
+</script>
+"""
 
         print >> html, '<h1>%s</h1>' % dynafile
 
         print >> html, '<h2>Dyna source</h2>'
-        print >> html, '<pre>\n%s\n</pre>' % code.strip()
+
+        print >> html, '<div style="float:left; width: 50%;">'
+
+        print >> html, '<pre>'
+        with file(dynafile) as f:
+            for lineno, line in enumerate(f, start=1):
+                print >> html, '<a onclick="selectline(%s)">%s</a>' % (lineno, line.rstrip())
+        print >> html, '</pre>'
+
+        print >> html, '</div>'
+
+        print >> html, '<div id="update-handler-pane" style="float:right; width: 50%;">'
+
+        print >> html, '</div>'
+
+
+        print >> html, '<div style="clear:both;"></div>'
 
         anf = toANF(code)
 
