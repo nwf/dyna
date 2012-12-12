@@ -92,6 +92,8 @@ import           Dyna.XXX.PPrint (valign)
 
 import qualified Data.Char as C
 
+import Dyna.XXX.Trifecta (renderSpan)
+
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
 
@@ -402,10 +404,11 @@ runNormalize =
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
-printANF :: FRule -> Doc e
+printANF :: FRule -> Doc T.Effect
 printANF (FRule h a s result span
             (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
- ";;" <+> (text $ show span) `above` (
+ --";;" <+> (renderSpan span) `above` 
+ (
    parens $ (pretty a)
             <+> valign [ (pretty h)
                        , parens $ text "side"   <+> (valign $ map pretty s)

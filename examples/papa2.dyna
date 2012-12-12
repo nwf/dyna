@@ -1,0 +1,35 @@
+% Parsing a simple sentence.
+
+% CKY-like parsing
+phrase(X,I,K,t(X,TY)) += phrase(Y,I,K,TY) * rewrite(X,Y).
+phrase(X,I,K,t(X,TY,TZ)) += phrase(Y,I,J,TY) * phrase(Z,J,K,TZ) * rewrite(X,Y,Z).
+
+% grammar rules
+rewrite( "S",   "S",  ".") += 1.
+rewrite( "S",  "NP", "VP") += 1.
+rewrite("NP", "Det",  "N") += 1.
+rewrite("NP",  "NP", "PP") += 1.
+rewrite("VP",   "V", "NP") += 1.
+rewrite("VP",  "VP", "PP") += 1.
+rewrite("PP",   "P", "NP") += 1.
+
+rewrite( "NP",   "Papa") += 1.
+rewrite(  "N", "caviar") += 1.
+rewrite(  "N",  "spoon") += 1.
+rewrite(  "V",    "ate") += 1.
+rewrite(  "P",   "with") += 1.
+rewrite("Det",    "the") += 1.
+rewrite("Det",      "a") += 1.
+
+% sentence
+% "Papa at the caviar with the spoon ."
+word(  "Papa", 0) .
+word(   "ate", 1) .
+word(   "the", 2) .
+word("caviar", 3) .
+word(  "with", 4) .
+word(     "a", 5) .
+word( "spoon", 6) .
+word(     ".", 7) .
+
+phrase(W, I, I+1, W) += 1 whenever word(W, I).

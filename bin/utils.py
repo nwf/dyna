@@ -49,8 +49,15 @@ def parse_sexpr(e):
 def read_anf(e):
     x = parse_sexpr(e)
 
+    def _g(x):
+#        return [(var, val[0], val[1:]) for var, val in x]
+        for var, val in x:
+            if isinstance(val, list):
+                yield (var, val[0], val[1:])
+            else:
+                yield (var, val, [])
     def g(x):
-        return [(var, val[0], val[1:]) for var, val in x]
+        return list(_g(x))
 
     for (agg, head, side, evals, unifs, [_,result]) in x:
         yield (agg,
