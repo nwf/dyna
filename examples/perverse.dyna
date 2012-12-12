@@ -1,0 +1,11 @@
+%%% Free rules
+% f(1) := log(3)*2.
+% f(&g(2)) := 1.
+
+%%% Side conditions
+h(X) := 1 whenever X is f(1).
+%%% Side conditions and unifications
+% h(X) := 1 whenever X is f(1), X is f(2).
+
+%%% Binops
+% goal :- a & b.
