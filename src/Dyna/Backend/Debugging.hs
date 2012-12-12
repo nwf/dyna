@@ -29,8 +29,8 @@ normalizeFile_ file oh = do
     T.Success rs -> mapM_ (PP.hPutDoc oh)
                     $ map (\(P.LRule x T.:~ _) -> printANF $ normRule x) rs
 
-normalizeFile i o = bracket
-  (openFile o WriteMode)
+normalizeFile i = bracket
+  (openFile (i++".anf") WriteMode)
   (hClose)
   $ normalizeFile_ i
 
