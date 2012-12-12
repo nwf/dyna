@@ -67,6 +67,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Dyna.Analysis.ANF (
     ANFState(..), NT(..), FDT, NTV, ENF, EVF, FRule(..),
@@ -161,7 +162,7 @@ data ANFState = AS
               , as_evals :: M.Map DVar EVF
               , as_assgn :: M.Map DVar ENF
               , as_unifs :: [(DVar,DVar)]
-              , as_annot :: M.Map DVar [T.Spanned (Annotation DTerm)]
+              , as_annot :: M.Map DVar [Annotation (T.Spanned P.Term)]
               , as_warns :: [(B.ByteString, [T.Span])]
               }
  deriving (Show)
@@ -187,7 +188,7 @@ newAssign pfx t = do
     return n
 
 newAnnot :: (MonadState ANFState m)
-         => DVar -> T.Spanned (Annotation DTerm) -> m ()
+         => DVar -> Annotation (T.Spanned P.Term) -> m ()
 newAnnot v a = do
     modify (\s -> s { as_annot = mapInOrApp v a (as_annot s) })
 
@@ -318,13 +319,13 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
         _          -> do
                        NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
 
--- Annotations are stripped of their span information
+-- Annotations 
 --
 -- XXX this is probably the wrong thing to do
 normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
-    nt <- normTerm_ c (st:ss) t
-    -- return $ UTerm $ TAnnot (fmap unspan a) nt
-    undefined -- XXX!!!
+    v <- normTerm_ c (st:ss) t >>= newAssignNT "_a"
+    newAnnot v a
+    return (NTVar v)
 
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
@@ -334,7 +335,21 @@ normTerm_ c   ss (P.TFunctor f as) = do
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
-    normas' <- mapM (newAssignNT "_x") normas
+    -- Convert everything to DVars and, while here, do a linearization
+    -- pass to strip duplicate vars out.  We need pattern matching to be
+    -- linear-with-checks in later pipeline stages so that we can, for
+    -- example, correctly reject updates that are not the right shape.
+    normas' <- let delin (vs,r) x = do
+                     case x of
+                       x@(NTVar v) | v `elem` vs -> do
+                            v' <- newAssign   "_x" (Left x)
+                            return (vs,v':r)
+                       x@(NTVar v) -> do
+                            return (v:vs,v:r)
+                       _ -> do
+                            v' <- newAssignNT "_x" x
+                            return (vs,v':r)
+               in (reverse . snd) `fmap` foldM delin ([],[]) normas
 
     selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
 
