@@ -24,19 +24,24 @@ class chart_indirect(dict):
 
 chart = chart_indirect()
 
-def dump_charts():
-    print
-    print 'Charts'
-    print '============'
-    for x in chart:
-        print x
+def dump_charts(out=sys.stdout):
+    print >> out
+    print >> out, 'Charts'
+    print >> out, '============'
 
-        zzz = [(pretty((x,idx)), idx, row, row[-1]) for idx, row in chart[x].data.items()]
-        zzz.sort()
+    fns = chart.keys()
+    fns.sort()
 
-        for p, i, _, v in zzz:
-            print '%s: %-30s := %s' % (i, p, v)
-        print
+    for x in fns:
+        print >> out, x
+        print >> out, '====================================='
+
+        rows = [(pretty((x,idx)), idx, row, row[-1]) for idx, row in chart[x].data.items()]
+        rows.sort()
+
+        for p, _, _, v in rows:
+            print >> out, '%-30s := %s' % (p, v)
+        print >> out
 
 
 class Chart(object):
@@ -96,7 +101,10 @@ def pretty(item):
     row = chart[fn].data[idx]
     args = row[:-1]
     fn = ''.join(fn.split('/')[:-1])  # drop arity from name.
-    return '%s(%s)' % (fn, ','.join(map(pretty, args)))
+    pretty_args = map(pretty, args)
+    if not len(pretty_args):          # zero arity -> no parens.
+        return fn
+    return '%s(%s)' % (fn, ','.join(pretty_args))
 
 
 def prettify(x):
@@ -260,6 +268,10 @@ def run():
         pass
     finally:
         dump_charts()
+
+        with file(dyna + '.chart', 'wb') as f:
+            dump_charts(f)
+
 
 
 # Example of reactivity
