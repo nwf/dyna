@@ -25,7 +25,7 @@ Call indirection
 
 """
 
-#from debug import ultraTB2; ultraTB2.enable()
+from debug import ultraTB2; ultraTB2.enable()
 #from debug import saverr; saverr.enable(editor=True)
 
 import os, sys, math, operator
@@ -222,11 +222,9 @@ def peel(fn, x):
     `functor_arity`. Returns arguments of term as a arity-tuple of intern idxs and
     constants.
     """
-    if not isinstance(x, tuple):
-        return None
+    assert isinstance(x, tuple)
     (fa, idx) = x
-    if fa != fn:
-        return None
+    assert fa == fn
     return chart[fn].data[idx][:-1]  # minus val
 
 
@@ -278,7 +276,7 @@ def run_agenda():
 
         if was == now:
             print '    unchanged'
-            return
+            continue
 
         chart[fn].data[idx][-1] = now
 
@@ -326,7 +324,9 @@ aggr = {
 
 
 def delete(item, val):
-    # XXX: very ugly handling of deletion
+    # XXX: very ugly handling of deletion by global variable; should probably
+    # target only handler at a time, because this will get called more times
+    # than it should.
     global _delete
     _delete = True
     update_dispatcher(item, val)
@@ -347,6 +347,12 @@ execfile(dyna + '.plan')
 for xxx in initializer.handlers:
     xxx()
 
-run_agenda()
+def run():
+    try:
+        run_agenda()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        dump_charts()
 
-dump_charts()
+run()

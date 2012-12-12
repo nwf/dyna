@@ -85,7 +85,7 @@ pdope (OPGetArgsIf vs id f) =
                 <> "peel" <> (parens $ fa f vs <> comma <> pretty id)
      )
 
-    `above` "except TypeError: continue"   -- you'll get a "TypeError: 'NoneType' is not iterable."
+    `above` "except (TypeError, AssertionError): continue"   -- you'll get a "TypeError: 'NoneType' is not iterable."
 
 
 pdope (OPBuild v vs f) = pretty v <+> equals
@@ -103,7 +103,7 @@ pdope (OPIter o m f) =
 fa f a = dquotes $ pretty f <> "/" <> (text $ show $ length a)
 
 -- this comes up because can't assign to ()
-tupledOrUnderscore vs = if length vs > 0 then tupled (map pretty vs) else text "_"
+tupledOrUnderscore vs = if length vs > 0 then parens ((sepBy "," $ map pretty vs) <> ",") else text "_"
 
 pslice vs = brackets $
        sepBy "," (map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v) vs)
