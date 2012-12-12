@@ -40,15 +40,8 @@ import           System.IO
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
-------------------------------------------------------------------------}}}
--- Utilities                                                            {{{
+import Dyna.XXX.Trifecta (renderSpan)
 
-renderSpan (T.Span s e bs) =
-       T.prettyTerm s
-   <+> char '-'
-   <+> T.prettyTerm e
-   <+> colon
-   `above` (indent 2 (T.prettyTerm $ T.rendering s bs))
 
 ------------------------------------------------------------------------}}}
 -- Top Level Exceptions                                                 {{{

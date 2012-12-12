@@ -1,8 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- XXX contribute back to trifecta
 
 module Dyna.XXX.Trifecta (
-    identNL, pureSpanned, stringLiteralSQ, triInteract
+    identNL, pureSpanned, stringLiteralSQ, triInteract, renderSpan
 ) where
 
 import           Control.Applicative
@@ -16,6 +17,8 @@ import qualified Data.Semigroup.Reducer              as R
 import           Text.Parser.Token.Highlight
 import           Text.Trifecta
 import           Text.Trifecta.Delta
+
+import           Text.PrettyPrint.Free ((<+>), above, indent)
 
 -- import Debug.Trace
 
@@ -115,3 +118,12 @@ triInteract p c s f i = loop (feed (BU.fromString i) $ stepParser (release dd *>
      dd = Directed (BU.fromString "interactive") 0 0 0 0
 
 
+------------------------------------------------------------------------}}}
+-- Utilities                                                            {{{
+
+renderSpan (Span s e bs) =
+       prettyTerm s
+   <+> "-"
+   <+> prettyTerm e
+   <+> ":"
+   `above` (indent 2 (prettyTerm $ rendering s bs))
