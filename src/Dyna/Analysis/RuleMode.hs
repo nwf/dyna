@@ -27,11 +27,12 @@ import qualified Data.ByteString.Char8      as BC
 import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
-import qualified Data.Ord                   as O
 import qualified Data.Set                   as S
+import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as DP
+import           Dyna.XXX.DataUtils(argmin)
 import           Dyna.XXX.TrifectaTest
 
 ------------------------------------------------------------------------}}}
@@ -115,6 +116,11 @@ cruxVars cr = case cr of
   CFAssign o _           -> S.singleton o
   CFEval   o i           -> S.fromList [o,i]
   CFUnif   o i           -> S.fromList [o,i]
+
+cruxIsEval :: Crux a b -> Bool
+cruxIsEval (CFEval _ _)   = True
+cruxIsEval (CFCall _ _ _) = True
+cruxIsEval _              = False
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine                                                             {{{
@@ -287,7 +293,9 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
   stepCost :: DOpAMine -> Double
   stepCost x = case x of
     OPAssign _ _        -> 1
-    OPCheck _ _         -> 2
+    OPCheck _ _         -> -1 -- Checks are issued with Assigns, so
+                              -- counter-act the cost to encourage them
+                              -- to be earlier in the plan.
     OPGetArgsIf _ _ _   -> 1
     OPBuild _ _ _       -> 1
     OPCall _ _ _        -> 1
@@ -317,16 +325,31 @@ stepPartialPlan steps score p =
    then Left $ (pp_score p, pp_plan p)
    else Right $
     let rc = pp_cruxes p
-    in  S.fold (\crux ps -> (
-                let bc = pp_binds p
-                    pl = pp_plan  p
-                    plans = steps (cruxMode bc crux)
-                    bc' = bc `S.union` cruxVars crux
-                    rc' = S.delete crux rc
-                in map (\act -> PP rc' bc' (score p act) (pl ++ act))
-                       plans
-                 ) ++ ps
-               ) [] rc
+    in 
+       -- XXX I am not sure this is right
+       --
+       --     force consideration of non-evaluation cruxes if
+       --     any nonevaluation crux has a possible move.
+       --     If a non-evaluation plan exists, commit to its
+       --     cheapest choice as the only option here.
+       --
+       --     This prevents us from considering the multitude
+       --     stupid plans that begin by evaluating when they
+       --     don't have to.
+       case step (S.filter (not . cruxIsEval) rc) of
+         [] -> step (S.filter cruxIsEval rc)
+         xs -> [argmin (flip score []) xs]
+ where
+   step = S.fold (\crux ps -> (
+                  let bc = pp_binds p
+                      pl = pp_plan p
+                      plans = steps (cruxMode bc crux)
+                      bc' = bc `S.union` cruxVars crux
+                      rc' = S.delete crux (pp_cruxes p)
+                  in map (\act -> PP rc' bc' (score p act) (pl ++ act))
+                         plans
+                   ) ++ ps
+                ) []
 
 stepAgenda st sc = go []
  where
@@ -374,7 +397,7 @@ plan :: (Crux (ModedVar) (ModedNT) -> [Action])
 plan st sc anf mi =
   (\x -> case x of
                 [] -> Nothing
-                plans -> Just $ L.minimumBy (O.comparing fst) plans)
+                plans -> Just $ argmin fst plans)
   $ plan_ st sc anf mi
 
 planInitializer :: FRule -> Maybe (Cost,Action)
@@ -434,9 +457,12 @@ run = mapM_ (\(c,msp) -> do
                 putStrLn $ show c
                 case msp of
                   []  -> putStrLn "NO PLAN"
-                  sps -> forM_ sps $ \(s,p) -> do
+                  sps -> putStrLn $ show $ length sps
+                  {-
+                         forM_ sps $ \(s,p) -> do
                                         putStrLn $ "\n\nSCORE: " ++ show s
                                         forM_ p (putStrLn . show)
+                  -}
                 putStrLn "")
        . take 1 . testPlanRule
 

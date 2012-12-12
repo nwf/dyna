@@ -1,4 +1,7 @@
 module Dyna.XXX.DataUtils (
+  -- * 'Data.List' utilities
+  -- ** Argmin/argmax idiom
+  argmax, argmin,
   -- * 'Data.Map' utilities
   -- ** Quantification
   mapExists, mapForall,
@@ -12,8 +15,16 @@ module Dyna.XXX.DataUtils (
 
 ) where
 
-import qualified Data.Map as M
-import qualified Data.Set as S
+import qualified Data.List as L
+import qualified Data.Map  as M
+import qualified Data.Ord  as O
+import qualified Data.Set  as S
+
+argmax :: (Ord b) => (a -> b) -> [a] -> a
+argmax = L.maximumBy . O.comparing
+
+argmin :: (Ord b) => (a -> b) -> [a] -> a
+argmin = L.minimumBy . O.comparing
 
 mapForall, mapExists :: (k -> v -> Bool) -> M.Map k v -> Bool
 mapForall p m = M.foldrWithKey (\k v -> (&& p k v)) True  m
