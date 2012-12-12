@@ -131,120 +131,6 @@ class Hypergraph(object):
 
         return t(root)
 
-    def find_update_plans(self, start):
-
-        # update planning algorithm: is a brute-force search for a feasible
-        # solution.
-        #
-        # timv: not sure we can do much better (i.e dynamic programming)
-        #
-        # TODO: add search heuristic (i.e. A* or best-first search). However,
-        # these search problems are very small so this might not matter much.
-        #
-        # TODO: refine cost function (for now not it's just feasibility).
-
-        chart = {x: False for x in self.nodes}   # chart checks node coverage
-
-        # set start's nodes to True
-        chart[start.head] = True
-        for b in start.body:
-            chart[b] = True
-
-        # set constants to True
-        for x in self.nodes:
-            if not isvar(x):
-                chart[x] = True
-
-        # enqueue start
-        q = [(chart.copy(), [(start, None)])]
-
-        while q:
-            [chart, history] = q.pop()
-#            print chart
-
-            visited_edges = {e for e, _ in history}
-
-            if all(chart.values()):     # complete configuration
-                return history
-
-            for e in self.edges:
-
-                if e in visited_edges:  # already visited this edge
-                    continue
-
-                for mode in consistent(e, chart):
-
-                    newchart = chart.copy()
-
-                    newchart[e.head] = True
-                    for b in e.body:
-                        newchart[b] = True
-
-                    q.append((newchart, [(e, mode)] + history))
-
-        assert False, 'No plan found for update to %s' % start
-
-
-def consistent(e, chart):
-    C = [chart[b] for b in e.body]
-
-    h = e.head
-
-#    print 'reversible?', e
-#    print '  chart:  ', display_mode(C, chart[h])
-
-    for M, o in modes(e.label, len(e.body)):
-
-        if all((c or not m) for m, c in zip(M, C)) and (chart[h] or not o):
-
-            B = tuple((c or m) for m, c in zip(M, C))
-            b = chart[h] or o
-
-#            print
-#            print '    witness:', display_mode(M, o)
-#            print '    runs:  ', display_mode(B, b)
-
-            yield B, b
-
-#    print
-
-
-
-def modes(f, arity):
-    """
-    Query modes supported for functor, f/arity.
-
-    TODO: annotate query modes with determinism and a handle to a function which
-    will execute the query (e.g, addition in mode "+ - -> +" is deterministic
-    and the query performs subtraction)
-    """
-
-    if f.startswith('& '):                  # Unification
-        yield [True] * arity, False
-        yield [False] * arity, True
-
-    elif f in ('^', '+', '-', '*', '/'):    # math (XXX should be "all backchaining")
-        yield [True] * arity, False
-
-        if f in ('^', '+', '-', '*', '/'):  # invertible math
-            for i in xrange(arity):
-                z = [True] * arity
-                z[i] = False
-                yield z, True
-
-    else:                                   # extensional tables
-        yield [False] * arity, False
-
-
-def display_mode(inputs, output):
-    z = {None: red % '?', False: yellow % '-', True: white % '+'}
-    return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
-                           z[output])
-
-def display_mode_nocolor(inputs, output):
-    z = {None: '?', False: '-', True: '+'}
-    return '[%s] -> %s' % (' '.join(z[i] for i in inputs),
-                           z[output])
 
 def show_slice(e, M):
     return [(b if bind else ':') for b, bind in zip(e.body, M)]
@@ -343,76 +229,41 @@ def main(dynafile):
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
 
-        print >> html, '<h2>Update plans<h2>'
-
-        modes_needed = set()
-
-        for i, r in enumerate(rules):
-
-            print '#________________________________________________'
-            print '# rule %s' % i
-
-            print >> html, '<h2 style="color:red;">%s</h2>' % '# rule %s' % i
-
-            for u in r.edges:
-
-                # suppose we receive an update to e
-                print
-                print '# Update %s' % (u,)
-
-                plan = r.find_update_plans(u)
-
-                print 'def update_rule%s_%s(%s,%s):' % (i, u.label, ','.join(u.body), u.head)
-                indent = '    '
-                for e, mode in reversed(plan):
-                    if mode is None:
-                        continue
-                    (M, o) = mode
-                    d = display_mode(M, o)
-
-                    modes_needed.add((e.label, M, o))
-
-                    assign = []
-                    for i, (b, bind) in enumerate(zip(e.body, M)):
-                        if not bind:
-                            assign.append(b)
-
-                    if assign:
-                        print '%sfor (%s) in %s[%s]:' % (indent, ','.join(assign), e.label,
-                                                         ','.join(show_slice(e, M)))
-                        indent += '    '
-
-                    print '%s%s = %s(%s)' % (indent, e.head, e.label, ','.join(e.body))
-
-                print '%semit(%s, %s)' % (indent, r.head, r.result)
-
-
-                print >> html, '<h3>Update %s</h3>' % (u,)
-                print >> html, '<table style="font-family: Courier;">'
-                for e, mode in reversed(plan):
-                    if mode is None:
-                        continue
-                    (M, o) = mode
-                    d = display_mode_nocolor(M, o)
-                    print >> html, '<tr><td>%s</td><td>%s</td></tr>' % (e, d)
-                print >> html, '</table>'
-
-                # TODO: plate notation for loop structure.
-
-                #svg = uplan_graph.render('/tmp/tmp')
-
-                #print >> html, '<h3>Update %s</h3>' % (u,)
-                #print >> html, '<div class="box">%s</div>' % svg
-
-
-        print
-        print red % '#________________'
-        print red % '# storage'
-        for label, M, o in modes_needed:
-            print label, display_mode_nocolor(M, o)
+        print >> html, '<h2>Update plans</h2>'
 
         cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dynafile
         assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
+
+#        print >> html, '<pre>'
+
+        with file(dynafile + '.plan') as f:
+            code = f.read()
+            print >> html, code
+
+            for block in re.split('# --\n', code)[1:]:  # drop the begining bit.
+ #               print block
+
+                [(f, bline, bcol, eline, ecol, code)] = \
+                    re.findall('# (.*?):(\d+):(\d+) - .*?:(\d+):(\d+) :\n#.*\n#.*\n([\w\W]*)',
+                               block)
+
+                print >> html, """\
+<div class="handler-%s">
+<pre>
+%s
+</pre>
+</div>
+""" % (bline, code.strip())
+
+#                print magenta % '%s:%s' % (bline, eline)
+#                print yellow % code
+
+#            from debug import ip; ip()
+
+            # connect code lines with update; anf; and rendered circuit
+            # examples/papa2.dyna:37:1 - examples/papa2.dyna:37:24 :
+
+        print >> html, '</pre>'
 
 
     print
