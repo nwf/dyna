@@ -25,6 +25,9 @@ Call indirection
 
 """
 
+#from debug import ultraTB2; ultraTB2.enable()
+#from debug import saverr; saverr.enable(editor=True)
+
 import os, sys, math, operator
 from collections import defaultdict, Counter
 from utils import red, green, blue, magenta
@@ -136,11 +139,13 @@ class Chart(object):
 # TODO: (functor, idx) pairs aren't nice to look at.
 def pretty(item):
     "Pretty print a term. Will retrieve the complete (ground) term for the chart."
+    if not isinstance(item, tuple):
+        return repr(item)
     (fn, idx) = item
     row = chart[fn].data[idx]
     args = row[:-1]
     fn = ''.join(fn.split('/')[:-1])  # drop arity from name.
-    return '%s%s' % (fn, tuple(args))    # TODO: need to recurse.
+    return '%s(%s)' % (fn, ','.join(map(pretty, args)))
 
 
 def prettify(x):
@@ -190,7 +195,6 @@ def register(fn):
 register.handlers = defaultdict(list)
 
 
-
 def initializer(_):
 
     def wrap(handler):
@@ -212,13 +216,17 @@ def update_dispatcher((fn, idx), val):
         handler((fn, idx), val)
 
 
-def peel(fn, (fa, idx)):
+def peel(fn, x):
     """
     Lookup `idx` in the intern table. Asserts that idx matches
     `functor_arity`. Returns arguments of term as a arity-tuple of intern idxs and
     constants.
     """
-    assert fa == fn
+    if not isinstance(x, tuple):
+        return None
+    (fa, idx) = x
+    if fa != fn:
+        return None
     return chart[fn].data[idx][:-1]  # minus val
 
 
@@ -279,11 +287,36 @@ def run_agenda():
 
 def aggregate(item):
     print '    aggregate:', pretty(item), aggregator[item],
-    val = 0.0
-    for k,v in aggregator[item].iteritems():
-        val += k*v                # val*multiplicity; TODO: use correct aggregator
+    val = 0.0  # need identity element or do a "fold1"
+    for k, multiplicity in aggregator[item].iteritems():
+        assert multiplicity >= 0, "negative multiplicity: this should never happen."
+        val += k*multiplicity         # val*multiplicity; TODO: use correct aggregator
     print 'result:', val
     return val
+
+
+def max_equals(item):
+    raise NotImplementedError
+def min_equals(item):
+    raise NotImplementedError
+def plus_equals(item):
+    raise NotImplementedError
+def times_equals(item):
+    raise NotImplementedError
+def and_equals(item):
+    raise NotImplementedError
+def or_equals(item):
+    raise NotImplementedError
+
+
+aggr = {
+    'max=': max_equals,
+    'min=': min_equals,
+    '+=': plus_equals,
+    '*=': times_equals,
+    '&=': and_equals,
+    '|=': or_equals,
+}
 
 
 def delete(item, val):
@@ -294,44 +327,12 @@ def delete(item, val):
     _delete = False
 
 
-#def papa_example():
-#
-#    map(chart['rewrite/3'].insert,
-#        [( "S",   "S",  ".", 1.),
-#         ( "S",  "NP", "VP", 1.),
-#         ("NP", "Det",  "N", 1.),
-#         ("NP",  "NP", "PP", 1.),
-#         ("VP",   "V", "NP", 1.),
-#         ("VP",  "VP", "PP", 1.),
-#         ("PP",   "P", "NP", 1.)])
-#
-#    map(chart['rewrite/2'].insert,
-#        [( "NP",   "Papa", 1.),
-#         (  "N", "caviar", 1.),
-#         (  "N",  "spoon", 1.),
-#         (  "V",    "ate", 1.),
-#         (  "P",   "with", 1.),
-#         ("Det",    "the", 1.),
-#         ("Det",      "a", 1.)])
-#
-#    for i, word in enumerate('Papa ate the caviar with a spoon .'.split()):
-#        idx = chart['phrase/3'].insert((word, i, i + 1, None))
-#
-#        emit(('phrase/3', idx), 1.0)
-#
-#execfile('examples/cky.dyna.plan')
-#papa_example()
-
-
-# 'examples/papa.dyna.plan'
 [dyna] = sys.argv[1:]
 
 cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
 assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
 
-
 execfile(dyna + '.plan')
-
 
 for xxx in initializer.handlers:
     xxx()
