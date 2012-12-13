@@ -206,9 +206,6 @@ def graph_styles(g):
 
 def main(dynafile):
 
-    with file(dynafile) as f:
-        code = f.read()
-
     d = dynafile + '.d'
     os.system('mkdir -p %s' % d)
 
@@ -255,21 +252,20 @@ function selectline(lineno) {
 </head>
 """
 
-#        print >> html, '<h1>%s</h1>' % dynafile
-#        print >> html, '<h2>Dyna source</h2>'
-
         print >> html, '<div id="dyna-source">'
         print >> html, '  <pre>'
+
         with file(dynafile) as f:
+            code = f.read().strip()
 
-            lexer = get_lexer_by_name("haskell", stripall=True)
-            formatter = HtmlFormatter(linenos=False)
-            c = re.sub('%', '--', f.read())
-            pretty_code = highlight(c, lexer, formatter)
-            pretty_code = re.sub('--', '%', pretty_code)
+        lexer = get_lexer_by_name("haskell")
+        formatter = HtmlFormatter(linenos=False)
+        c = re.sub('%', '--', code)
+        pretty_code = highlight(c, lexer, formatter)
+        pretty_code = re.sub('--', '%', pretty_code)
 
-            for lineno, line in enumerate(pretty_code.split('\n'), start=1):
-                print >> html, '<a onclick="selectline(%s)">%s</a>' % (lineno, line.rstrip())
+        for lineno, line in enumerate(pretty_code.split('\n'), start=1):
+            print >> html, '<a onclick="selectline(%s)">%s</a>' % (lineno, line.rstrip())
 
         print >> html, '  </pre>'
         print >> html, '</div>'

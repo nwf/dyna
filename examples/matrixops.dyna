@@ -1,4 +1,5 @@
 
+
 % A and B are names of matricies
 times(A, B, I, J)    += m(A, I, K) * m(B, K, J).
 times(A, B, C, I, L) += m(A, I, K) * m(B, K, J) * m(C, J, L).
