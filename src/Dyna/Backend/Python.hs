@@ -107,7 +107,7 @@ tupledOrUnderscore vs = if length vs > 0 then parens ((sepBy "," $ map pretty vs
 
 pslice vs = brackets $
        sepBy "," (map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v) vs)
-       <+> "," -- add a list comma to ensure getitem is always passed a tuple.
+       <> "," -- add a list comma to ensure getitem is always passed a tuple.
 
 filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 

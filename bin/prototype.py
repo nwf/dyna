@@ -217,7 +217,7 @@ def main(dynafile):
 
 html, body {margin:0; padding:0;}
 
-#dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%;  }
+#dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%; padding-left: 10px;  }
 #circuit-pane { position:absolute; width: 50%; top: 10px; left: 42%; padding-left: 5%; }
 #update-handler-pane { position: absolute; top: 10px; left: 100%; width: 45%; padding-right: 5%; }
 
@@ -227,7 +227,7 @@ html, body {margin:0; padding:0;}
 
 h2 { margin-top: 40px; }
 a { cursor: pointer; }
-svg { width: 90%; height: 90%; }
+svg { width: 95%; height: 97%; }
 body { background: black; color: white; }
 
 </style>
