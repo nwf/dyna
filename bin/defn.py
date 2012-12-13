@@ -92,6 +92,7 @@ def agg_bind(agg_decl, table):
         '*=': times_equals,
         '&=': and_equals,
         '|=': or_equals,
+        ':-': or_equals,
     }
 
     # commit functors to an aggregator definition to avoid unnecessary lookups.

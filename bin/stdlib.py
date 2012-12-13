@@ -352,9 +352,12 @@ class UserChart(object):
 
 #constructor_names = {''.join(functor.split('/')[:-1]) for functor in chart}
 for _fn in chart:
-    exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
+    try:
+        exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
+    except:
+        pass
 
 #def phrase(A,I,K):
 #    return chart['phrase/3']
 
-from debug import ip; ip()
+from IPython import embed; embed()
