@@ -63,26 +63,34 @@ def agg_bind(agg_decl, table):
     """
 
     def max_equals(item):
-        return max(k for k, m in table[item].iteritems() if m > 0)
+        s = [k for k, m in table[item].iteritems() if m > 0]
+        if len(s):
+            return max()
 
     def min_equals(item):
-        return min(k for k, m in table[item].iteritems() if m > 0)
+        s = [k for k, m in table[item].iteritems() if m > 0]
+        if len(s):
+            return min(s)
 
     def plus_equals(item):
-        return reduce(operator.add,
-                      [k*m for k, m in table[item].iteritems()])
+        s = [k*m for k, m in table[item].iteritems()]
+        if len(s):
+            return reduce(operator.add, s)
 
     def times_equals(item):
-        return reduce(operator.mul,
-                      [k**m for k, m in table[item].iteritems()])
+        s = [k**m for k, m in table[item].iteritems()]
+        if len(s):
+            return reduce(operator.mul, s)
 
     def and_equals(item):
-        return reduce(operator.and_,
-                      [k for k, m in table[item].iteritems() if m > 0])
+        s = [k for k, m in table[item].iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.and_, s)
 
     def or_equals(item):
-        return reduce(operator.or_,
-                      [k for k, m in table[item].iteritems() if m > 0])
+        s = [k for k, m in table[item].iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.or_, s)
 
     # map names to functions
     agg_defs = {

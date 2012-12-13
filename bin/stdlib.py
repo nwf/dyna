@@ -179,6 +179,8 @@ def update_dispatcher(item, val):
     """
     Passes update to relevant handlers.
     """
+    if val is None:
+        return
     (fn, _) = item
     print 'dispatch', pretty(item), '=', val
     for handler in register.handlers[fn]:
@@ -267,7 +269,8 @@ def _go():
 
         chart[fn].data[idx][-1] = now
 
-        update_dispatcher(item, now)
+        if now is not None:
+            update_dispatcher(item, now)
 
 
 def go():
