@@ -8,6 +8,11 @@ import re, os
 from collections import defaultdict, namedtuple
 from utils import magenta, red, green, yellow, white, toANF, read_anf
 
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name
+from pygments.formatters import HtmlFormatter
+
+
 Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "tail"
 
 def edge_code(x):
@@ -61,6 +66,13 @@ class Hypergraph(object):
         with file(dot, 'wb') as f:
             print >> f, 'digraph rule {'
             print >> f, 'rankdir=LR;'  # left-to-right layout
+
+
+            print >> f, 'node [style=filled,fillcolor=white];'
+
+            print >> f, 'bgcolor="transparent";'
+
+            print >> f, 'edge [color=white];'
 
             for e in self.edges:
 
@@ -202,13 +214,29 @@ def main(dynafile):
 
     with file(d + '/index.html', 'wb') as html:
 
-        print >> html, '<style>'
-        print >> html, '.box, pre { border: 1px solid #eee; margin: 10px; padding: 10px;}'
-        print >> html, 'h2 { margin-top: 40px; }'
-        print >> html, 'a { cursor: pointer; }'
-        print >> html, '</style>'
-
         print >> html, """\
+<head>
+<style>
+
+html, body {margin:0; padding:0;}
+
+#dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%;  }
+#circuit-pane { position:absolute; width: 50%; top: 10px; left: 42%; padding-left: 5%; }
+#update-handler-pane { position: absolute; top: 10px; left: 100%; width: 45%; padding-right: 5%; }
+
+#dyna-source, #circuit-pane {
+  border-right: 1px solid #666
+}
+
+h2 { margin-top: 40px; }
+a { cursor: pointer; }
+svg { width: 90%; height: 90%; }
+body { background: black; color: white; }
+
+</style>
+
+<link rel="stylesheet" href="../../style.css">
+
 <script type="text/javascript" language="javascript" src="../../bin/prototype.js"></script>
 
 <script type="text/javascript" language="javascript">
@@ -216,45 +244,58 @@ def main(dynafile):
 function selectline(lineno) {
   $("update-handler-pane").innerHTML = "";
   $$(".handler-" + lineno).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
+
+  $("circuit-pane").innerHTML = "";
+  $$(".circuit-" + lineno).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
+
 }
 
 </script>
+
+</head>
 """
 
-        print >> html, '<h1>%s</h1>' % dynafile
+#        print >> html, '<h1>%s</h1>' % dynafile
+#        print >> html, '<h2>Dyna source</h2>'
 
-        print >> html, '<h2>Dyna source</h2>'
-
-        print >> html, '<div style="float:left; width: 50%;">'
-
-        print >> html, '<pre>'
+        print >> html, '<div id="dyna-source">'
+        print >> html, '  <pre>'
         with file(dynafile) as f:
-            for lineno, line in enumerate(f, start=1):
+
+            lexer = get_lexer_by_name("haskell", stripall=True)
+            formatter = HtmlFormatter(linenos=False)
+            c = re.sub('%', '--', f.read())
+            pretty_code = highlight(c, lexer, formatter)
+            pretty_code = re.sub('--', '%', pretty_code)
+
+            for lineno, line in enumerate(pretty_code.split('\n'), start=1):
                 print >> html, '<a onclick="selectline(%s)">%s</a>' % (lineno, line.rstrip())
-        print >> html, '</pre>'
 
+        print >> html, '  </pre>'
         print >> html, '</div>'
 
-        print >> html, '<div id="update-handler-pane" style="float:right; width: 50%;">'
-
-        print >> html, '</div>'
-
-
-        print >> html, '<div style="clear:both;"></div>'
+        print >> html, '<div id="circuit-pane" style=""></div>'
+        print >> html, '<div id="update-handler-pane" style=""></div>'
 
         anf = toANF(code)
+
+        print >> html, '<div style="display:none;">'
 
         print >> html, '<h2>ANF</h2>'
         print >> html, '<pre>\n%s\n</pre>' % anf.strip()
 
         print >> html, '<h2>Hyperedge templates</h2>'
 
+        linenos = re.findall(';; (.*?):(\d+):\d+-.*?:(\d+):\d+', anf)
+
         rules = [circuit(x) for x in read_anf(anf)]
 
-        for i, g in enumerate(rules):
+        assert len(rules) == len(linenos), 'missing line number in ANF.'
+
+        for (i, ((_, lineno, _), g)) in enumerate(zip(linenos, rules)):
             sty = graph_styles(g)
             svg = g.render(dynafile + '.d/rule-%s' % i, sty)
-            print >> html, '<div class="box">%s</div>' % svg
+            print >> html, '<div class="circuit-%s">%s</div>' % (lineno, svg)
 
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
@@ -271,19 +312,24 @@ function selectline(lineno) {
             print >> html, code
 
             for block in re.split('# --\n', code)[1:]:  # drop the begining bit.
- #               print block
-
                 [(f, bline, bcol, eline, ecol, code)] = \
-                    re.findall('# (.*?):(\d+):(\d+) - .*?:(\d+):(\d+) :\n#.*\n#.*\n([\w\W]*)',
+                    re.findall('# (.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n#.*\n([\w\W]*)',
                                block)
 
+                code = re.compile('^\s*#.*', re.M).sub('', code.strip())
+
+                lexer = get_lexer_by_name("python", stripall=True)
+                formatter = HtmlFormatter(linenos=False)
+                pretty_code = highlight(code, lexer, formatter)
+
+#
                 print >> html, """\
 <div class="handler-%s">
 <pre>
 %s
 </pre>
 </div>
-""" % (bline, code.strip())
+""" % (bline, pretty_code)
 
 #                print magenta % '%s:%s' % (bline, eline)
 #                print yellow % code
@@ -295,12 +341,15 @@ function selectline(lineno) {
 
         print >> html, '</pre>'
 
+        print >> html, '</div>'
+
 
     print
     print 'wrote', html.name
 
     if argv.browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+
 
 
 if __name__ == '__main__':
