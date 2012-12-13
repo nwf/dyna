@@ -32,6 +32,7 @@ import qualified Data.Set                   as S
 import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 import           Dyna.Term.TTerm
+import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Parser       as DP
 import           Dyna.XXX.DataUtils(argmin)
 import           Dyna.XXX.TrifectaTest
@@ -416,7 +417,7 @@ initializeForCrux :: (Crux DVar a, DVar, DVar)
 initializeForCrux (cr, hi, v) = case cr of
   CFCall o is f -> ( ((f,length is), hi, o)
                    , [ OPGetArgsIf is hi f, OPAssign o (NTVar v) ])
-  _             -> error "Don't know how to initially plan !CFCall"
+  _             -> sorryDynac "Don't know how to initially plan !CFCall"
 
 -- | Given a normalized form and an initial crux, saturate the graph and
 --   get a plan for doing so.
