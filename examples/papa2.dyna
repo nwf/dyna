@@ -38,4 +38,4 @@ word(     ".", 7) += 1.
 
 % for fun, try making the above words facts instead of +=1's.
 
-phrase(W, I, I+1, W) += 1 whenever word(W, I).
+phrase(W, I, I+1, W) += (word(W, I) > 0) & 1.

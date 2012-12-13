@@ -32,9 +32,9 @@ call = {'*/2': operator.mul,
 
         '-/1': operator.neg,
 
-#        '~/1': operator.inv,   # differs
-#        '|/1': operator.or_,
-#        '&/2': operator.and_,
+        '~/1': lambda x: not x,
+        '|/1': lambda x,y: x or y,
+        '&/2': lambda x,y: x and y,
 
         # comparisons
         '</2': operator.lt,

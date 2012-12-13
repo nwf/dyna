@@ -55,15 +55,24 @@ class Chart(object):
     def __getitem__(self, item):
         assert isinstance(item, tuple) and len(item) == self.ncols, \
             'item width mismatch: ncols %s, item %s' % (self.ncols, len(item))
-
         nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
         slices = [i for i, val in enumerate(item) if isinstance(val, slice)]
-
         for row in self.data.values():                    # XXX: very inefficient
             if row[-1] is None:
                 continue
             if all(row[i] == val for i, val in nonslice):
                 yield tuple(row[i] for i in slices)
+
+    def __setitem__(self, item, now):
+        assert isinstance(item, tuple) and len(item) == self.ncols - 1
+        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
+        for idx, row in self.data.iteritems():
+            if all(row[i] == val for i, val in nonslice):
+                item = (self.name, idx)
+                was = self.data[idx][-1]
+                delete(item, was)
+                emit(item, now)
+        go()
 
     def lookup(self, *args):
         "find index for these args"
@@ -235,7 +244,7 @@ def aggregate(item):
 agenda = set()
 
 
-def _run():
+def _go():
     "the main loop"
     while agenda:
         (fn, idx) = item = agenda.pop()
@@ -261,9 +270,9 @@ def _run():
         update_dispatcher(item, now)
 
 
-def run():
+def go():
     try:
-        _run()
+        _go()
     except KeyboardInterrupt:
         pass
     finally:
@@ -271,12 +280,6 @@ def run():
 
         with file(dyna + '.chart', 'wb') as f:
             dump_charts(f)
-
-
-
-# Example of reactivity
-#  >>> emit(('rewrite/3', 5), -1000)
-#  >>> run_agenda()
 
 
 [dyna] = sys.argv[1:]
@@ -298,4 +301,62 @@ for init in initializer.handlers:
     init()
 
 # start running the agenda
-run()
+go()
+
+
+
+class UserChart(object):
+
+    def __init__(self, _chart):
+        self.ncols = _chart.ncols
+        self.data = _chart.data
+        self.name = _chart.name
+        self._chart = _chart
+
+    def __getitem__(self, item):
+        assert isinstance(item, tuple) and len(item) == self.ncols - 1
+        nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
+        for idx, row in self.data.iteritems():
+            if row[-1] is None:
+                continue
+            if all(row[i] == val for i, val in nonslice):
+                yield (self.name, idx)
+
+    def __setitem__(self, item, now):
+        # XXX: can't add new things only change old things..
+
+        assert isinstance(item, tuple) and len(item) == self.ncols - 1
+        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
+
+        foundone = False
+        for idx, row in self.data.iteritems():
+            if all(row[i] == val for i, val in nonslice):
+                item = (self.name, idx)
+
+                # timv: technically, should restrict to ":=" and extensional
+                aggregator[item].clear()
+                aggregator[item][now] += 1
+                agenda.add(item)
+
+                foundone = True
+
+        if not foundone and len(nonslice) == len(item):
+            idx = self._chart.insert(item + (None,))
+            item = (self.name, idx)
+            aggregator[item].clear()
+            aggregator[item][now] += 1
+            agenda.add(item)
+
+        go()
+
+
+#constructor_names = {''.join(functor.split('/')[:-1]) for functor in chart}
+for _fn in chart:
+    exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
+
+#def phrase(A,I,K):
+#    return chart['phrase/3']
+
+rewrite3["VP","VP",rewrite3["VP","VP","PP"]] = -100
+
+from debug import ip; ip()
