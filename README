@@ -16,12 +16,17 @@ src/Dyna/
                    -- done in finally-tagless style.
                    -- Includes some "Examples", even if not self-tests.
 
+  Backend          -- Compilation to target languages
+
+  Main             -- Dyna compiler main modules
+
   ParserHS         -- the Haskell front-end parser and selftests
 
   Term             -- Different representations of terms and
-                   --  utilities
+                   -- utilities
 
   Test             -- code used by self-tests throughout the codebase
+                   -- and the top-level test harness itself
 
   XXX              -- code that should probably go upstream;
                    -- modules here are named by the upstream package.

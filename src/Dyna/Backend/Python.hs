@@ -1,14 +1,10 @@
 ---------------------------------------------------------------------------
--- | Some week-before-the-deadline heroics to try to get something
--- (anything) up and running.
+-- | Compile to Python
 --
--- XXX This is terrible.  Just terrible.
+-- See bin/stdlib.py
 
 -- Header material                                                      {{{
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Dyna.Backend.Python where
 
@@ -25,49 +21,21 @@ import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 import qualified Data.Ord                   as O
 import qualified Data.Set                   as S
-import qualified Data.Typeable              as DT
 import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.RuleMode
+import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint
-import           Dyna.XXX.TrifectaTest
+import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.IO
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
-import Dyna.XXX.Trifecta (prettySpanLoc)
 
-
-------------------------------------------------------------------------}}}
--- Top Level Exceptions                                                 {{{
---
--- Make the control flow a little cleaner by bailing out rather than
--- anything right-branching.  Probably not what we actually want.
-
-data TopLevelException = TLEAggPlan    String
-                       | TLENoUpdPlan  FRule  (DFunct,Int)
- deriving (DT.Typeable)
-
-instance Eq TopLevelException where
-  (==) (TLENoUpdPlan (FRule h1 a1 e1 r1 s1 _) f1)
-       (TLENoUpdPlan (FRule h2 a2 e2 r2 s2 _) f2) =
-        h1 == h2 && a1 == a2 && e1 == e2
-     && r1 == r2 && s1 == s2 && f1 == f2
-
-  (==) (TLEAggPlan s1) (TLEAggPlan s2) = s1 == s2
-  (==) _ _ = False
-
-instance Show TopLevelException where
-  show (TLEAggPlan s) = "TLEAggPlan: " ++ s
-  show (TLENoUpdPlan r fa) = show $
-       text "TLENoUpdPlan" <+> text "for" <+> pretty fa <> line
-    <> printANF r
-
-instance Exception TopLevelException
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
@@ -136,7 +104,11 @@ combinePlans = go (M.empty)
   go' xs _  []           m = go m xs
   go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> throw $ TLENoUpdPlan fr fa
+      Nothing -> throw $ UserProgramError 
+                       $ "No update plan for "
+                          <+> (pretty fa)
+                          <+> "in rule at"
+                          <+> (prettySpanLoc $ fr_span fr)
       Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
 
 py (f,a) mu (FRule h _ _ r span _) dope =
@@ -198,7 +170,7 @@ processFile_ fileName fh = do
                          $ map (\x -> (x, planInitializer x)) frs
       in do
          aggm <- case buildAggMap frs of
-                   Left e -> throw $ TLEAggPlan e
+                   Left e -> throw $ UserProgramError (text e)
                    Right x -> return x
 
          hPutStrLn fh $ "agg_decl = {}"
