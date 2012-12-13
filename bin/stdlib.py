@@ -36,7 +36,7 @@ def dump_charts(out=sys.stdout):
         print >> out, x
         print >> out, '====================================='
 
-        rows = [(pretty((x,idx)), idx, row, pretty(row[-1])) for idx, row in chart[x].data.items()]
+        rows = [(pretty((x,idx)), idx, row, pretty(row[-1])) for idx, row in chart[x].data.items() if row[-1] is not None]
         rows.sort()
 
         for p, _, _, v in rows:
