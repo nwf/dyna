@@ -100,12 +100,12 @@ class Hypergraph(object):
 
             print >> f, '}'
 
-        print 'wrote', dot, 'compiling...'
+#        print 'wrote', dot, 'compiling...'
 
         # run graphviz to produce image
         assert 0 == os.system('(dot -Tsvg %s > %s)' % (dot, svg)), 'graphviz failed.'
 
-        print 'created', svg
+#        print 'created', svg
 
         with file(svg) as f:
             return f.read()

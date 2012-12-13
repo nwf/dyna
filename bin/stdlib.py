@@ -284,8 +284,12 @@ def go():
         with file(dyna + '.chart', 'wb') as f:
             dump_charts(f)
 
+try:
+    [dyna] = sys.argv[1:]
+except ValueError:
+    print 'Dyna interpreter:\n\tplease specify a source file.'
+    sys.exit(1)
 
-[dyna] = sys.argv[1:]
 
 cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
 assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
@@ -359,8 +363,5 @@ for _fn in chart:
         exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
     except:
         pass
-
-#def phrase(A,I,K):
-#    return chart['phrase/3']
 
 from IPython import embed; embed()
