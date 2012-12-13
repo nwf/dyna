@@ -357,6 +357,4 @@ for _fn in chart:
 #def phrase(A,I,K):
 #    return chart['phrase/3']
 
-rewrite3["VP","VP",rewrite3["VP","VP","PP"]] = -100
-
 from debug import ip; ip()

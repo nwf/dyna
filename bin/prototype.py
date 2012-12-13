@@ -235,7 +235,7 @@ body { background: black; color: white; }
 
 </style>
 
-<link rel="stylesheet" href="../../style.css">
+<link rel="stylesheet" href="../../bin/style.css">
 
 <script type="text/javascript" language="javascript" src="../../bin/prototype.js"></script>
 
