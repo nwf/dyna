@@ -119,7 +119,7 @@ def pretty(item):
 def prettify(x):
     if isinstance(x, tuple):
         return pretty(x)
-    elif isinstance(x, list):
+    elif hasattr(x, '__iter__'):
         return map(pretty, x)
     elif isinstance(x, Chart):
         return {pretty((x.name, k)): v for k,v in x.data.iteritems()}
@@ -342,7 +342,8 @@ class UserChart(object):
 
                 # timv: technically, should restrict to ":=" and extensional
                 aggregator[item].clear()
-                aggregator[item][now] += 1
+                if now is not None:
+                    aggregator[item][now] += 1
                 agenda.add(item)
 
                 foundone = True
@@ -351,7 +352,8 @@ class UserChart(object):
             idx = self._chart.insert(item + (None,))
             item = (self.name, idx)
             aggregator[item].clear()
-            aggregator[item][now] += 1
+            if now is not None:
+                aggregator[item][now] += 1
             agenda.add(item)
 
         go()
