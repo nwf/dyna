@@ -1,0 +1,16 @@
+path(*start) min= 0 .
+path(B) min= path(A) + edge(A,B).
+
+start += "a".
+
+edge("a","b") += 1 . 
+edge("b","d") += 1 . 
+edge("a","d") += 3 . 
+edge("a","c") += 1 . 
+edge("c","d") += 2 . 
+
+% Expected
+%  path("a") = 0
+%  path("b") = 1
+%  path("c") = 1
+%  path("d") = 2
