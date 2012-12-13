@@ -65,7 +65,7 @@ def agg_bind(agg_decl, table):
     def max_equals(item):
         s = [k for k, m in table[item].iteritems() if m > 0]
         if len(s):
-            return max()
+            return max(s)
 
     def min_equals(item):
         s = [k for k, m in table[item].iteritems() if m > 0]
