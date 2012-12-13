@@ -254,10 +254,10 @@ possible cr = case cr of
 
   -- XXX this really ought to be done some other way
   inv :: DFunct -> [ModedVar] -> ModedVar -> [Action]
-  inv "+" is [(MB x), (MF y)] (MB o)
+  inv "+" [(MB x), (MF y)] (MB o)
                   = [[ OPCall y [o,x] "-" ]]
 
-  inv "+" is [(MF x), (MB y)] (MB o)
+  inv "+" [(MF x), (MB y)] (MB o)
                   = [[ OPCall x [o,y] "-" ]]
 
   inv "-" [(MB x),(MF y)] (MB o)
