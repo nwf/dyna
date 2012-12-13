@@ -254,13 +254,11 @@ possible cr = case cr of
 
   -- XXX this really ought to be done some other way
   inv :: DFunct -> [ModedVar] -> ModedVar -> [Action]
-  inv "+" is (MB o)
-               = case L.partition isFree is of
-                   ([MF fi],bis) -> let cv = "_tmp"
-                                        bis' = map varOfMV bis
-                                    in  [[ OPCall cv bis' "+"
-                                         , OPCall fi [o, cv] "-"]]
-                   _ -> []
+  inv "+" is [(MB x), (MF y)] (MB o)
+                  = [[ OPCall y [o,x] "-" ]]
+
+  inv "+" is [(MF x), (MB y)] (MB o)
+                  = [[ OPCall x [o,y] "-" ]]
 
   inv "-" [(MB x),(MF y)] (MB o)
                   = [[ OPCall y [x,o] "-" ]]
