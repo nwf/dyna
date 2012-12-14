@@ -158,11 +158,9 @@ def circuit(anf):
 
     g = Hypergraph()
     for var, op, args in evals:
-        #if not args: args, op = [op], 'const'    # todo: useless special case?
         g.edge(head=var, label=op, body=args)
 
     for var, op, args in unifs:
-#        g.edge(head=var, label='& %s(%s)' % (op, ','.join(map(str, args))), body=args)
         g.edge(head=var, label='& %s' % op, body=args)
 
     g.head = head
@@ -329,14 +327,6 @@ function selectline(lineno) {
 </pre>
 </div>
 """ % (bline, pretty_code)
-
-#                print magenta % '%s:%s' % (bline, eline)
-#                print yellow % code
-
-#            from debug import ip; ip()
-
-            # connect code lines with update; anf; and rendered circuit
-            # examples/papa2.dyna:37:1 - examples/papa2.dyna:37:24 :
 
         print >> html, '</pre>'
 

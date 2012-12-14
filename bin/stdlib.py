@@ -8,9 +8,10 @@ use of.
 
 import os, sys
 from collections import defaultdict, Counter
+from argparse import ArgumentParser
 from utils import red, green, blue, magenta
-
 from defn import agg_bind, call
+
 
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
@@ -22,7 +23,12 @@ class chart_indirect(dict):
                               ncols = arity + 1)  # add one for output variable
         return c
 
+
 chart = chart_indirect()
+_delete = False
+agenda = set()
+aggregator = defaultdict(Counter)
+
 
 def dump_charts(out=sys.stdout):
     print >> out
@@ -33,14 +39,7 @@ def dump_charts(out=sys.stdout):
     fns.sort()
 
     for x in fns:
-        print >> out, x
-        print >> out, '====================================='
-
-        rows = [(pretty((x,idx)), idx, row, pretty(row[-1])) for idx, row in chart[x].data.items() if row[-1] is not None]
-        rows.sort()
-
-        for p, _, _, v in rows:
-            print >> out, '%-30s := %s' % (p, v)
+        print >> out, chart[x]
         print >> out
 
 
@@ -52,12 +51,19 @@ class Chart(object):
         self.data = {}
         self._id = 0
 
+    def __repr__(self):
+        rows = [(r, pretty((self.name, i)), pretty(r[-1])) for i, r in self.data.items() if r[-1] is not None]
+        x = '\n'.join('%-30s := %s' % (p, v) for _, p, v in sorted(rows))
+        return '%s\n=================\n%s' % (self.name, x)
+
     def __getitem__(self, item):
         assert isinstance(item, tuple) and len(item) == self.ncols, \
             'item width mismatch: ncols %s, item %s' % (self.ncols, len(item))
         nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
         slices = [i for i, val in enumerate(item) if isinstance(val, slice)]
-        for row in self.data.values():                    # XXX: very inefficient
+
+        # XXX: very inefficient
+        for row in self.data.values():  # note: dict changes size during iteration
             if row[-1] is None:
                 continue
             if all(row[i] == val for i, val in nonslice):
@@ -74,7 +80,7 @@ class Chart(object):
                 emit(item, now)
         go()
 
-    def lookup(self, *args):
+    def lookup(self, args):
         "find index for these args"
         assert len(args) == self.ncols - 1                    # XXX: lookup doesn't want val?
         args = list(args)
@@ -87,13 +93,16 @@ class Chart(object):
         assert len(args) == self.ncols and isinstance(args, list)
         self.data[ix] = args
 
-    def insert(self, args):
+    def insert(self, args, val):
+
+        args = list(args)
+        args.append(val)
 
         # debugging check: row is not already in chart.
-        assert self.lookup(*args[:-1]) is None, '%s already in chart' % (args,)
+        assert self.lookup(args[:-1]) is None, '%s already in chart' % (args,)
 
         idx = self.next_id()
-        self.update(idx, list(args))
+        self.update(idx, args)
         return idx
 
     def next_id(self):
@@ -103,7 +112,7 @@ class Chart(object):
 
 
 def pretty(item):
-    "Pretty print a term. Will retrieve the complete (ground) term for the chart."
+    "Pretty print a term. Will retrieve the complete (ground) term from the chart."
     if not isinstance(item, tuple):
         return repr(item)
     (fn, idx) = item
@@ -159,7 +168,6 @@ def register(fn):
 
     return wrap
 
-# NOTE: global & mutable
 register.handlers = defaultdict(list)
 
 
@@ -188,33 +196,29 @@ def update_dispatcher(item, val):
         handler(item, val)
 
 
-def peel(fn, x):
+def peel(fn, item):
     """
-    Lookup `idx` in the intern table. Asserts that idx matches functor/arity,
-    `fn`. Returns the arguments of term as a tuple of intern idxs and constants.
+    Find item's args in the appropriate chart. Assert that idx matches
+    functor/arity, `fn`. Returns the arguments of term as a tuple of intern idxs
+    and constants (possibly an empty tuple).
     """
-    assert isinstance(x, tuple)
-    (fa, idx) = x
+    assert isinstance(item, tuple)
+    (fa, idx) = item
     assert fa == fn
     return chart[fn].data[idx][:-1]  # minus val
 
 
 def build(fn, *args):
-    idx = chart[fn].lookup(*args)   # lookup doesn't require val?
+    idx = chart[fn].lookup(args)
     if idx is None:
-        idx = chart[fn].insert(args + (None,))   # don't know val yet.
+        idx = chart[fn].insert(args, None)   # don't know val yet.
     return (fn, idx)
 
 
-_delete = False
-
 def emit(item, val):
-    (fn, idx) = item
-    row = chart[fn].data[idx]
-    was = row[-1]
 
     print (red if _delete else green) \
-        % 'emit %s   (val %s; was: %s)' % (pretty(item), val, was)
+        % 'emit %s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
 
     if _delete:
         aggregator[item][val] -= 1
@@ -234,16 +238,17 @@ def delete(item, val):
     _delete = False
 
 
-
-aggregator = defaultdict(Counter)
-
 def aggregate(item):
     (fn, _) = item
-    return agg[fn](item)   # agg is defined after updates are loaded
+    v = agg[fn](item)
+    if v is None:
+        print 'aggregator empty'
+    return v
 
 
-
-agenda = set()
+def lookup(item):
+    (fn, idx) = item
+    return chart[fn].data[idx][-1]
 
 
 def _go():
@@ -254,14 +259,13 @@ def _go():
         print
         print 'pop', pretty(item)
 
-        was = chart[fn].data[idx][-1]  # last cell is val
+        was = lookup(item)
+        now = aggregate(item)
 
-        now = aggregate(item)   # compute new val for item
-
-        print '    was %s  now %s' % (was, now)
+        print 'was %s, now %s' % (was, now)
 
         if was == now:
-            print '    unchanged'
+            print 'unchanged'
             continue
 
         if was is not None:
@@ -280,24 +284,22 @@ def go():
         pass
     finally:
         dump_charts()
-
-        with file(dyna + '.chart', 'wb') as f:
+        with file(argv.source + '.chart', 'wb') as f:
             dump_charts(f)
 
-try:
-    [dyna] = sys.argv[1:]
-except ValueError:
-    print 'Dyna interpreter:\n\tplease specify a source file.'
-    sys.exit(1)
+
+parser = ArgumentParser(description=__doc__)
+parser.add_argument('source', help='Path to Dyna source file.')
+argv = parser.parse_args()
 
 
-cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dyna
+cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % argv.source
 assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
 
 agg_decl = None # filled in after exec, this only here to satisfy lint checker.
 
-
-execfile(dyna + '.plan')
+# load generated code.
+execfile(argv.source + '.plan')
 
 
 # bind aggregators to definitions
@@ -312,6 +314,9 @@ go()
 
 
 
+#_____________
+# REPL stuff.
+
 class UserChart(object):
 
     def __init__(self, _chart):
@@ -322,48 +327,51 @@ class UserChart(object):
 
     def __getitem__(self, item):
         assert isinstance(item, tuple) and len(item) == self.ncols - 1
-        nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
+        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
         for idx, row in self.data.iteritems():
-            if row[-1] is None:
+            val = row[-1]
+            if val is None:
                 continue
             if all(row[i] == val for i, val in nonslice):
-                yield (self.name, idx)
+#                yield (self.name, idx)
+                print pretty((self.name, idx)), ':=', val
 
-    def __setitem__(self, item, now):
-        # XXX: can't add new things only change old things..
+    def __setitem__(self, args, now):
 
-        assert isinstance(item, tuple) and len(item) == self.ncols - 1
-        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
+        assert isinstance(args, tuple) and len(args) == self.ncols - 1
+        nonslice = [(i, v) for i, v in enumerate(args) if not isinstance(v, slice)]
 
         foundone = False
         for idx, row in self.data.iteritems():
             if all(row[i] == val for i, val in nonslice):
                 item = (self.name, idx)
-
                 # timv: technically, should restrict to ":=" and extensional
-                aggregator[item].clear()
-                if now is not None:
-                    aggregator[item][now] += 1
-                agenda.add(item)
-
+                colon_equals(item, now)
                 foundone = True
 
-        if not foundone and len(nonslice) == len(item):
-            idx = self._chart.insert(item + (None,))
+        if not foundone and len(nonslice) == len(args):
+            idx = self._chart.insert(args, None)
             item = (self.name, idx)
-            aggregator[item].clear()
-            if now is not None:
-                aggregator[item][now] += 1
-            agenda.add(item)
+            colon_equals(item, now)
 
         go()
 
 
-#constructor_names = {''.join(functor.split('/')[:-1]) for functor in chart}
+def colon_equals(item, now):
+    # timv: technically, should restrict to ":=" and extensional
+    aggregator[item].clear()
+    if now is not None:
+        aggregator[item][now] += 1
+    agenda.add(item)               # XXX: probably shouldn't queue automatically.
+
+
 for _fn in chart:
     try:
         exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
     except:
         pass
 
-from IPython import embed; embed()
+
+from IPython.frontend.terminal.embed import InteractiveShellEmbed
+ipshell = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
+ipshell()

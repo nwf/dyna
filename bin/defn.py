@@ -73,12 +73,12 @@ def agg_bind(agg_decl, table):
             return min(s)
 
     def plus_equals(item):
-        s = [k*m for k, m in table[item].iteritems()]
+        s = [k*m for k, m in table[item].iteritems() if m != 0]
         if len(s):
             return reduce(operator.add, s)
 
     def times_equals(item):
-        s = [k**m for k, m in table[item].iteritems()]
+        s = [k**m for k, m in table[item].iteritems() if m != 0]
         if len(s):
             return reduce(operator.mul, s)
 
