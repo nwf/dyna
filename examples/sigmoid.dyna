@@ -1,0 +1,6 @@
+% FIXME: should all be '=' instead of '+='
+sigmoid(X) += 1 / (1 + exp(-X)).
+
+a += sigmoid(-1).
+b += sigmoid(0).
+c += sigmoid(1).
