@@ -1,0 +1,4 @@
+
+% Simplest example nonlinearity in unification (i.e. a repeated variable inside
+% structured term)
+goal += f(&pair(X,X)).
