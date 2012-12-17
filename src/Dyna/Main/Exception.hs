@@ -34,9 +34,9 @@ instance Exception DynacException
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
-throwDynac :: DynacException -> a
-throwDynac = throw
+dynacThrow :: DynacException -> a
+dynacThrow = throw
 
-sorryDynac = throw . Sorry
+dynacSorry = throw . Sorry
 
 ------------------------------------------------------------------------}}}

@@ -36,6 +36,9 @@ call = {'*/2': operator.mul,
         '|/1': lambda x,y: x or y,
         '&/2': lambda x,y: x and y,
 
+        'true/0': lambda: True,
+        'false/0': lambda: False,
+
         # comparisons
         '</2': operator.lt,
         '<=/2': operator.le,

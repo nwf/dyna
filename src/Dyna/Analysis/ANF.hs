@@ -70,7 +70,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..), NT(..), FDT, NTV, ENF, EVF, FRule(..),
+    ANFState(..),  FRule(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -80,17 +80,17 @@ import           Control.Unification
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
+import qualified Data.Char                  as C
 import qualified Data.Map                   as M
-import           Text.PrettyPrint.Free
-import qualified Text.Trifecta              as T
-
 import qualified Dyna.ParserHS.Parser       as P
+import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
 import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint (valign)
 -- import           Dyna.Test.Trifecta         -- XXX
+import           Text.PrettyPrint.Free
+import qualified Text.Trifecta              as T
 
-import qualified Data.Char as C
 
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 
@@ -131,33 +131,6 @@ mergeDispositions = md
   md SDEval    (_,_)                = ADEval
   md SDQuote   (ECExplicit,ADEval)  = ADEval
   md SDQuote   (_,_)                = ADQuote
-
--- | A Normalized Term, parametric in the variable case
---
--- The Ord instance is solely for Data.Set's use
-data NT v = NTNumeric (Either Integer Double)
-          | NTString  B.ByteString
-          | NTVar     v
- deriving (Eq,Ord,Show)
-
-instance (Pretty v) => Pretty (NT v) where
-    pretty (NTNumeric (Left x))  = pretty x
-    pretty (NTNumeric (Right x)) = pretty x
-    pretty (NTString s)          = dquotes (pretty s)
-    pretty (NTVar v)             = pretty v
-
-
--- | Normalized Term over 'DVar' (that is, either a primitive or a variable)
-type NTV = NT DVar
-
--- | Flat Dyna Term (that is, a functor over variables)
-type FDT = (DFunct,[DVar])
-
--- | Either a variable or a functor of variables)
-type EVF = Either DVar FDT
-
--- | Either a constant, another variable, or a flat Dyna term
-type ENF = Either NTV FDT
 
 data ANFState = AS
               { as_next  :: !Int
@@ -230,8 +203,6 @@ dynaFunctorArgDispositions x = case x of
 -- XXX These should be read from declarations
 dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
 dynaFunctorSelfDispositions x = case x of
-    ("true",0)   -> SDQuote
-    ("false",0)  -> SDQuote
     ("pair",2)   -> SDQuote
     (name, _) ->
        -- If it starts with a nonalpha, it prefers to evaluate

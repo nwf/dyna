@@ -23,6 +23,7 @@ import qualified Data.Ord                   as O
 import qualified Data.Set                   as S
 import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
+import           Dyna.Analysis.Base
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.RuleMode
 import           Dyna.Main.Exception
@@ -35,17 +36,73 @@ import           System.IO
 import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
 
+------------------------------------------------------------------------}}}
+-- DOpAMine Backend Information                                         {{{
 
+constants = S.fromList
+    [ ("+",2)
+    , ("-",2)
+    , ("*",2)
+    , ("/",2)
+    , ("^",2)
+    , ("&",2)
+    , ("|",2)
+    , ("%",2)
+    , ("**",2)
+    , ("<",2)
+    , (">",2)
+    , ("<<",2)
+    , (">>",2)
+    , ("~",2)
+    , ("log",1)
+    , ("exp",1)
+    , ("and",2)
+    , ("or",2)
+    , ("not",1)
+    , ("true",0)
+    ]
+
+data PyDopeBS = PDBAsIs
+              | PDBRewrite   (([ModedVar],ModedVar) -> [DOpAMine PyDopeBS])
+
+builtin (f,is,o) = case () of
+  _ | all (== MBound) is && S.member (f,length is) constants
+    -> case o of
+         MFree  -> Right (Det,PDBAsIs)
+         MBound -> Right (DetSemi,
+           PDBRewrite $ \(is,o) -> let chkv = "_chk" in
+                                   [ OPIter (MF chkv) is f Det $ Just PDBAsIs
+                                   , OPCheq chkv (varOfMV o)
+                                   ])
+
+  _ | f == "+"
+    -> case (is,o) of
+         ([MBound,MFree],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter y [o,x] "-" Det $ Just PDBAsIs])
+         ([MFree,MBound],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "-" Det $ Just PDBAsIs])
+         _ -> Left True
+                                
+  _ | f == "-"
+    -> case (is,o) of
+         ([MBound,MFree],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter y [x,o] "-" Det $ Just PDBAsIs])
+         ([MFree,MBound],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "+" Det $ Just PDBAsIs])
+         _ -> Left True
+
+  _ | S.member (f,length is) constants  -> Left True
+  _ -> Left False
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
 
-pdope :: DOpAMine -> Doc e
-pdope (OPIndirEval _ _) = error "indirect evaluation not implemented"
-pdope (OPAssign v val) = pretty v <+> equals <+> pretty val
-pdope (OPCheck v val) = "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
-pdope (OPCheckNE v val) = "if" <+> pretty v <+> "==" <+> pretty val <> ": continue"
-pdope (OPGetArgsIf vs id f) =
+pdope :: DOpAMine PyDopeBS -> Either [DOpAMine PyDopeBS] (Doc e)
+pdope (OPIndr _ _) = dynacSorry "indirect evaluation not implemented"
+pdope (OPAsgn v val) = Right $ pretty v <+> equals <+> pretty val
+pdope (OPCheq v val) = Right $ "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
+pdope (OPCkne v val) = Right $ "if" <+> pretty v <+> "==" <+> pretty val <> ": continue"
+pdope (OPPeel vs id f) = Right $
 
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs
@@ -56,14 +113,20 @@ pdope (OPGetArgsIf vs id f) =
     `above` "except (TypeError, AssertionError): continue"   -- you'll get a "TypeError: 'NoneType' is not iterable."
 
 
-pdope (OPBuild v vs f) = pretty v <+> equals
+pdope (OPWrap v vs f) = Right $ pretty v <+> equals
       <+> "build" <> (parens $ fa f vs <> comma <> (sepBy "," $ map pretty vs))
 
-pdope (OPCall v vs f) = pretty v <+> equals
-      <+> functorIndirect "call" f vs
-      <> (tupled $ map pretty vs)
+pdope (OPIter v vs f _ (Just b)) =
+  case b of
+    PDBAsIs -> Right $     pretty (varOfMV v)
+                       <+> equals
+                       <+> functorIndirect "call" f vs
+                       <>  (tupled $ map (pretty . varOfMV) vs)
 
-pdope (OPIter o m f) =
+    PDBRewrite rf -> Left $ rf (vs,v)
+  
+
+pdope (OPIter o m f _ Nothing) = Right $
       let mo = m ++ [o] in
           "for" <+> (tupledOrUnderscore $ filterBound mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
@@ -94,8 +157,8 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 --
 -- timv: might want to fuse these into one circuit
 --
-combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action))])] ->
-                M.Map DFunctAr [(FRule, Cost, Action)]
+combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action fbs))])] ->
+                M.Map DFunctAr [(FRule, Cost, Action fbs)]
 combinePlans = go (M.empty)
  where
   go m []             = m
@@ -129,10 +192,13 @@ py (f,a) mu (FRule h _ _ r span _) dope =
             pretty f <> "/" <> (text $ show a))
 
    go []  = id
-   go (x:xs) = let px = pdope x
-                   indents = case x of OPIter _ _ _ -> True ; _ -> False
+   go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
                in
-                   above px . (if indents then indent 4 else id) . go xs
+                   case pdope x of
+                     Left rw -> go (rw++xs)
+                     Right px ->   above px
+                                 . (if indents then indent 4 else id)
+                                 . go xs
 
    emit = "emit" <> tupled [pretty h, pretty r]
 
@@ -140,7 +206,7 @@ py (f,a) mu (FRule h _ _ r span _) dope =
 printPlan :: Handle
           -> (DFunct,Int)                    -- ^ Functor & arity
           -> Maybe (DVar,DVar)               -- ^ if update, input intern & value
-          -> (FRule, Cost, Action)           -- ^ rule and plan
+          -> (FRule, Cost, Action PyDopeBS)  -- ^ rule and plan
           -> IO ()
 printPlan fh fa mu (r, cost, dope) = do         -- display plan
   hPutStrLn fh $ "# --"
@@ -167,7 +233,7 @@ processFile_ fileName fh = do
       let urs = map (\(P.LRule x T.:~ _) -> x) rs
           frs = map normRule urs
           initializers = MA.mapMaybe (\(f,mca) -> (\(c,a) -> (f,c,a)) `fmap` mca)
-                         $ map (\x -> (x, planInitializer x)) frs
+                         $ map (\x -> (x, planInitializer builtin x)) frs
       in do
          aggm <- case buildAggMap frs of
                    Left e -> throw $ UserProgramError (text e)
@@ -180,7 +246,7 @@ processFile_ fileName fh = do
            }
 
          cPlans <- return $! combinePlans                  -- crux plans
-                      $ map (\x -> (x, planEachEval headVar valVar x)) frs
+                      $ map (\x -> (x, planEachEval builtin constants headVar valVar x)) frs
          forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity
             hPutStrLn fh ""
             hPutStrLn fh $ "# =============="
