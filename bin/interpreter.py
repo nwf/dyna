@@ -1,7 +1,4 @@
-"""
-Work in progress: standard library of "stuff" the "dyna executable" will make
-use of.
-"""
+#!/usr/bin/env python
 
 #from debug import ultraTB2; ultraTB2.enable()
 #from debug import saverr; saverr.enable(editor=True)
@@ -11,7 +8,6 @@ from collections import defaultdict, Counter
 from argparse import ArgumentParser
 from utils import red, green, blue, magenta
 from defn import agg_bind, call
-
 
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
@@ -42,6 +38,8 @@ def dump_charts(out=sys.stdout):
         print >> out, chart[x]
         print >> out
 
+# maybe the chart should store pretty printed term and a reference to the
+# aggregator (each item get's its own aggregator to avoid a hash lookup w).
 
 class Chart(object):
 
