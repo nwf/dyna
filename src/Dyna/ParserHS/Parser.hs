@@ -44,6 +44,7 @@ import           Control.Monad
 import           Control.Monad.State
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
+import           Data.Char (isSpace)
 import qualified Data.CharSet                     as CS
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
@@ -54,6 +55,7 @@ import           Text.Parser.Token.Style
 import           Text.Trifecta
 
 import           Dyna.Term.TTerm (Annotation(..))
+import           Dyna.XXX.MonadUtils (incState)
 import           Dyna.XXX.Trifecta (identNL,stringLiteralSQ)
 
 ------------------------------------------------------------------------}}}
@@ -84,7 +86,7 @@ rule :: (Functor f, MonadState RuleIx f)
            -> [Spanned Term]
            -> Spanned Term
            -> Rule)
-rule = Rule <$> get
+rule = Rule <$> incState
 
 --   XXX Having one kind of Pragma is probably wrong
 data Line = LRule (Spanned Rule)
@@ -269,7 +271,9 @@ term  = token $ choice
 -- XXX dotAny is also likely useful when we get dynabase handling, but we're
 -- not there yet.
 dotAny :: (TokenParsing m, Monad m) => m Char
-dotAny  = char '.' <* notFollowedBy whiteSpace
+dotAny  =    char '.'							 -- is a dot
+          <* lookAhead (notFollowedBy someSpace) -- not followed by space
+          <* lookAhead anyChar					 -- and not follwed by EOF
 
 -- | A "dot operator" is a dot followed immediately by something that looks
 -- like a typical operator.  We 'lookAhead' here to avoid the case of a dot
@@ -363,15 +367,17 @@ parseRule = choice [
                -- timv: using ':-' as the "default" aggregator for facts is
                -- probably incorrect because it conflicts with '&=' and other
                -- logical aggregators.
-             -- , term >>= \h@(_ :~ s) -> rule h ":-" [] (TFunctor "true" [] :~ s)
-
+             , do
+                  h@(_ :~ s) <- term
+                  ix <- get
+                  return $ Rule ix h ":-" [] (TFunctor "true" [] :~ s)
              ]
        <* optional (char '.')
  where
   hrss = highlight ReservedOperator . spanned . symbol
 
-drule :: (MonadState RuleIx m, DeltaParsing m) => m (Spanned Rule)
-drule = unDL (spanned parseRule)
+drule :: (DeltaParsing m) => m (Spanned Rule)
+drule = evalStateT (unDL (spanned parseRule)) 0
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
