@@ -180,7 +180,7 @@ py (f,a) mu (FRule h _ _ r span _) dope =
                          "@register"
                  <>      pfsa
                  `above` "def" <+> char '_'
-                               <+> tupled (map pretty [hv,v])
+                               <> tupled (map pretty [hv,v])
                                <+> colon
              Nothing -> "@initializer" <> pfsa
                  `above` "def _():"

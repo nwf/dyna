@@ -1,0 +1,15 @@
+
+% extract a row from matrix
+
+rowlen(N,I) max= J whenever m(N,I,J).
+row_(N,I,K) += &nil whenever K is (rowlen(N,I) + 1).
+row_(N,I,J) += &cons(*m(N,I,J), *row_(N, I, J + 1)).
+row(N,I) += row_(N,I,1).
+
+
+% matrix "b" = [ 3 0 ;
+%                0 2 ]
+m(b, 1, 1) += 3.
+m(b, 1, 2) += 0 .
+m(b, 2, 1) += 0 .
+m(b, 2, 2) += 2.
