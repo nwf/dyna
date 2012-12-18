@@ -189,7 +189,9 @@ dynaFunctorArgDispositions x = case x of
     -- evaluate arithmetic / math
     ("exp", 1) -> [ADEval]
     ("log", 1) -> [ADEval]
-    -- logic
+    ("mod", 2) -> [ADEval, ADEval]
+    ("abs", 1) -> [ADEval]
+     -- logic
     ("and", 2) -> [ADEval, ADEval]
     ("or", 2)  -> [ADEval, ADEval]
     ("not", 1) -> [ADEval]
@@ -292,7 +294,7 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
         _          -> do
                        NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
 
--- Annotations 
+-- Annotations
 --
 -- XXX this is probably the wrong thing to do
 normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do

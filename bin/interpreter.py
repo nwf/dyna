@@ -1,12 +1,35 @@
 #!/usr/bin/env python
 
+"""
+
+ - "initializers" aren't just initializers, they are the fully-naive bottom-up
+   inference rules.
+
+ - TODO: routines from probing the chart.
+
+ - XXX: maybe the chart should store pretty printed term and a reference to the
+   aggregator (each item get's its own aggregator to avoid a hash lookup).
+
+ - XXX: should we store value and aggregators separate from others columns? that
+   is, separate the chart and intern table.
+
+ - TODO: should probably make a Term object.
+
+ - XXX: we should probably fuse update handlers instead of dispatching to each
+   one independently.
+
+ - TODO: deletion of a rule should be running the initializer for the rule in
+   deletion mode.
+
+"""
+
 #from debug import ultraTB2; ultraTB2.enable()
 #from debug import saverr; saverr.enable(editor=True)
 
 import os, sys
 from collections import defaultdict, Counter
 from argparse import ArgumentParser
-from utils import red, green, blue, magenta
+from utils import ip, red, green, blue, magenta
 from defn import agg_bind, call
 
 
@@ -15,8 +38,7 @@ class chart_indirect(dict):
     def __missing__(self, key):
         print 'creating chart indirect for:', key
         arity = int(key.split('/')[-1])
-        c = self[key] = Chart(name = key,
-                              ncols = arity + 1)  # add one for output variable
+        c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
         return c
 
 
@@ -24,6 +46,8 @@ chart = chart_indirect()
 _delete = False
 agenda = set()
 aggregator = defaultdict(Counter)
+agg = {}
+agg_decl = None # filled in after exec, this only here to satisfy lint checker.
 
 
 def dump_charts(out=sys.stdout):
@@ -38,8 +62,6 @@ def dump_charts(out=sys.stdout):
         print >> out, chart[x]
         print >> out
 
-# maybe the chart should store pretty printed term and a reference to the
-# aggregator (each item get's its own aggregator to avoid a hash lookup w).
 
 class Chart(object):
 
@@ -137,8 +159,6 @@ def prettify(x):
 # Update handler indirection -- a true hack. Allow us to have many handlers on
 # the same functor/arity
 
-# TODO: fuse update handlers instead of dispatching to each one independently.
-
 def register(fn):
     """
     Decorator for registering update handlers. Used by update dispatcher.
@@ -190,7 +210,6 @@ def update_dispatcher(item, val):
     (fn, _) = item
     print 'dispatch', pretty(item), '=', val
     for handler in register.handlers[fn]:
-        print 'handler'
         handler(item, val)
 
 
@@ -238,10 +257,7 @@ def delete(item, val):
 
 def aggregate(item):
     (fn, _) = item
-    v = agg[fn](item)
-    if v is None:
-        print 'aggregator empty'
-    return v
+    return agg[fn](item)
 
 
 def lookup(item):
@@ -251,11 +267,12 @@ def lookup(item):
 
 def _go():
     "the main loop"
+
     while agenda:
         (fn, idx) = item = agenda.pop()
 
         print
-        print 'pop', pretty(item)
+        print 'pop', pretty(item),
 
         was = lookup(item)
         now = aggregate(item)
@@ -286,90 +303,51 @@ def go():
             dump_charts(f)
 
 
+def dynac(f):
+    cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % f
+    assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
+    return f + '.plan'
+
+
+def load(f, verbose=True):
+
+    if verbose:
+        with file(f) as h:
+            print h.read()
+
+    # load generated code.
+    execfile(f, globals())
+
+    # bind aggregators to definitions
+    agg_bind(agg, agg_decl, aggregator)
+
+
+def dump(code, filename='/tmp/tmp.dyna'):
+    "Write code to file."
+    with file(filename, 'wb') as f:
+        f.write(code)
+    return filename
+
+
+def do(filename):
+    "Compile, load, and execute dyna code."
+
+    assert os.path.exists(filename)
+
+    initializer.handlers = []    # XXX: do we really want to clear?
+
+    load(dynac(filename))
+
+    for init in initializer.handlers:   # assumes we have cleared
+        init()
+
+    go()
+
+
 parser = ArgumentParser(description=__doc__)
 parser.add_argument('source', help='Path to Dyna source file.')
 argv = parser.parse_args()
 
+do(argv.source)
 
-cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % argv.source
-assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
-
-agg_decl = None # filled in after exec, this only here to satisfy lint checker.
-
-# load generated code.
-execfile(argv.source + '.plan')
-
-
-# bind aggregators to definitions
-agg = agg_bind(agg_decl, aggregator)
-
-# run initializers
-for init in initializer.handlers:
-    init()
-
-# start running the agenda
-go()
-
-
-
-#_____________
-# REPL stuff.
-
-class UserChart(object):
-
-    def __init__(self, _chart):
-        self.ncols = _chart.ncols
-        self.data = _chart.data
-        self.name = _chart.name
-        self._chart = _chart
-
-    def __getitem__(self, item):
-        assert isinstance(item, tuple) and len(item) == self.ncols - 1
-        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
-        for idx, row in self.data.iteritems():
-            val = row[-1]
-            if val is None:
-                continue
-            if all(row[i] == val for i, val in nonslice):
-#                yield (self.name, idx)
-                print pretty((self.name, idx)), ':=', val
-
-    def __setitem__(self, args, now):
-
-        assert isinstance(args, tuple) and len(args) == self.ncols - 1
-        nonslice = [(i, v) for i, v in enumerate(args) if not isinstance(v, slice)]
-
-        foundone = False
-        for idx, row in self.data.iteritems():
-            if all(row[i] == val for i, val in nonslice):
-                item = (self.name, idx)
-                # timv: technically, should restrict to ":=" and extensional
-                colon_equals(item, now)
-                foundone = True
-
-        if not foundone and len(nonslice) == len(args):
-            idx = self._chart.insert(args, None)
-            item = (self.name, idx)
-            colon_equals(item, now)
-
-        go()
-
-
-def colon_equals(item, now):
-    # timv: technically, should restrict to ":=" and extensional
-    aggregator[item].clear()
-    if now is not None:
-        aggregator[item][now] += 1
-    agenda.add(item)               # XXX: probably shouldn't queue automatically.
-
-
-for _fn in chart:
-    try:
-        exec '%s = UserChart(chart[%r])' % (_fn.replace('/', ''), _fn)
-    except:
-        pass
-
-
-from IPython.frontend.terminal.embed import InteractiveShellEmbed
-ipshell = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
-ipshell()
+ip()

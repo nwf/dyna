@@ -50,16 +50,20 @@ constants = S.fromList
     , ("%",2)
     , ("**",2)
     , ("<",2)
+    , ("<=",2)
     , (">",2)
-    , ("<<",2)
-    , (">>",2)
-    , ("~",2)
+    , (">=",2)
+    , ("!",2)
+    , ("mod",1)
+    , ("abs",1)
     , ("log",1)
     , ("exp",1)
     , ("and",2)
     , ("or",2)
     , ("not",1)
     , ("true",0)
+    , ("false",0)
+    , ("null",0)   -- XXX is this right?
     ]
 
 data PyDopeBS = PDBAsIs
@@ -82,7 +86,7 @@ builtin (f,is,o) = case () of
          ([MFree,MBound],MBound) -> Right (Det,
              PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "-" Det $ Just PDBAsIs])
          _ -> Left True
-                                
+
   _ | f == "-"
     -> case (is,o) of
          ([MBound,MFree],MBound) -> Right (Det,
@@ -120,11 +124,10 @@ pdope (OPIter v vs f _ (Just b)) =
   case b of
     PDBAsIs -> Right $     pretty (varOfMV v)
                        <+> equals
-                       <+> functorIndirect "call" f vs
-                       <>  (tupled $ map (pretty . varOfMV) vs)
+                       <+> pycall "call" f vs
 
     PDBRewrite rf -> Left $ rf (vs,v)
-  
+
 
 pdope (OPIter o m f _ Nothing) = Right $
       let mo = m ++ [o] in
@@ -143,6 +146,42 @@ pslice vs = brackets $
 filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 
 functorIndirect table f vs = table <> (brackets $ dquotes $ (pretty f <> "/" <> (text $ show $ length vs)))
+
+
+pycall table f vs = case (f, length vs) of
+  (  "*", 2) -> infixOp " * "
+  (  "+", 2) -> infixOp " + "
+  (  "-", 2) -> infixOp " - "
+  (  "/", 2) -> infixOp " / "
+  (  "^", 2) -> infixOp " ** "
+  (  "&", 2) -> infixOp " and " -- note: python's 'and' and 'or' operate on more than bool
+  (  "|", 2) -> infixOp " or "
+  (  "<", 2) -> infixOp " < "
+  ( "<=", 2) -> infixOp " <= "
+  (  ">", 2) -> infixOp " > "
+  ( ">=", 2) -> infixOp " >= "
+  ( "==", 2) -> infixOp " == "
+  ( "!=", 2) -> infixOp " != "
+  ("mod", 2) -> infixOp " % "
+
+  ("eval", 1) -> call "eval"   -- note: security hole.
+
+  ( "abs", 1) -> call "abs"
+  ( "log", 1) -> call "log"
+  ( "exp", 1) -> call "exp"
+  (   "!", 1) -> call "not"
+
+  ( "null", 0) -> "None"
+  ( "true", 0) -> "True"
+  ("false", 0) -> "False"
+
+    -- fall back use the call indirection table... for now non-exhaustive pattern match error
+    -- TODO: add useful error message.
+--  _ -> functorIndirect "call" f vs <> (tupled $ pretty_vs)
+
+ where pretty_vs = map (pretty . varOfMV) vs
+       call name = name <> (parens $ sepBy ", " $ pretty_vs)
+       infixOp op = sepBy op $ pretty_vs
 
 pf f vs = pretty f <> (tupled $ map pretty vs)
 
@@ -167,7 +206,7 @@ combinePlans = go (M.empty)
   go' xs _  []           m = go m xs
   go' xs fr ((fa,mca):ys) m =
     case mca of
-      Nothing -> throw $ UserProgramError 
+      Nothing -> throw $ UserProgramError
                        $ "No update plan for "
                           <+> (pretty fa)
                           <+> "in rule at"

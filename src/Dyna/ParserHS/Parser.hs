@@ -331,7 +331,11 @@ rule = choice [
                           <*> texpr)
 
                -- HEAD .
+               -- timv: using ':-' as the "default" aggregator for facts is
+               -- probably incorrect because it conflicts with '&=' and other
+               -- logical aggregators.
              , (\h@(_ :~ s) -> Rule h ":-" [] $ (TFunctor "true" [] :~ s)) <$> term
+
              ]
        <* optional (char '.')
  where
