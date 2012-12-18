@@ -206,6 +206,7 @@ dynaFunctorArgDispositions x = case x of
 dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
 dynaFunctorSelfDispositions x = case x of
     ("pair",2)   -> SDQuote
+    ("eval",1)   -> SDEval
     (name, _) ->
        -- If it starts with a nonalpha, it prefers to evaluate
        let d = if C.isAlphaNum $ head $ BU.toString name

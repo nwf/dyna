@@ -21,6 +21,8 @@
  - TODO: deletion of a rule should be running the initializer for the rule in
    deletion mode.
 
+ - TODO: hooks from introspection, eval, and prioritization.
+
 """
 
 #from debug import ultraTB2; ultraTB2.enable()
@@ -30,7 +32,7 @@ import os, sys
 from collections import defaultdict, Counter
 from argparse import ArgumentParser
 from utils import ip, red, green, blue, magenta
-from defn import agg_bind, call
+from defn import agg_bind
 
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
@@ -42,10 +44,20 @@ class chart_indirect(dict):
         return c
 
 
+class aggregator_indirect(dict):
+    def __missing__(self, item):
+        a = agg_bind(item, agg_decl)
+        self[item] = a
+        return a
+
+
+aggregator = aggregator_indirect()
+
+
 chart = chart_indirect()
 _delete = False
 agenda = set()
-aggregator = defaultdict(Counter)
+#aggregator = defaultdict(Counter)
 agg = {}
 agg_decl = None # filled in after exec, this only here to satisfy lint checker.
 
@@ -156,8 +168,8 @@ def prettify(x):
         raise ValueError("Don't know what to do with %r" % x)
 
 
-# Update handler indirection -- a true hack. Allow us to have many handlers on
-# the same functor/arity
+# Update handler indirection -- a temporary hack. Allow us to have many handlers
+# on the same functor/arity. Eventually, we'll fuse handlers into one handler.
 
 def register(fn):
     """
@@ -238,9 +250,9 @@ def emit(item, val):
         % 'emit %s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
 
     if _delete:
-        aggregator[item][val] -= 1
+        aggregator[item].dec(val)
     else:
-        aggregator[item][val] += 1
+        aggregator[item].inc(val)
 
     agenda.add(item)
 
@@ -253,11 +265,6 @@ def delete(item, val):
     _delete = True
     update_dispatcher(item, val)
     _delete = False
-
-
-def aggregate(item):
-    (fn, _) = item
-    return agg[fn](item)
 
 
 def lookup(item):
@@ -275,7 +282,7 @@ def _go():
         print 'pop', pretty(item),
 
         was = lookup(item)
-        now = aggregate(item)
+        now = aggregator[item].fold()
 
         print 'was %s, now %s' % (was, now)
 
@@ -317,9 +324,6 @@ def load(f, verbose=True):
 
     # load generated code.
     execfile(f, globals())
-
-    # bind aggregators to definitions
-    agg_bind(agg, agg_decl, aggregator)
 
 
 def dump(code, filename='/tmp/tmp.dyna'):

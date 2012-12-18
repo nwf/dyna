@@ -26,67 +26,116 @@ from collections import defaultdict, Counter
 from utils import red
 
 
-def agg_bind(agg, agg_decl, table):
+class Aggregator(object):
+    def __init__(self, item, name):
+        self.item = item
+        self.name = name
+    def fold(self):
+        raise NotImplementedError
+    def inc(self, val):
+        raise NotImplementedError
+    def dec(self, val):
+        raise NotImplementedError
+    def clear(self):
+        raise NotImplementedError
+    def __repr__(self):
+        return 'Aggregator(%r, %r)' % (self.item, self.name)
+
+
+class MultisetAggregator(Counter, Aggregator):
+    def __init__(self, item, name, folder):
+        self.folder = folder
+        Aggregator.__init__(self, item, name)
+        Counter.__init__(self)
+    def inc(self, val):
+        self[val] += 1
+    def dec(self, val):
+        self[val] -= 1
+    def fold(self):
+        return self.folder(self)
+    def fromkeys(self, *_):
+        raise NotImplementedError
+
+
+class LastEquals(Aggregator):
+    def __init__(self, item, name):
+        self.list = []
+        Aggregator.__init__(self, item, name)
+    def inc(self, val):
+        self.list.append(val)
+    def dec(self, val):
+        raise NotImplementedError('dec on last equal not defined.')
+    def fold(self):
+        return self.list[-1]
+
+
+def agg_bind(item, agg_decl):
     """
     Bind declarations (map functor->string) to table (storing values) and
     aggregator definition (the fold funciton, which gets executed).
     """
 
-    def max_equals(item):
-        s = [k for k, m in table[item].iteritems() if m > 0]
+    def majority_equals(a):
+        [(k,_)] = a.most_common(1)
+        return k
+
+    def max_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
         if len(s):
             return max(s)
 
-    def min_equals(item):
-        s = [k for k, m in table[item].iteritems() if m > 0]
+    def min_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
         if len(s):
             return min(s)
 
-    def plus_equals(item):
-        s = [k*m for k, m in table[item].iteritems() if m != 0]
+    def plus_equals(a):
+        s = [k*m for k, m in a.iteritems() if m != 0]
         if len(s):
             return reduce(operator.add, s)
 
-    def times_equals(item):
-        s = [k**m for k, m in table[item].iteritems() if m != 0]
+    def times_equals(a):
+        s = [k**m for k, m in a.iteritems() if m != 0]
         if len(s):
             return reduce(operator.mul, s)
 
-    def and_equals(item):
-        s = [k for k, m in table[item].iteritems() if m > 0]
+    def and_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
         if len(s):
             return reduce(lambda x,y: x and y, s)
 
-    def or_equals(item):
-        s = [k for k, m in table[item].iteritems() if m > 0]
+    def or_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
         if len(s):
             return reduce(lambda x,y: x or y, s)
 
+    def b_and_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.and_, s)
+
+    def b_or_equals(a):
+        s = [k for k, m in a.iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.or_, s)
 
     # map names to functions
-    agg_defs = {
+    defs = {
         'max=': max_equals,
         'min=': min_equals,
         '+=': plus_equals,
         '*=': times_equals,
-        '&=': and_equals,
-        '|=': or_equals,
+        'and=': and_equals,
+        'or=': or_equals,
+        '&=': b_and_equals,
+        '|=': b_or_equals,
         ':-': or_equals,
+        'majority=': majority_equals,
     }
 
-    # commit functors to an aggregator definition to avoid unnecessary lookups.
-    for fn in agg_decl:
+    (fn, _) = item
 
-#        if agg_decl[fn] == ':=':   # XXX: leaves previous version???
-#            raise NotImplementedError("aggregator ':=' not implemented yet.")
-#            continue
+    if agg_decl[fn] == ':=':
+        return LastEquals(item, agg_decl[fn])
 
-        if fn in agg:
-            if agg[fn].__name__ != agg_defs[agg_decl[fn]].__name__:
-                print red % 'conflicting aggregators. %s and %s' % (agg[fn], agg_defs[agg_decl[fn]])
-
-        # XXX: ignores conflicts with aggregator, might lead to confusion.
-
-        # TODO: as soon as we ':=' we probably won't want this behavior and we
-        # can restor the assertion that aggregator hasn't changed.
-        agg[fn] = agg_defs[agg_decl[fn]]
+    return MultisetAggregator(item, agg_decl[fn], defs[agg_decl[fn]])

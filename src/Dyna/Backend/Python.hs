@@ -42,6 +42,7 @@ import qualified Text.Trifecta              as T
 constants = S.fromList
     [ ("+",2)
     , ("-",2)
+    , ("-",1)    -- unary negation
     , ("*",2)
     , ("/",2)
     , ("^",2)
@@ -53,7 +54,7 @@ constants = S.fromList
     , ("<=",2)
     , (">",2)
     , (">=",2)
-    , ("!",2)
+    , ("!",1)
     , ("mod",1)
     , ("abs",1)
     , ("log",1)
@@ -61,6 +62,7 @@ constants = S.fromList
     , ("and",2)
     , ("or",2)
     , ("not",1)
+    , ("eval",1)
     , ("true",0)
     , ("false",0)
     , ("null",0)   -- XXX is this right?
@@ -170,6 +172,7 @@ pycall table f vs = case (f, length vs) of
   ( "log", 1) -> call "log"
   ( "exp", 1) -> call "exp"
   (   "!", 1) -> call "not"
+  (   "-", 1) -> call "-"
 
   ( "null", 0) -> "None"
   ( "true", 0) -> "True"
