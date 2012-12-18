@@ -15,8 +15,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-
-module Dyna.BackendK3.Examples where
+module Dyna.Backend.K3.Examples where
 
 import           Dyna.BackendK3.AST
 import           Dyna.BackendK3.Automation

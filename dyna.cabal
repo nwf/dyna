@@ -3,7 +3,7 @@ Version:        0.4
 Cabal-Version:  >=1.14
 Build-Type:     Simple
 Stability:      alpha
-Copyright:      Copyright (c) 2007--2012,
+Copyright:      Copyright (c) 2007-2012,
                       Nathaniel W. Filardo, Tim Vieira, wren ng thornton
 License:        OtherLicense
 License-File:   LICENSE
@@ -30,9 +30,9 @@ Library
 
     Exposed-Modules:    Dyna.Analysis.ANF,
                         Dyna.Analysis.Mode,
-                        Dyna.BackendK3.AST,
-                        Dyna.BackendK3.Automation,
-                        Dyna.BackendK3.Render,
+                        Dyna.Backend.K3.AST,
+                        Dyna.Backend.K3.Automation,
+                        Dyna.Backend.K3.Render,
                         Dyna.ParserHS.Parser,
                         Dyna.XXX.HList,
                         Dyna.XXX.THTuple,
@@ -69,6 +69,7 @@ Executable drepl
                         haskeline >=0.6,
                         mtl >=2.1,
                         parsers >=0.2,
+                        process >=1.1,
                         reducers >=3.0,
                         semigroups >=0.8,
                         tagged >= 0.4.4,
@@ -109,6 +110,6 @@ Test-suite dyna-selftests
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0
 
-    Other-Modules:      Dyna.BackendK3.Examples
+    Other-Modules:      Dyna.Backend.K3.Examples
 
     Main-Is: Dyna/Test/Main.hs

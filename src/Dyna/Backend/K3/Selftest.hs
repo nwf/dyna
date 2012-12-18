@@ -5,11 +5,11 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Dyna.BackendK3.Selftest where
+module Dyna.Backend.K3.Selftest where
 
-import           Dyna.BackendK3.AST
-import           Dyna.BackendK3.Automation
-import           Dyna.BackendK3.Render
+import           Dyna.Backend.K3.AST
+import           Dyna.Backend.K3.Automation
+import           Dyna.Backend.K3.Render
 import           Dyna.XXX.HList
 import qualified Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit

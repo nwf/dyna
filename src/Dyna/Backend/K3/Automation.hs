@@ -19,7 +19,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Dyna.BackendK3.Automation (
+module Dyna.Backend.K3.Automation (
     -- * Automated derivation of data from types, where possible
   K3AutoColl, autocoll, K3AutoTy, autoty,
 
@@ -31,7 +31,7 @@ module Dyna.BackendK3.Automation (
 ) where
 
 import           Data.Word
-import           Dyna.BackendK3.AST
+import           Dyna.Backend.K3.AST
 import           Dyna.XXX.HList
 -- import           Dyna.XXX.THTuple
 

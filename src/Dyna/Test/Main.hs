@@ -3,13 +3,14 @@
 module Dyna.Test.Main where
 
 import           Test.Framework
-import qualified Dyna.BackendK3.Selftest as DK3S
-import qualified Dyna.ParserHS.Selftest  as DPHS
-import qualified Dyna.XXX.TrifectaTests  as DXT
+import qualified Dyna.Backend.K3.Selftest as DK3S
+import qualified Dyna.ParserHS.Selftest   as DPHS
+import qualified Dyna.XXX.TrifectaTests   as DXT
 
 main :: IO ()
 main = defaultMain
            [DPHS.selftest
-           ,DK3S.selftest
+           -- XXX Until this is meaningful...
+           -- ,DK3S.selftest
            , DXT.selftest
            ]

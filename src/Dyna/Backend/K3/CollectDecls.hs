@@ -17,11 +17,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -Werror #-}
 
-module Dyna.BackendK3.CollectDecls where
+module Dyna.Backend.K3.CollectDecls where
 
 import qualified Data.Map as M
 
-import Dyna.BackendK3.AST
+import Dyna.Backend.K3.AST
 import Dyna.XXX.HList
 
 data ExDecl = forall a s . Ex (Decl s a)
@@ -43,6 +43,7 @@ mkpc PUnk              = ()
 mkpc (PHL HRN)         = HN
 mkpc (PHL (w :++ ws))  = mkpc w :+ mkpc (PHL ws)
 mkpc (PJust x)         = mkpc x
+mkpc (PRef x)          = mkpc x
 mkpc (PT2 (a,b))       = (mkpc a, mkpc b)
 mkpc (PT3 (a,b,c))     = (mkpc a, mkpc b, mkpc c)
 mkpc (PT4 (a,b,c,d))   = (mkpc a, mkpc b, mkpc c, mkpc d)
@@ -52,8 +53,9 @@ mkpc (PT5 (a,b,c,d,e)) = (mkpc a, mkpc b, mkpc c, mkpc d, mkpc e)
 
 cslice :: PDat C w -> C (PatTy C w)
 cslice (PVar x)          = x
-cslice (PUnk)            = eC
+cslice PUnk              = eC
 cslice (PJust x)         = pC $ cslice x
+cslice (PRef x)          = pC $ cslice x
 cslice (PHL xs)          = C $ M.unions $ hrlproj (unC . cslice) xs
 cslice (PT2 (a,b))       = uC (cslice a) (cslice b)
 cslice (PT3 (a,b,c))     = C $ M.unions [ unC $ cslice a
@@ -73,7 +75,6 @@ cslice (PT5 (a,b,c,d,e)) = C $ M.unions [ unC $ cslice a
                                         ]
 
 instance K3 C where
-
   declVar d@(Decl v b) = C $ M.union (cdk b) (M.singleton v (Ex d))
   unsafeVar _ _        = eC
   
@@ -140,14 +141,12 @@ instance K3 C where
   eDelete a b          = uC a b
   eUpdate a b c        = C $ M.unions [unC a, unC b, unC c]
 
-  -- XXX k3ref
-  -- eAssign r v          = C $ M.union (unC r) (unC v)
+  eAssign r v          = C $ M.union (unC r) (unC v)
 
   eSend a t m          = C $ M.unions [unC a, unC t, unC m]
 
 cdk :: DBody t -> M.Map VarIx ExDecl
-cdk (DColl _) = M.empty
--- XXX k3ref
--- cdk DRef  = M.empty
-cdk (DFunc b) = unC b
-cdk (DTrig b) = unC b
+cdk (DColl _)       = M.empty
+cdk (DRef _ i)      = unC i
+cdk (DFunc _ _ p f) = unC (f $ mkpc p)
+cdk (DTrig p f)     = unC (f $ mkpc p)

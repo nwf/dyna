@@ -21,7 +21,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wall -Werror #-}
 
-module Dyna.BackendK3.Render (
+module Dyna.Backend.K3.Render (
     -- * K3 implementations
     AsK3Ty(..), AsK3E(..),
 
@@ -35,14 +35,34 @@ import qualified Data.List              as DL
 import qualified Data.Map               as M
 import           Text.PrettyPrint.Free
 
-import           Dyna.BackendK3.AST
-import           Dyna.BackendK3.CollectDecls
+import           Dyna.Backend.K3.AST
+import           Dyna.Backend.K3.CollectDecls
 import           Dyna.XXX.HList
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.THTuple
+import           Dyna.XXX.PPrint
 
 -- import qualified Language.Haskell.TH    as TH
 
+------------------------------------------------------------------------}}}
+-- Utilities                                                            {{{
+
+-- | Since the entire type of an AsK3 is phantom, we can, of course, alter
+-- it at a moment's notice.  Note that this is generally probably unwise.
+phantom_ask3e :: forall t e a. AsK3E e t -> AsK3E e a
+phantom_ask3e (AsK3E f) = AsK3E f
+
+{- XXX k3ref
+-- | Shift the phantom type for a reference inside AsK3E's interpretation
+phantom_ref :: AsK3E e (Ref (AsK3E e) a) -> AsK3E e (Ref r a)
+phantom_ref = phantom_ask3e
+-}
+
+{-
+-- | Shift the phantom type for a collection inside AsK3E's interpretation
+phantom_coll :: AsK3E e (CTE (AsK3E e) c a) -> AsK3E e (CTE r c a)
+phantom_coll = phantom_ask3e
+-}
 
 ------------------------------------------------------------------------}}}
 -- Collection handling                                                  {{{
@@ -61,40 +81,40 @@ k3cfn_sing CBag  (AsK3E e) = AsK3E$ encBag . e
 -- Pattern handling                                                     {{{
 
 rec_k3pfn :: PDat UnivTyRepr w
-          -> ReaderT Bool (State Int) (Doc e, PatReprFn (AsK3E e) w)
-rec_k3pfn = local (const False) . k3pfn
+          -> ReaderT (Doc e,Bool) (State Int) (Doc e, PatReprFn (AsK3E e) w)
+rec_k3pfn = local (\(a,_) -> (a,False)) . k3pfn
 
 -- | Turn a pattern into two parts: the string to be placed after the
 -- \ in the K3 code and the constitutent pieces to be passed into the
 -- HOAS function given to eLam
-k3pfn :: PDat UnivTyRepr w -> ReaderT Bool (State Int) (Doc e, PatReprFn (AsK3E e) w)
+k3pfn :: PDat UnivTyRepr w -> ReaderT (Doc e,Bool) (State Int) (Doc e, PatReprFn (AsK3E e) w)
 k3pfn (PVar tr) = do
     n <- lift incState
-    let sn = text $ "x" ++ show n
+    (pfx,_) <- ask
+    let sn = pfx <> pretty n
     return (sn <> colon <> unAsK3Ty (unUTR tr)
            ,AsK3E$ const$ sn)
 k3pfn PUnk = return ("_", ())
 k3pfn (PJust w) = rec_k3pfn w >>= \(p,r) -> return ("just" <+> parens p, r)
--- XXX k3ref
--- k3pfn (PRef w) = rec_k3pfn w
-k3pfn (PHL HRN) = ask >>= \f -> return (if f then "" else "()", HN)
+k3pfn (PRef w) = rec_k3pfn w
+k3pfn (PHL HRN) = ask >>= \(_,f) -> return (if f then "" else "()", HN)
 k3pfn (PHL (w :++ ws)) = do
     (pw,rw) <- k3pfn w
-    (ps,rs) <- local (const True) $ k3pfn (PHL ws)
-    p <- asks (\f -> (if f then (comma <>) else parens) (pw <> ps))
+    (ps,rs) <- local (\(a,_) -> (a,True)) $ k3pfn (PHL ws)
+    p <- asks (\(_,f) -> (if f then (comma <>) else id) (pw <> ps))
     let r = rw :+ rs
     return (p,r)
 k3pfn (PT2 (a,b)) = do
     (pa,ra) <- k3pfn a
     (pb,rb) <- k3pfn b
-    let p = tupled [pa,pb]
+    let p = sepBy comma [pa,pb]
     let r = (ra,rb)
     return (p,r)
 k3pfn (PT3 (a,b,c)) = do
     (pa,ra) <- k3pfn a
     (pb,rb) <- k3pfn b
     (pc,rc) <- k3pfn c
-    let p = tupled [pa,pb,pc]
+    let p = sepBy comma [pa,pb,pc]
     let r = (ra,rb,rc)
     return (p,r)
 k3pfn (PT4 (a,b,c,d)) = do
@@ -102,7 +122,7 @@ k3pfn (PT4 (a,b,c,d)) = do
     (pb,rb) <- k3pfn b
     (pc,rc) <- k3pfn c
     (pd,rd) <- k3pfn d
-    let p = tupled [pa,pb,pc,pd]
+    let p = sepBy comma [pa,pb,pc,pd]
     let r = (ra,rb,rc,rd)
     return (p,r)
 k3pfn (PT5 (a,b,c,d,e)) = do
@@ -111,9 +131,15 @@ k3pfn (PT5 (a,b,c,d,e)) = do
     (pc,rc) <- k3pfn c
     (pd,rd) <- k3pfn d
     (pe,re) <- k3pfn e
-    let p = tupled [pa,pb,pc,pd,pe]
+    let p = sepBy comma [pa,pb,pc,pd,pe]
     let r = (ra,rb,rc,rd,re)
     return (p,r)
+
+run_k3pfn :: Doc e
+          -> PDat UnivTyRepr w
+          -> Int
+          -> ((Doc e, PatReprFn (AsK3E e) w), Int)
+run_k3pfn pfx w n = runState (runReaderT (k3pfn w) (pfx,False)) n
 
 
 ------------------------------------------------------------------------}}}
@@ -129,11 +155,9 @@ k3sfn PUnk = return $ AsK3E$ const$ text "_"
 k3sfn (PJust s) = do
     p <- rec_k3sfn s
     return $ AsK3E$ \n -> "just" <> parens (unAsK3E p n)
-{- XXX k3ref
 k3sfn (PRef x) = do
     p <- rec_k3sfn x
-    return $ AsK3E$ unAsK3E p  -- coerce
--}
+    return $ phantom_ask3e p
 k3sfn (PHL HRN) = asks (\f -> AsK3E$ const$ if f then "" else "()")
 k3sfn (PHL (w :++ ws)) = do
     pw <- k3sfn w
@@ -155,7 +179,7 @@ k3sfn (PT4 (a,b,c,d)) = do
     pc <- k3sfn c
     pd <- k3sfn d
     return$ AsK3E$ \n -> tupled [unAsK3E pa n, unAsK3E pb n
-                               ,unAsK3E pc n, unAsK3E pd n]
+                                ,unAsK3E pc n, unAsK3E pd n]
 k3sfn (PT5 (a,b,c,d,e)) = do
     pa <- k3sfn a
     pb <- k3sfn b
@@ -163,8 +187,8 @@ k3sfn (PT5 (a,b,c,d,e)) = do
     pd <- k3sfn d
     pe <- k3sfn e
     return$ AsK3E$ \n -> tupled [unAsK3E pa n, unAsK3E pb n
-                               ,unAsK3E pc n, unAsK3E pd n
-                               ,unAsK3E pe n]
+                                ,unAsK3E pc n, unAsK3E pd n
+                                ,unAsK3E pe n]
 
 
 ------------------------------------------------------------------------}}}
@@ -301,6 +325,12 @@ instance K3Ty (AsK3Ty e) where
 
   tHL     us = AsK3Ty $ tupled $ hrlproj unAsK3Ty us
 
+instance Show (AsK3Ty e a) where
+  show (AsK3Ty f) = show f
+
+sht :: AsK3Ty e a -> Doc e
+sht = unAsK3Ty
+
 ------------------------------------------------------------------------}}}
 -- Expression handling                                                  {{{
 
@@ -334,7 +364,7 @@ instance K3 (AsK3E e) where
   cInt     n     = AsK3E$ const$ text$ show n
   cString  n     = AsK3E$ const$ text$ show n
   cNothing       = AsK3E$ const$ "nothing"
-  cUnit          = AsK3E$ const$ "unit"
+  cUnit          = AsK3E$ const$ "()"
 
 
   eJust (AsK3E a)          = builtin "just" [ a ]
@@ -363,11 +393,12 @@ instance K3 (AsK3E e) where
   eLeq = binop PrecBOComp "<="
   eNeq = binop PrecBOComp "!="
 
-  eLam w f = AsK3E$ \(n,_) -> let ((pat, arg),n') = runState (runReaderT (k3pfn w) False) n
-                             in "\\" <> pat <+> "->" `above` indent 2 (unAsK3E (f arg) (n',PrecLowest))
+  eLam w f = AsK3E$ \(n,_) -> let ((pat, arg),n') = run_k3pfn "x" w n
+                              in "\\" <> parens pat <+> "->" `above`
+                                 indent 2 (unAsK3E (f arg) (n',PrecLowest))
 
-  eApp (AsK3E f) (AsK3E x) = AsK3E$ \n ->
-    parens (parens (f n) </> parens (x n))
+  eApp (AsK3E f) (AsK3E x) = AsK3E$ \(n,_) ->
+    parens (parens (f (n,PrecApp)) </> parens (x (n,PrecApp)))
 
   eBlock ss (AsK3E r) = AsK3E$ \(n,_) -> 
     "do" <> (semiBraces (map ($ (n,PrecLowest)) ((map unAsK3E ss) ++ [r])))
@@ -393,8 +424,7 @@ instance K3 (AsK3E e) where
   eDelete (AsK3E c) (AsK3E e)          = builtin "delete" [ c, e ]
   eUpdate (AsK3E c) (AsK3E o) (AsK3E n) = builtin "update" [ c, o, n ]
 
-  -- XXX k3ref
-  -- eAssign          = binop PrecBOComp "<-" 
+  eAssign          = binop PrecBOComp ":=" 
   
   eSend (AsK3E a) (AsK3E f) (AsK3E x) = builtin "send" [ a, f, x ] 
 
@@ -416,58 +446,84 @@ binop p' o (AsK3E a) (AsK3E b) =
 builtin :: Doc e -> [ (Int,Prec) -> Doc e ] -> AsK3E e b
 builtin fn as = AsK3E$ \(n,_) -> fn <> tupled (map ($ (n,PrecLowest)) as)
 
-{-
--- | Since the entire type of an AsK3 is phantom, we can, of course, alter
--- it at a moment's notice.  Note that this is generally probably unwise.
-phantom_ask3e :: forall t e a. AsK3E e t -> AsK3E e a
-phantom_ask3e (AsK3E f) = AsK3E f
-
-{- XXX k3ref
--- | Shift the phantom type for a reference inside AsK3E's interpretation
-phantom_ref :: AsK3E e (Ref (AsK3E e) a) -> AsK3E e (Ref r a)
-phantom_ref = phantom_ask3e
--}
-
--- | Shift the phantom type for a collection inside AsK3E's interpretation
-phantom_coll :: AsK3E e (CTE (AsK3E e) c a) -> AsK3E e (CTE r c a)
-phantom_coll = phantom_ask3e
--}
-
 instance Show (AsK3E e a) where
   show (AsK3E f) = show $ f inist
 
 sh :: AsK3E e a -> Doc e
 sh f = unAsK3E f inist
 
-instance Show (AsK3Ty e a) where
-  show (AsK3Ty f) = show f
+------------------------------------------------------------------------}}}
+-- Declaration handling: data synthesis from types (XXX JUNK?)          {{{
 
-sht :: AsK3Ty e a -> Doc e
-sht = unAsK3Ty
+{-
+
+-- | Produce a textual representation of a K3 type
+--
+--   Unlike AsK3E below, we don't need to thread a variable counter
+--   around since K3 doesn't have tyvars
+newtype AsK3TyDat e (a :: *) = AsK3TyDat { unAsK3TyDat :: State Int (AsK3E e a) }
+
+mkvar :: AsK3TyDat e a
+mkvar = AsK3TyDat$ incState >>= \n -> return $ AsK3E $ \_ -> text ("a" ++ (show n))
+
+instance K3Ty (AsK3TyDat e) where
+  tAnn = const
+
+  tAddress  = mkvar 
+  tBool     = mkvar 
+  tByte     = mkvar 
+  tFloat    = mkvar 
+  tInt      = mkvar 
+  tString   = mkvar 
+  tUnit     = mkvar 
+  tTarget _ = mkvar
+  tMaybe  _ = mkvar
+  tColl _ _ = mkvar
+  tFun  _ _ = mkvar
+
+  -- XXX k3ref
+  -- tRef (AsK3Ty ta) = AsK3Ty$ "ref" <+> ta
+ 
+  -- XXX TUPLES 
+  tTuple2 _  = mkvar
+  tTuple3 _  = mkvar
+  tTuple4 _  = mkvar
+  tTuple5 _  = mkvar
+
+  tHL     _  = mkvar
+-}
+
+------------------------------------------------------------------------}}}
+-- Declaration handling: printout                                       {{{
 
 declKeyword :: DBody t -> Doc e
-declKeyword (DColl _)    = "declare"
-declKeyword (DTrig _)    = "trigger"
--- declKeyword DRef      = "declare"
-declKeyword (DFunc _) = "declare"
+declKeyword (DColl _)       = "declare"
+declKeyword (DTrig _ _)     = "trigger"
+declKeyword (DRef _ _)      = "declare"
+declKeyword (DFunc _ _ _ _) = "declare"
 
 shdk :: DBody t -> Doc e
 shdk d = case d of
-  (DColl ty) -> align (colon <+> sht (unUTR ty))
-  (DTrig b)  -> renderBody b
-  -- XXX k3ref
-  -- shdk DRef      = empty
-  (DFunc b)  -> renderBody b
+  (DColl ty)        -> colon <+> sht (unUTR ty)
+  (DTrig p f)       -> let ((pvs,args),_)  = run_k3pfn "a" p 0
+                       in    parens pvs
+                          <+> text "{}"   -- XXX
+                          <+> equals
+                          <+> sh (f args)
+                         
+  (DRef ty i)       -> colon <+> sht (unUTR ty)
+                        <> renderBody i
+  (DFunc ta tb p f) -> colon <+> sht (unUTR $ tFun ta tb)
+                        <> renderBody (eLam p f)
+
  where
-  renderBody b = space <> equals `aboveBreak`
-                          (indent 2 $ unAsK3E b inist)
+  renderBody b = space <> equals `aboveBreak` (indent 2 $ sh b)
 
 shd :: Decl s t -> Doc e
 shd (Decl (Var name) {- tipe -} body) =
       declKeyword body
   <+> text name
-  <+> shdk body
-   <> semi
+  <+> align (shdk body)
    <> line
 
 ------------------------------------------------------------------------}}}
@@ -480,12 +536,10 @@ shk3 :: Prog -> (Doc e, [Doc e])
 shk3 r = (case r of (Prog d) -> shd d,
           case r of (Prog (Decl _ b)) -> map shex $ M.elems $ cdk b)
 
-{-
+{- XXX JUNK
+ -
 -- | Produce a textual representation of a K3 program, including all
 -- referenced declarations.
---
--- XXX I would rather do this differently, if I can, but for the moment,
--- this suffices.
 data AsK3P e (a :: *) = AsK3P { ask3p_exp   :: AsK3E e a
                               , ask3p_decls :: M.Map VarIx (Doc e)
                               }
@@ -555,7 +609,7 @@ instance K3 (AsK3P e) where
 -}
 
 ------------------------------------------------------------------------}}}
--- Template Haskell splices                                             {{{
+-- Template Haskell splices (XXX)                                       {{{
 
 
 {-
@@ -580,3 +634,5 @@ $(do
                     $ ls
                   ))
 -}
+
+------------------------------------------------------------------------}}}
