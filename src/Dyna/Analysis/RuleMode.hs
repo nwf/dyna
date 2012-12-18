@@ -372,14 +372,14 @@ plan st sc anf mi =
                 plans -> Just $ argmin fst plans)
   $ plan_ st sc anf mi
 
-planInitializer :: BackendPossible fbs -> FRule -> Maybe (Cost,Action fbs)
-planInitializer bp (FRule { fr_anf = anf }) = plan (possible bp)
-                                                   simpleCost anf Nothing
+planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost,Action fbs)
+planInitializer bp (Rule { r_anf = anf }) = plan (possible bp)
+                                                 simpleCost anf Nothing
 
 planEachEval :: BackendPossible fbs
              -> S.Set DFunctAr
-             -> DVar -> DVar -> FRule -> [(DFunctAr, Maybe (Cost,Action fbs))]
-planEachEval bp cs hi v (FRule { fr_anf = anf })  =
+             -> DVar -> DVar -> Rule -> [(DFunctAr, Maybe (Cost,Action fbs))]
+planEachEval bp cs hi v (Rule { r_anf = anf })  =
   map (\(c,fa) -> (fa, plan (possible bp) simpleCost anf $ Just (c,hi,v)))
     $ MA.mapMaybe (\c -> case c of
                            CFCall _ is f | S.notMember (f,length is) cs
@@ -417,7 +417,7 @@ ntMode _ (NTNumeric _) = MBound
 -}
 
 {-
-planEachEval_ hi v (FRule { fr_anf = anf })  =
+planEachEval_ hi v (Rule { r_anf = anf })  =
   map (\(c,fa) -> (fa, plan_ possible simpleCost anf $ Just (c,hi,v)))
     $ MA.mapMaybe (\c -> case c of
                            CFCall _ is f | not $ isMath f

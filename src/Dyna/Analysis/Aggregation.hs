@@ -23,18 +23,20 @@ type AggMap = M.Map DFunctAr DAgg
 ------------------------------------------------------------------------}}}
 -- Associate each item with an aggregator                               {{{
 
+-- XXX These functions should be rewritten to use Dyna.Main.Exception
+
 -- XXX These functions really would like to have span information, so they
 -- could report which line of the source caused an error.
 
-procANF :: FRule -> Either String (DFunctAr, DAgg)
-procANF (FRule h a _ _ _ (AS { as_assgn = as })) =
+procANF :: Rule -> Either String (DFunctAr, DAgg)
+procANF (Rule _ h a _ _ _ (AS { as_assgn = as })) =
   case M.lookup h as of
     Nothing       -> Left $ "I can't process head-variables"
     Just t -> case t of
                 Left _       -> Left "Malformed head"
                 Right (f,as) -> Right ((f,length as),a)
 
-buildAggMap :: [FRule] -> Either String AggMap
+buildAggMap :: [Rule] -> Either String AggMap
 buildAggMap = go (M.empty)
  where
   go m []      = Right m

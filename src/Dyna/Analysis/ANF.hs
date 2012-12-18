@@ -70,7 +70,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..),  FRule(..),
+    ANFState(..),  Rule(..),
     normTerm, normRule, runNormalize, printANF
 ) where
 
@@ -346,22 +346,24 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data FRule = FRule { fr_functor :: DVar
-                   , fr_aggregator :: DAgg
-                   , fr_side :: [DVar]
-                   , fr_result :: DVar
-                   , fr_span :: T.Span
-                   , fr_anf :: ANFState }
+data Rule = Rule { r_index      :: Int
+                 , r_functor    :: DVar
+                 , r_aggregator :: DAgg
+                 , r_side       :: [DVar]
+                 , r_result     :: DVar
+                 , r_span       :: T.Span
+                 , r_anf        :: ANFState
+                 }
  deriving (Show)
 
 -- XXX
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
-         -> FRule
-normRule (P.Rule h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
+         -> Rule
+normRule (P.Rule i h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
     nh  <- normTerm False h >>= newAssignNT "_h"
     nr  <- normTerm True  r >>= newAssignNT "_r"
     nes <- mapM (\e -> normTerm True e >>= newAssignNT "_c") es
-    return $ FRule nh a nes nr span
+    return $ Rule i nh a nes nr span
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -377,10 +379,12 @@ runNormalize =
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{
 
-printANF :: FRule -> Doc e
-printANF (FRule h a s result span
+printANF :: Rule -> Doc e
+printANF (Rule i h a s result span
             (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
           text ";;" <+> prettySpanLoc span
+  `above`
+          text ";; index" <+> pretty i
   `above`
   ( parens $ (pretty a)
             <+> valign [ (pretty h)

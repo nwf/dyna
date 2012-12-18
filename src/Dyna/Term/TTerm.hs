@@ -21,7 +21,7 @@ module Dyna.Term.TTerm (
     TermF(..), DTermV, DVar, DFunct, DFunctAr, DTerm,
 
         -- * Rules
-    DAgg, DRule(..),
+    DAgg, {- DRule(..), -}
 
         -- * Convenience re-export
     UTerm(..)
@@ -64,7 +64,9 @@ instance (Eq a) => Unifiable (TermF a) where
 
 type DAgg = B.ByteString
 
+{-
 data DRule = Rule !DTerm !DAgg ![DTerm] !DTerm
  deriving (Show)
+-}
 
 ------------------------------------------------------------------------}}}

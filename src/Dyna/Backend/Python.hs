@@ -196,8 +196,8 @@ pf f vs = pretty f <> (tupled $ map pretty vs)
 --
 -- timv: might want to fuse these into one circuit
 --
-combinePlans :: [(FRule,[(DFunctAr, Maybe (Cost,Action fbs))])] ->
-                M.Map DFunctAr [(FRule, Cost, Action fbs)]
+combinePlans :: [(Rule,[(DFunctAr, Maybe (Cost,Action fbs))])] ->
+                M.Map DFunctAr [(Rule, Cost, Action fbs)]
 combinePlans = go (M.empty)
  where
   go m []             = m
@@ -210,10 +210,10 @@ combinePlans = go (M.empty)
                        $ "No update plan for "
                           <+> (pretty fa)
                           <+> "in rule at"
-                          <+> (prettySpanLoc $ fr_span fr)
+                          <+> (prettySpanLoc $ r_span fr)
       Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
 
-py (f,a) mu (FRule h _ _ r span _) dope =
+py (f,a) mu (Rule _ h _ _ r span _) dope =
            case mu of
              Just (hv,v) ->
                          "@register"
@@ -245,12 +245,12 @@ py (f,a) mu (FRule h _ _ r span _) dope =
 printPlan :: Handle
           -> (DFunct,Int)                    -- ^ Functor & arity
           -> Maybe (DVar,DVar)               -- ^ if update, input intern & value
-          -> (FRule, Cost, Action PyDopeBS)  -- ^ rule and plan
+          -> (Rule, Cost, Action PyDopeBS)  -- ^ rule and plan
           -> IO ()
 printPlan fh fa mu (r, cost, dope) = do         -- display plan
   hPutStrLn fh $ "# --"
   displayIO fh $ prefixSD "# " $ renderPretty 1.0 100
-                 $ (prettySpanLoc $ fr_span r) <> line
+                 $ (prettySpanLoc $ r_span r) <> line
   hPutStrLn fh $ "# Cost: " ++ (show cost)
   displayIO fh $ renderPretty 1.0 100
                  $ py fa mu r dope <> line
@@ -297,7 +297,7 @@ processFile_ fileName fh = do
          forM_ initializers $ \(f,c,a) -> printPlan fh (findHeadFA f) Nothing (f,c,a)
 
  where
-  findHeadFA (FRule h _ _ _ _ (AS { as_assgn = as })) =
+  findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
     case M.lookup h as of
       Nothing            -> error "No unification for head variable?"
       Just (Left _)      -> error "NTVar head?"

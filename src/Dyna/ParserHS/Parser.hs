@@ -25,11 +25,14 @@
 --      anywhere else in the pipeline yet)
 
 --   Header material                                                      {{{
-
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.ParserHS.Parser (
     Term(..), dterm, dtexpr,
@@ -38,10 +41,9 @@ module Dyna.ParserHS.Parser (
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.Trans (MonadTrans,lift)
+import           Control.Monad.State
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
-import           Data.Char (isSpace)
 import qualified Data.CharSet                     as CS
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
@@ -66,20 +68,37 @@ data Term = TFunctor !B.ByteString
           | TVar     !B.ByteString
  deriving (Eq,Ord,Show)
 
+type RuleIx = Int
 
 -- | Rules are not just terms because we want to make it very syntactically
 --   explicit about the head being a term (though that's not an expressivity
 --   concern -- just use the parenthesized texpr case) so that there is no
 --   risk of parsing ambiguity.
-data Rule = Rule !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
+data Rule = Rule !RuleIx !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
  deriving (Eq,Show)
 
---   XXX The span on LRule is a little silly
+-- | Smart constructor for building a rule with index
+rule :: (Functor f, MonadState RuleIx f)
+     => f (   Spanned Term
+           -> B.ByteString
+           -> [Spanned Term]
+           -> Spanned Term
+           -> Rule)
+rule = Rule <$> get
+
 --   XXX Having one kind of Pragma is probably wrong
 data Line = LRule (Spanned Rule)
           | LPragma !(Spanned Term)
  deriving (Eq,Show)
 
+------------------------------------------------------------------------}}}
+-- Parser Configuration State                                           {{{
+
+{-
+-- | Configuration data threaded deeply into the parser
+data PC m = PC { pc_opertab :: OperatorTable m (Spanned Term) }
+type PCM m a = StateT (PC m) m a
+-}
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
@@ -199,6 +218,11 @@ instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
   rend = lift rend
   restOfLine = lift restOfLine
 
+instance MonadState s m => MonadState s (DynaLanguage m) where
+  get = lift get
+  put = lift . put
+  state = lift . state
+
 ------------------------------------------------------------------------}}}
 -- Atoms                                                                {{{
 
@@ -211,6 +235,7 @@ atom =     liftA BU.fromString stringLiteralSQ
 
 nullaryStar :: DeltaParsing m => m (Spanned Term)
 nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
+                      <* (notFollowedBy $ char '(')
 
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
@@ -241,12 +266,14 @@ term  = token $ choice
 -- confusion with the end-of-rule marker, which is taken to be "dot space"
 -- or "dot eof").
 --
--- XXX is the use of isSpace here correct or do we want whiteSpace?
-dotAny :: CharParsing m => m Char
-dotAny  = char '.' <* satisfy (not . isSpace)
+-- XXX dotAny is also likely useful when we get dynabase handling, but we're
+-- not there yet.
+dotAny :: (TokenParsing m, Monad m) => m Char
+dotAny  = char '.' <* notFollowedBy whiteSpace
 
 -- | A "dot operator" is a dot followed immediately by something that looks
--- like a typical operator.
+-- like a typical operator.  We 'lookAhead' here to avoid the case of a dot
+-- by itself as being counted as an operator.
 dotOper :: (Monad m, TokenParsing m) => m [Char]
 dotOper = try (lookAhead dotAny *> identNL dynaDotOperStyle)
 
@@ -286,6 +313,7 @@ bf f = do
 --
 -- XXX timv suggests that this should be assocnone for binops as a quick
 -- fix.  Eventually we should still do this properly.
+termETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
 termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
              , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
              , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
@@ -312,13 +340,14 @@ dtexpr = unDL texpr
 
 -- | Grab the head (term!) and aggregation operator from a line that
 -- we hope is a rule.
-rulepfx :: DeltaParsing f => f ([Spanned Term] -> Spanned Term -> Rule)
-rulepfx = Rule <$> term
+rulepfx :: (MonadState RuleIx m, DeltaParsing m)
+        => m ([Spanned Term] -> Spanned Term -> Rule)
+rulepfx = rule <*> term
                <*  whiteSpace
                <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
 
-rule :: DeltaParsing m => m Rule
-rule = choice [
+parseRule :: (MonadState RuleIx m, DeltaParsing m) => m Rule
+parseRule = choice [
                -- HEAD OP= RESULTEXPR whenever EXPRS .
                (try (liftA flip rulepfx
                           <*> texpr
@@ -334,15 +363,15 @@ rule = choice [
                -- timv: using ':-' as the "default" aggregator for facts is
                -- probably incorrect because it conflicts with '&=' and other
                -- logical aggregators.
-             , (\h@(_ :~ s) -> Rule h ":-" [] $ (TFunctor "true" [] :~ s)) <$> term
+             -- , term >>= \h@(_ :~ s) -> rule h ":-" [] (TFunctor "true" [] :~ s)
 
              ]
        <* optional (char '.')
  where
   hrss = highlight ReservedOperator . spanned . symbol
 
-drule :: DeltaParsing m => m (Spanned Rule)
-drule = unDL (spanned rule)
+drule :: (MonadState RuleIx m, DeltaParsing m) => m (Spanned Rule)
+drule = unDL (spanned parseRule)
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
@@ -354,16 +383,16 @@ dpragma =    symbol ":-"
           <* whiteSpace
           <* optional (char '.')
 
-progline :: DeltaParsing m => m (Spanned Line)
+progline :: (MonadState RuleIx m, DeltaParsing m) => m (Spanned Line)
 progline  =    whiteSpace
-            *> spanned (choice [ LRule <$> drule
+            *> spanned (choice [ LRule <$> spanned parseRule
                                , LPragma <$> dpragma
                                ])
 
-dline :: DeltaParsing m => m (Spanned Line)
-dline = unDL (progline <* optional whiteSpace)
+dline :: (DeltaParsing m) => m (Spanned Line)
+dline = evalStateT (unDL (progline <* optional whiteSpace)) 0
 
 dlines :: DeltaParsing m => m [Spanned Line]
-dlines = unDL (many (progline <* optional whiteSpace))
+dlines = evalStateT (unDL (many (progline <* optional whiteSpace))) 0
 
 ------------------------------------------------------------------------}}}
