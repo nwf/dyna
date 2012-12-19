@@ -29,7 +29,7 @@
 #from debug import saverr; saverr.enable(editor=True)
 
 import os, sys
-from collections import defaultdict, Counter
+from collections import defaultdict
 from argparse import ArgumentParser
 from utils import ip, red, green, blue, magenta
 from defn import agg_bind
@@ -306,8 +306,9 @@ def go():
         pass
     finally:
         dump_charts()
-        with file(argv.source + '.chart', 'wb') as f:
-            dump_charts(f)
+        if argv.output is not None:
+            with file(argv.output, 'wb') as f:
+                dump_charts(f)
 
 
 def dynac(f):
@@ -350,8 +351,15 @@ def do(filename):
 
 parser = ArgumentParser(description=__doc__)
 parser.add_argument('source', help='Path to Dyna source file.')
+parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
+parser.add_argument('-o', dest='output', help='Output chart.')
+
 argv = parser.parse_args()
+
+#if argv.output is None:
+#    argv.output = argv.source + '.chart'
 
 do(argv.source)
 
-ip()
+if argv.interactive:
+    ip()

@@ -42,9 +42,8 @@ class Aggregator(object):
         return 'Aggregator(%r, %r)' % (self.item, self.name)
 
 
-class MultisetAggregator(Counter, Aggregator):
-    def __init__(self, item, name, folder):
-        self.folder = folder
+class BAggregator(Counter, Aggregator):
+    def __init__(self, item, name):
         Aggregator.__init__(self, item, name)
         Counter.__init__(self)
     def inc(self, val):
@@ -52,9 +51,17 @@ class MultisetAggregator(Counter, Aggregator):
     def dec(self, val):
         self[val] -= 1
     def fold(self):
-        return self.folder(self)
+        return self
     def fromkeys(self, *_):
-        raise NotImplementedError
+        assert False, 'bah.'
+
+
+class MultisetAggregator(BAggregator):
+    def __init__(self, item, name, folder):
+        self.folder = folder
+        BAggregator.__init__(self, item, name)
+    def fold(self):
+        return self.folder(self)
 
 
 class LastEquals(Aggregator):
@@ -67,6 +74,20 @@ class LastEquals(Aggregator):
         raise NotImplementedError('dec on last equal not defined.')
     def fold(self):
         return self.list[-1]
+
+
+class SetEquals(Aggregator):
+    def __init__(self, item, name):
+        self.set = set([])
+        Aggregator.__init__(self, item, name)
+    def inc(self, val):
+        self.set.add(val)
+    def dec(self, val):
+        self.set.pop(val)
+    def fold(self):
+        return self.set
+    def clear(self):
+        self.set.clear()
 
 
 def agg_bind(item, agg_decl):
@@ -138,4 +159,11 @@ def agg_bind(item, agg_decl):
     if agg_decl[fn] == ':=':
         return LastEquals(item, agg_decl[fn])
 
-    return MultisetAggregator(item, agg_decl[fn], defs[agg_decl[fn]])
+    elif agg_decl[fn] == 'bag=':
+        return BAggregator(item, agg_decl[fn])
+
+    elif agg_decl[fn] == 'set=':
+        return SetEquals(item, agg_decl[fn])
+
+    else:
+        return MultisetAggregator(item, agg_decl[fn], defs[agg_decl[fn]])
