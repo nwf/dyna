@@ -49,11 +49,11 @@ case_mfn = e @=? renderExp k3
     -- the type of a from the occurrance of "a + Int".
   k3 = eLam (PVar tInt) (\a -> eNeg $ eAdd a $ cInt 1)
 
-case_pairfn :: Assertion
-case_pairfn = e @=? renderExp k3
- where
-  e  = "\\(x0:int,x1:bool) -> x0"
-  k3 = eLam (PHL $ PVar tInt :++ PVar tBool :++ HRN) (\(a:+_:+_) -> a)
+-- case_pairfn :: Assertion
+-- case_pairfn = e @=? renderExp k3
+--  where
+--   e  = "\\(x0:int,x1:bool) -> x0"
+--   k3 = eLam (PHL $ PVar tInt :++ PVar tBool :++ HRN) (\(a:+_:+_) -> a)
 
 ------------------------------------------------------------------------}}}
 -- Macro expansion test cases                                           {{{
