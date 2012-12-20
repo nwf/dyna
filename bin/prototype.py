@@ -296,7 +296,7 @@ function selectline(lineno) {
 
         print >> html, '<h2>Update plans</h2>'
 
-        cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % dynafile
+        cmd = """dist/build/dyna/dyna -B python -o "%s".plan "%s" """ % (dynafile,dynafile)
         if 0 != os.system(cmd):
             print 'command failed:\n\t' + cmd
             os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)

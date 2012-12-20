@@ -21,6 +21,9 @@ data DynacException =
     -- | The user program contains an error
     UserProgramError (PP.Doc TP.Effect)
 
+    -- | Something went wrong when trying to understand arguments
+  | InvocationError (PP.Doc TP.Effect)
+
     -- | We don't implement a feature yet.
   | Sorry            (PP.Doc TP.Effect)
 
@@ -34,9 +37,12 @@ instance Exception DynacException
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
+dynacUserErr, dynacSorry, dynacPanic :: PP.Doc TP.Effect -> a
+dynacUserErr = throw . UserProgramError
+dynacSorry = throw . Sorry
+dynacPanic = throw . Panic
+
 dynacThrow :: DynacException -> a
 dynacThrow = throw
-
-dynacSorry = throw . Sorry
 
 ------------------------------------------------------------------------}}}

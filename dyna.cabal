@@ -57,11 +57,11 @@ Library
 
 Executable drepl
     Default-Language:   Haskell2010
+    Hs-Source-Dirs:     src
 
     ghc-options:        -Wall
                         -main-is Dyna.REPL
 
-    Hs-Source-Dirs:     src
     Build-Depends:      base >=4,
                         bytestring >=0.9,
                         charset >=0.3,
@@ -81,13 +81,42 @@ Executable drepl
     
     Main-Is: Dyna/REPL.hs
 
+Executable dyna
+
+    Default-Language:   Haskell2010
+    Hs-Source-Dirs:     src
+
+    ghc-options:        -Wall
+                        -main-is Dyna.Main.Driver
+
+    Build-Depends:      base >=4,
+                        bytestring >=0.9,
+                        charset >=0.3,
+                        containers >=0.4,
+                        haskeline >=0.6,
+                        HUnit >=1.2,
+                        mtl >=2.1,
+                        parsers >=0.2,
+                        process >=1.1,
+                        reducers >=3.0,
+                        semigroups >=0.8,
+                        tagged >= 0.4.4,
+                        trifecta >=0.90,
+                        unification-fd,
+                        unordered-containers>=0.2,
+                        utf8-string >=0.3,
+                        wl-pprint-extras >=3.0,
+                        wl-pprint-terminfo >=3.0
+
+    Main-Is: Dyna/Main/Driver.hs
+
 Test-suite dyna-selftests
     type:               exitcode-stdio-1.0
     Default-Language:   Haskell2010
     Hs-Source-Dirs:     src
 
     ghc-options:        -Wall
-                        -main-is Dyna.Test.Main
+                        -main-is Dyna.Main.TestsDriver
 
     Build-Depends:      base >=4,
                         bytestring >=0.9,
@@ -97,6 +126,7 @@ Test-suite dyna-selftests
                         HUnit >=1.2,
                         mtl >=2.1,
                         parsers >=0.2,
+                        process >=1.1,
                         reducers >=3.0,
                         semigroups >=0.8,
                         tagged >= 0.4.4,
@@ -104,6 +134,7 @@ Test-suite dyna-selftests
                         test-framework >=0.6,
                         test-framework-hunit >=0.2,
                         test-framework-th >=0.2,
+                        test-framework-golden >= 1.1,
                         trifecta >=0.90,
                         unification-fd,
                         unordered-containers>=0.2,
@@ -112,4 +143,4 @@ Test-suite dyna-selftests
 
     Other-Modules:      Dyna.Backend.K3.Examples
 
-    Main-Is: Dyna/Test/Main.hs
+    Main-Is: Dyna/Main/TestsDriver.hs

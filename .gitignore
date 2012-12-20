@@ -2,6 +2,4 @@
 *.o
 *.pyc
 
-examples/*.plan
-examples/*.anf
-examples/*.d
+dist/

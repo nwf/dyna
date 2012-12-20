@@ -15,7 +15,10 @@ module Dyna.Analysis.RuleMode (
 
     Crux(..),
 
-    Action, Cost, Det(..), planInitializer, planEachEval,
+    Action, Cost, Det(..), planInitializer,
+    BackendPossible, planEachEval,
+
+    EvalMap, combinePlans,
 
     adornedQueries
 ) where
@@ -33,8 +36,10 @@ import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Parser       as DP
-import           Dyna.XXX.DataUtils(argmin)
+import           Dyna.XXX.DataUtils(argmin,mapInOrApp)
+import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           Dyna.XXX.TrifectaTest
+import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Modes                                                                {{{
@@ -325,17 +330,20 @@ stepAgenda st sc mic = go [] . (\x -> [x])
   go [] []     = []
   go (r:rs) [] = go rs r
   go rs (p:ps) = case stepPartialPlan st sc mic p of
-                    Left df -> df : (go rs ps)
+                    Left df ->   (\(c,a) -> (c,fmap (\(_,x,y) -> (x,y)) mic,a)) df 
+                               : (go rs ps)
                     Right ps' -> go (ps':rs) ps
 
 -- XXX we're going to need to initially plan a unification crux as part of
 -- backward chaining, but we don't yet.
-initializeForCrux :: (Crux DVar a, DVar, DVar)
+initializeForCrux :: (Crux DVar a)
                   -> ((DFunctAr, DVar, DVar), Action fbs)
-initializeForCrux (cr, hi, v) = case cr of
-  CFCall o is f -> ( ((f,length is), hi, o)
-                   , [ OPPeel is hi f, OPAsgn o (NTVar v) ])
+initializeForCrux cr = case cr of
+  CFCall o is f -> ( ((f,length is), _hi, o)
+                   , [ OPPeel is _hi f ])
   _             -> dynacSorry "Don't know how to initially plan !CFCall"
+ where
+  _hi = "_i"
 
 -- | Given a normalized form and an initial crux, saturate the graph and
 --   get a plan for doing so.
@@ -344,17 +352,14 @@ initializeForCrux (cr, hi, v) = case cr of
 plan_ :: Possible fbs                                -- ^ Available steps
       -> (PartialPlan fbs -> Action fbs -> Cost)     -- ^ Scoring function
       -> ANFState                                    -- ^ Normal form
-      -> Maybe (Crux DVar NTV, DVar, DVar)           -- ^ Initial crux,
-                                                     --   item intern, and
-                                                     --   value, if any.
-      -> [(Cost, Action fbs)]                        -- ^ If there's a plan...
+      -> Maybe (Crux DVar NTV)                       -- ^ Initial crux
+      -> [(Cost, Maybe (DVar,DVar), Action fbs)]     -- ^ If there's a plan...
 plan_ st sc anf mi =
   let cruxes =    eval_cruxes anf
                ++ unif_cruxes anf
       (mic,ip) = maybe (Nothing, []) (first Just . initializeForCrux) mi
-      initPlan = PP { pp_cruxes = maybe id (\(c,_,_) -> S.delete c) mi
-                                  $ S.fromList cruxes
-                    , pp_binds  = maybe S.empty (\(c,_,_) -> cruxVars c) mi
+      initPlan = PP { pp_cruxes = maybe id S.delete mi $ S.fromList cruxes
+                    , pp_binds  = maybe S.empty cruxVars mi
                     , pp_restrictSearch = False
                     , pp_score  = 0
                     , pp_plan   = ip
@@ -364,28 +369,62 @@ plan_ st sc anf mi =
 plan :: Possible fbs
      -> (PartialPlan fbs -> Action fbs -> Cost)
      -> ANFState
-     -> Maybe (Crux DVar NTV, DVar, DVar)
-     -> Maybe (Cost, Action fbs)
+     -> Maybe (Crux DVar NTV)
+     -> Maybe (Cost, Maybe (DVar,DVar), Action fbs)
 plan st sc anf mi =
   (\x -> case x of
                 [] -> Nothing
-                plans -> Just $ argmin fst plans)
+                plans -> Just $ argmin (\(c,_,_) -> c) plans)
   $ plan_ st sc anf mi
 
-planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost,Action fbs)
-planInitializer bp (Rule { r_anf = anf }) = plan (possible bp)
-                                                 simpleCost anf Nothing
+planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Action fbs)
+planInitializer bp (Rule { r_anf = anf }) =
+  fmap (\(c,m,a) -> case m of
+                      Nothing -> (c,a)
+                      Just _ -> dynacPanic "Initializer wants input variables?")
+  $ plan (possible bp) simpleCost anf Nothing
 
-planEachEval :: BackendPossible fbs
-             -> S.Set DFunctAr
-             -> DVar -> DVar -> Rule -> [(DFunctAr, Maybe (Cost,Action fbs))]
-planEachEval bp cs hi v (Rule { r_anf = anf })  =
-  map (\(c,fa) -> (fa, plan (possible bp) simpleCost anf $ Just (c,hi,v)))
+planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
+             -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
+             -> Rule
+             -> [(DFunctAr, Maybe (Cost, Maybe (DVar, DVar), Action fbs))]
+planEachEval bp cs (Rule { r_anf = anf })  =
+  map (\(c,fa) -> (fa, plan (possible bp) simpleCost anf $ Just c))
     $ MA.mapMaybe (\c -> case c of
-                           CFCall _ is f | S.notMember (f,length is) cs
+                           CFCall _ is f | cs (f,length is)
                                          -> Just $ (c,(f,length is))
                            _             -> Nothing )
     $ eval_cruxes anf
+
+------------------------------------------------------------------------}}}
+-- Plan combination                                                     {{{
+
+type EvalMap fbs = M.Map DFunctAr [(Rule, Cost, Maybe (DVar,DVar), Action fbs)]
+
+-- | Return all plans for each functor/arity
+--
+-- XXX This may still belong elsewhere.
+--
+-- XXX This guy wants span information; he's got it now use it.
+--
+-- timv: might want to fuse these into one circuit
+--
+combinePlans :: [(Rule,[(DFunctAr, Maybe (Cost, Maybe (DVar, DVar), Action fbs))])]
+             -> EvalMap fbs  
+combinePlans = go (M.empty)
+ where
+  go m []             = m
+  go m ((fr,cmca):xs) = go' xs fr cmca m
+
+  go' xs _  []           m = go m xs
+  go' xs fr ((fa,mca):ys) m =
+    case mca of
+      Nothing -> dynacUserErr
+                       $ "No update plan for "
+                          <+> (pretty fa)
+                          <+> "in rule at"
+                          <+> (prettySpanLoc $ r_span fr)
+      Just (c,mv,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,mv,a) m
 
 ------------------------------------------------------------------------}}}
 -- Adorned Queries                                                      {{{

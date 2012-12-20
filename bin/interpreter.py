@@ -305,14 +305,15 @@ def go():
     except KeyboardInterrupt:
         pass
     finally:
-        dump_charts()
         if argv.output is not None:
-            with file(argv.output, 'wb') as f:
-                dump_charts(f)
+            if argv.output == "-": dump_charts(sys.stdout)
+            else:
+                with file(argv.output, 'wb') as f: dump_charts(f)
+        else: dump_charts()
 
 
 def dynac(f):
-    cmd = """ghc -isrc Dyna.Backend.Python -e 'processFile "%s"' """ % f
+    cmd = """dist/build/dyna/dyna -B python -o "%s".plan "%s" """ % (f,f)
     assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
     return f + '.plan'
 

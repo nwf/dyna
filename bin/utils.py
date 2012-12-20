@@ -12,7 +12,7 @@ def toANF(code, f='/tmp/tmp.dyna'):
     with file(f, 'wb') as tmp:
         tmp.write(code)
     os.system('rm -f %s.anf' % f)  # clean up any existing ANF output
-    assert 0 == os.system("""ghc -isrc Dyna.Backend.Debugging -e 'normalizeFile "%s"' """ % f), \
+    assert 0 == os.system("""dist/build/dyna/dyna --dump-anf="%s".anf --backend=none \"%s\" """ % (f,f)), \
         'failed to convert file.'
     with file('%s.anf' % f) as h:
         return h.read()

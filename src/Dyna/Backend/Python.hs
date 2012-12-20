@@ -1,12 +1,12 @@
 ---------------------------------------------------------------------------
 -- | Compile to Python
 --
--- See bin/stdlib.py
+-- See bin/interpreter.py
 
 -- Header material                                                      {{{
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dyna.Backend.Python where
+module Dyna.Backend.Python (pythonBackend) where
 
 import           Control.Applicative ((<*))
 import qualified Control.Arrow              as A
@@ -26,6 +26,7 @@ import           Dyna.Analysis.ANF
 import           Dyna.Analysis.Base
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.RuleMode
+import           Dyna.Main.BackendDefn
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as P
@@ -39,6 +40,40 @@ import qualified Text.Trifecta              as T
 ------------------------------------------------------------------------}}}
 -- DOpAMine Backend Information                                         {{{
 
+data PyDopeBS = PDBAsIs
+              | PDBRewrite   (([ModedVar],ModedVar) -> [DOpAMine PyDopeBS])
+
+builtins (f,is,o) = case () of
+  _ | all (== MBound) is && S.member (f,length is) constants
+    -> case o of
+         MFree  -> Right (Det,PDBAsIs)
+         MBound -> Right (DetSemi,
+           PDBRewrite $ \(is,o) -> let chkv = "_chk" in
+                                   [ OPIter (MF chkv) is f Det $ Just PDBAsIs
+                                   , OPCheq chkv (varOfMV o)
+                                   ])
+
+  _ | f == "+"
+    -> case (is,o) of
+         ([MBound,MFree],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter y [o,x] "-" Det $ Just PDBAsIs])
+         ([MFree,MBound],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "-" Det $ Just PDBAsIs])
+         _ -> Left True
+
+  _ | f == "-"
+    -> case (is,o) of
+         ([MBound,MFree],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter y [x,o] "-" Det $ Just PDBAsIs])
+         ([MFree,MBound],MBound) -> Right (Det,
+             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "+" Det $ Just PDBAsIs])
+         _ -> Left True
+
+  _ | S.member (f,length is) constants  -> Left True
+  _ -> Left False
+
+-- XXX This and pycall ought to be merged
+constants :: S.Set (DFunct,Int)
 constants = S.fromList
     [ ("+",2)
     , ("-",2)
@@ -67,38 +102,6 @@ constants = S.fromList
     , ("false",0)
     , ("null",0)   -- XXX is this right?
     ]
-
-data PyDopeBS = PDBAsIs
-              | PDBRewrite   (([ModedVar],ModedVar) -> [DOpAMine PyDopeBS])
-
-builtin (f,is,o) = case () of
-  _ | all (== MBound) is && S.member (f,length is) constants
-    -> case o of
-         MFree  -> Right (Det,PDBAsIs)
-         MBound -> Right (DetSemi,
-           PDBRewrite $ \(is,o) -> let chkv = "_chk" in
-                                   [ OPIter (MF chkv) is f Det $ Just PDBAsIs
-                                   , OPCheq chkv (varOfMV o)
-                                   ])
-
-  _ | f == "+"
-    -> case (is,o) of
-         ([MBound,MFree],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter y [o,x] "-" Det $ Just PDBAsIs])
-         ([MFree,MBound],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "-" Det $ Just PDBAsIs])
-         _ -> Left True
-
-  _ | f == "-"
-    -> case (is,o) of
-         ([MBound,MFree],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter y [x,o] "-" Det $ Just PDBAsIs])
-         ([MFree,MBound],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "+" Det $ Just PDBAsIs])
-         _ -> Left True
-
-  _ | S.member (f,length is) constants  -> Left True
-  _ -> Left False
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
@@ -149,7 +152,6 @@ filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 
 functorIndirect table f vs = table <> (brackets $ dquotes $ (pretty f <> "/" <> (text $ show $ length vs)))
 
-
 pycall table f vs = case (f, length vs) of
   (  "*", 2) -> infixOp " * "
   (  "+", 2) -> infixOp " + "
@@ -188,34 +190,6 @@ pycall table f vs = case (f, length vs) of
 
 pf f vs = pretty f <> (tupled $ map pretty vs)
 
-------------------------------------------------------------------------}}}
--- Experimental Detritus                                                {{{
-
--- | Return all plans for each functor/arity
---
--- XXX This belongs elsewhere.
---
--- XXX This guy wants span information; he's got it now use it.
---
--- timv: might want to fuse these into one circuit
---
-combinePlans :: [(Rule,[(DFunctAr, Maybe (Cost,Action fbs))])] ->
-                M.Map DFunctAr [(Rule, Cost, Action fbs)]
-combinePlans = go (M.empty)
- where
-  go m []             = m
-  go m ((fr,cmca):xs) = go' xs fr cmca m
-
-  go' xs _  []           m = go m xs
-  go' xs fr ((fa,mca):ys) m =
-    case mca of
-      Nothing -> throw $ UserProgramError
-                       $ "No update plan for "
-                          <+> (pretty fa)
-                          <+> "in rule at"
-                          <+> (prettySpanLoc $ r_span fr)
-      Just (c,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,a) m
-
 py (f,a) mu (Rule _ h _ _ r span _) dope =
            case mu of
              Just (hv,v) ->
@@ -244,13 +218,12 @@ py (f,a) mu (Rule _ h _ _ r span _) dope =
 
    emit = "emit" <> tupled [pretty h, pretty r]
 
-
 printPlan :: Handle
           -> (DFunct,Int)                    -- ^ Functor & arity
-          -> Maybe (DVar,DVar)               -- ^ if update, input intern & value
-          -> (Rule, Cost, Action PyDopeBS)  -- ^ rule and plan
+             -- | rule, cost, input variables, and plan
+          -> (Rule, Cost, Maybe (DVar, DVar), Action PyDopeBS)
           -> IO ()
-printPlan fh fa mu (r, cost, dope) = do         -- display plan
+printPlan fh fa (r, cost, mu, dope) = do         -- display plan
   hPutStrLn fh $ "# --"
   displayIO fh $ prefixSD "# " $ renderPretty 1.0 100
                  $ (prettySpanLoc $ r_span r) <> line
@@ -259,45 +232,29 @@ printPlan fh fa mu (r, cost, dope) = do         -- display plan
                  $ py fa mu r dope <> line
   hPutStrLn fh ""
 
-processFile fileName = bracket
-  (openFile (fileName ++ ".plan") WriteMode)
-  hClose
-  $ processFile_ fileName
+------------------------------------------------------------------------}}}
+-- Driver                                                               {{{
 
-processFileStdout fileName = do
-  processFile_ fileName stdout
+driver am em is fh = do
+  -- Aggregation mapping
+  hPutStrLn fh $ "agg_decl = {}"
+  forM (M.toList am) $ \((f,a),v) -> do
+     hPutStrLn fh $ show $    "agg_decl"
+                           <> brackets (dquotes $ pretty f <> "/" <> pretty a)
+                           <+> equals <+> (dquotes $ pretty v)
 
-processFile_ fileName fh = do
-  pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
-  case pr of
-    T.Failure td -> T.display td
-    T.Success rs ->
-      let urs = map (\(P.LRule x T.:~ _) -> x) rs
-          frs = map normRule urs
-          initializers = MA.mapMaybe (\(f,mca) -> (\(c,a) -> (f,c,a)) `fmap` mca)
-                         $ map (\x -> (x, planInitializer builtin x)) frs
-      in do
-         aggm <- case buildAggMap frs of
-                   Left e -> throw $ UserProgramError (text e)
-                   Right x -> return x
+  -- plans aggregated by functor/arity
+  forM_ (M.toList em) $ \(fa, ps) -> do
+     hPutStrLn fh ""
+     hPutStrLn fh $ "# =============="
+     hPutStrLn fh $ "# " ++ show fa
+     forM_ ps $ printPlan fh fa
 
-         hPutStrLn fh $ "agg_decl = {}"
-         forM (M.toList aggm) $ \((f,a),v) -> do {
-             hPutStrLn fh $ show $ "agg_decl" <> brackets (dquotes $ pretty f <> "/" <> pretty a)
-                <+> equals <+> (dquotes $ pretty v)
-           }
+  hPutStrLn fh ""
+  hPutStrLn fh $ "# =============="
+  hPutStrLn fh $ "# Initializers"
 
-         cPlans <- return $! combinePlans                  -- crux plans
-                      $ map (\x -> (x, planEachEval builtin constants headVar valVar x)) frs
-         forM_ (M.toList cPlans) $ \(fa, ps) -> do    -- plans aggregated by functor/arity
-            hPutStrLn fh ""
-            hPutStrLn fh $ "# =============="
-            hPutStrLn fh $ "# " ++ show fa
-            forM_ ps $ printPlan fh fa (Just (headVar,valVar))
-         hPutStrLn fh ""
-         hPutStrLn fh $ "# =============="
-         hPutStrLn fh $ "# Initializers"
-         forM_ initializers $ \(f,c,a) -> printPlan fh (findHeadFA f) Nothing (f,c,a)
+  forM_ is $ \(f,c,a) -> printPlan fh (findHeadFA f) (f,c,Nothing,a)
 
  where
   findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
@@ -306,10 +263,9 @@ processFile_ fileName fh = do
       Just (Left _)      -> error "NTVar head?"
       Just (Right (f,a)) -> (f, length a)
 
-  headVar = "_h"
-  valVar  = "_v"
+------------------------------------------------------------------------}}}
+-- Export                                                               {{{
 
-
--- TEST: processFileStdout "examples/cky.dyna"
+pythonBackend = Backend builtins constants driver
 
 ------------------------------------------------------------------------}}}
