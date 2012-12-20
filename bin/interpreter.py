@@ -38,7 +38,7 @@ from defn import agg_bind
 # TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
     def __missing__(self, key):
-        print 'creating chart indirect for:', key
+        print >> sys.stderr, 'creating chart indirect for:', key
         arity = int(key.split('/')[-1])
         c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
         return c
@@ -220,7 +220,7 @@ def update_dispatcher(item, val):
     if val is None:
         return
     (fn, _) = item
-    print 'dispatch', pretty(item), '=', val
+    print >> sys.stderr, 'dispatch', pretty(item), '=', val
     for handler in register.handlers[fn]:
         handler(item, val)
 
@@ -246,7 +246,7 @@ def build(fn, *args):
 
 def emit(item, val):
 
-    print (red if _delete else green) \
+    print >> sys.stderr, (red if _delete else green) \
         % 'emit %s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
 
     if _delete:
@@ -278,16 +278,16 @@ def _go():
     while agenda:
         (fn, idx) = item = agenda.pop()
 
-        print
-        print 'pop', pretty(item),
+        print >> sys.stderr
+        print >> sys.stderr, 'pop', pretty(item),
 
         was = lookup(item)
         now = aggregator[item].fold()
 
-        print 'was %s, now %s' % (was, now)
+        print >> sys.stderr, 'was %s, now %s' % (was, now)
 
         if was == now:
-            print 'unchanged'
+            print >> sys.stderr, 'unchanged'
             continue
 
         if was is not None:
@@ -321,7 +321,7 @@ def load(f, verbose=True):
 
     if verbose:
         with file(f) as h:
-            print h.read()
+            print >> sys.stderr, h.read()
 
     # load generated code.
     execfile(f, globals())
