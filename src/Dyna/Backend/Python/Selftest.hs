@@ -6,7 +6,6 @@
 module Dyna.Backend.Python.Selftest where
 
 import           Control.Exception (throw)
-import qualified Data.ByteString.Lazy                as BL
 import           System.Exit (ExitCode(..))
 import           System.IO
 import           System.Process
@@ -16,25 +15,24 @@ import           Test.Golden
 ------------------------------------------------------------------------}}}
 -- Run Backend                                                          {{{
 
-runDynaPy :: String -> IO BL.ByteString
-runDynaPy f = do
+runDynaPy :: String -> String -> IO ()
+runDynaPy f out = do
   devnull <- openFile "/dev/null" ReadWriteMode
 
-  (Nothing,Just so,Nothing,ph) <- createProcess $ CreateProcess
+  (Nothing,Nothing,Nothing,ph) <- createProcess $ CreateProcess
      { cmdspec = RawCommand "/usr/bin/env"
-                            ["python", "bin/interpreter.py", "-o", "-", f]
+                            ["python", "bin/interpreter.py", "-o", out, f]
      , cwd = Nothing
      , env = Nothing
      , std_in = UseHandle devnull
-     , std_out = CreatePipe
+     , std_out = UseHandle devnull
      , std_err = UseHandle devnull
      , close_fds = True
      , create_group = False
      }
-  bs <- BL.hGetContents so
   ec <- waitForProcess ph
   case ec of
-   ExitSuccess -> return bs
+   ExitSuccess -> return ()
    ExitFailure _ -> throw ec
 
 ------------------------------------------------------------------------}}}
@@ -42,9 +40,10 @@ runDynaPy f = do
 
 mkExample :: String -> TF.Test
 mkExample name =
-  let (dy,ex) = names in goldenVsString dy ex (runDynaPy dy)
+  let (dy,out,ex) = names in goldenVsFile dy ex out (runDynaPy dy out)
  where
-  names = ( "examples/" ++ name ++ ".dyna"
+  names = ( "examples/"          ++ name ++ ".dyna"
+          , "examples/"          ++ name ++ ".dyna.py.out"
           , "examples/expected/" ++ name ++ ".py.out")
 
 goldens :: TF.Test

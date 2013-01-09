@@ -40,33 +40,30 @@ import qualified Text.Trifecta              as T
 ------------------------------------------------------------------------}}}
 -- DOpAMine Backend Information                                         {{{
 
-data PyDopeBS = PDBAsIs
-              | PDBRewrite   (([ModedVar],ModedVar) -> [DOpAMine PyDopeBS])
+-- At the moment, we pass through a @Maybe ()@ to indicate whether or not
+-- we're making a call.  See the call to pycall in pdope_ below.
+type PyDopeBS = ()
 
+builtins :: BackendPossible PyDopeBS
 builtins (f,is,o) = case () of
-  _ | all (== MBound) is && S.member (f,length is) constants
-    -> case o of
-         MFree  -> Right (Det,PDBAsIs)
-         MBound -> Right (DetSemi,
-           PDBRewrite $ \(is,o) -> let chkv = "_chk" in
-                                   [ OPIter (MF chkv) is f Det $ Just PDBAsIs
-                                   , OPCheq chkv (varOfMV o)
-                                   ])
+  _ | all isBound is && S.member (f,length is) constants
+    -> case modeOf o of
+         MFree  -> Right [OPIter o is f Det (Just ())]
+         MBound -> let chkv = "_chk"
+                   in Right $ [ OPIter (MF chkv) is f Det (Just ())
+                              , OPCheq chkv (varOfMV o)
+                              ]
 
   _ | f == "+"
     -> case (is,o) of
-         ([MBound,MFree],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter y [o,x] "-" Det $ Just PDBAsIs])
-         ([MFree,MBound],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "-" Det $ Just PDBAsIs])
+         ([x@(MB _),y@(MF _)],MB _) -> Right [OPIter y [o,x] "-" Det $ Just ()]
+         ([x@(MF _),y@(MB _)],MB _) -> Right [OPIter x [o,y] "-" Det $ Just ()]
          _ -> Left True
 
   _ | f == "-"
     -> case (is,o) of
-         ([MBound,MFree],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter y [x,o] "-" Det $ Just PDBAsIs])
-         ([MFree,MBound],MBound) -> Right (Det,
-             PDBRewrite $ \([x,y],o) -> [OPIter x [o,y] "+" Det $ Just PDBAsIs])
+         ([x@(MB _),y@(MF _)],MB _) -> Right [OPIter y [x,o] "-" Det $ Just ()]
+         ([x@(MF _),y@(MB _)],MB _) -> Right [OPIter x [o,y] "+" Det $ Just ()]
          _ -> Left True
 
   _ | S.member (f,length is) constants  -> Left True
@@ -106,53 +103,27 @@ constants = S.fromList
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
 
-pdope :: DOpAMine PyDopeBS -> Either [DOpAMine PyDopeBS] (Doc e)
-pdope (OPIndr _ _) = dynacSorry "indirect evaluation not implemented"
-pdope (OPAsgn v val) = Right $ pretty v <+> equals <+> pretty val
-pdope (OPCheq v val) = Right $ "if" <+> pretty v <+> "!=" <+> pretty val <> ": continue"
-pdope (OPCkne v val) = Right $ "if" <+> pretty v <+> "==" <+> pretty val <> ": continue"
-pdope (OPPeel vs id f) = Right $
+-- | Print functor and arity based on argument list
+pfas f args = dquotes $ pretty f <> "/" <> (pretty $ length args)
 
-    "try:" `above` (indent 4 $
-           tupledOrUnderscore vs
-            <+> equals <> " "
-                <> "peel" <> (parens $ fa f vs <> comma <> pretty id)
-     )
+pfa f n = parens $ dquotes $ pretty f <> "/" <> pretty n
 
-    `above` "except (TypeError, AssertionError): continue"   -- you'll get a "TypeError: 'NoneType' is not iterable."
+-- pf f vs = pretty f <> (tupled $ map pretty vs)
 
-
-pdope (OPWrap v vs f) = Right $ pretty v <+> equals
-      <+> "build" <> (parens $ fa f vs <> comma <> (sepBy "," $ map pretty vs))
-
-pdope (OPIter v vs f _ (Just b)) =
-  case b of
-    PDBAsIs -> Right $     pretty (varOfMV v)
-                       <+> equals
-                       <+> pycall "call" f vs
-
-    PDBRewrite rf -> Left $ rf (vs,v)
-
-
-pdope (OPIter o m f _ Nothing) = Right $
-      let mo = m ++ [o] in
-          "for" <+> (tupledOrUnderscore $ filterBound mo)
-                <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
-
-fa f a = dquotes $ pretty f <> "/" <> (text $ show $ length a)
+functorIndirect table f vs = table <> (brackets $ pfas f vs)
 
 -- this comes up because can't assign to ()
-tupledOrUnderscore vs = if length vs > 0 then parens ((sepBy "," $ map pretty vs) <> ",") else text "_"
-
-pslice vs = brackets $
-       sepBy "," (map (\x -> case x of (MF v) -> ":" ; (MB v) -> pretty v) vs)
-       <> "," -- add a list comma to ensure getitem is always passed a tuple.
+tupledOrUnderscore vs = if length vs > 0
+                         then parens ((sepBy "," $ map pretty vs) <> ",")
+                         else text "_"
 
 filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 
-functorIndirect table f vs = table <> (brackets $ dquotes $ (pretty f <> "/" <> (text $ show $ length vs)))
+pslice vs = brackets $
+       sepBy "," (map (\x -> case x of (MF _) -> ":" ; (MB v) -> pretty v) vs)
+       <> "," -- add a list comma to ensure getitem is always passed a tuple.
 
-pycall table f vs = case (f, length vs) of
+pycall f vs = case (f, length vs) of
   (  "*", 2) -> infixOp " * "
   (  "+", 2) -> infixOp " + "
   (  "-", 2) -> infixOp " - "
@@ -184,88 +155,150 @@ pycall table f vs = case (f, length vs) of
     -- TODO: add useful error message.
 --  _ -> functorIndirect "call" f vs <> (tupled $ pretty_vs)
 
+
  where pretty_vs = map (pretty . varOfMV) vs
        call name = name <> (parens $ sepBy ", " $ pretty_vs)
        infixOp op = sepBy op $ pretty_vs
 
-pf f vs = pretty f <> (tupled $ map pretty vs)
 
-py (f,a) mu (Rule _ h _ _ r span _) dope =
-           case mu of
-             Just (hv,v) ->
-                         "@register"
-                 <>      pfsa
-                 `above` "def" <+> char '_'
-                               <> tupled (map pretty [hv,v])
-                               <+> colon
-             Nothing -> "@initializer" <> pfsa
-                 `above` "def _():"
-   `above` (indent 4 $ "for _ in [None]:")
-   `above` (indent 8 $ go dope emit)
+-- | Render a single dopamine opcode or its surrogate
+pdope_ :: DOpAMine PyDopeBS -> Doc e
+pdope_ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
+pdope_ (OPAsgn v val) = pretty v <+> equals <+> pretty val
+pdope_ (OPCheq v val) = "if" <+> pretty v <+> "!="
+                             <+> pretty val <> ": continue"
+pdope_ (OPCkne v val) = "if" <+> pretty v <+> "=="
+                             <+> pretty val <> ": continue"
+pdope_ (OPPeel vs i f) =
+    "try:" `above` (indent 4 $
+           tupledOrUnderscore vs
+            <+> equals <> " "
+                <> "peel" <> (parens $ pfas f vs <> comma <> pretty i)
+     )
+    -- you'll get a "TypeError: 'NoneType' is not iterable."
+    `above` "except (TypeError, AssertionError): continue"
+pdope_ (OPWrap v vs f) = pretty v
+                           <+> equals
+                           <+> "build"
+                           <> (parens $ pfas f vs <> comma
+                                <> (sepBy "," $ map pretty vs))
 
+pdope_ (OPIter v vs f _ (Just ())) = pretty (varOfMV v)
+                                     <+> equals
+                                     <+> pycall f vs
+
+pdope_ (OPIter o m f _ Nothing) =
+      let mo = m ++ [o] in
+          "for" <+> (tupledOrUnderscore $ filterBound mo)
+                <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
+
+-- | Render a dopamine sequence's checks and loops above a (indended) core.
+pdope :: [DOpAMine PyDopeBS] -> Doc e -> Doc e
+pdope _d _e =         (indent 4 $ "for _ in [None]:")
+              `above` (indent 8 $ go _d _e)
  where
-   pfsa = (parens $ dquotes $
-            pretty f <> "/" <> (text $ show a))
+  go []  = id
+  go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
+              in above (pdope_ x)
+                 . (if indents then indent 4 else id)
+                 . go xs
 
-   go []  = id
-   go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
-               in
-                   case pdope x of
-                     Left rw -> go (rw++xs)
-                     Right px ->   above px
-                                 . (if indents then indent 4 else id)
-                                 . go xs
 
+py mfa mu (Rule _ h _ _ r span _) dope =
+           case mu of
+             Just (hv,v) -> case mfa of
+                              Nothing -> dynacSorry "Can't register indir eval"
+             Nothing -> case mfa of
+                          Nothing    -> dynacPanic "Initializer without head"
+   `above` pdope dope emit
+ where
    emit = "emit" <> tupled [pretty h, pretty r]
 
-printPlan :: Handle
-          -> (DFunct,Int)                    -- ^ Functor & arity
-             -- | rule, cost, input variables, and plan
-          -> (Rule, Cost, Maybe (DVar, DVar), Action PyDopeBS)
-          -> IO ()
-printPlan fh fa (r, cost, mu, dope) = do         -- display plan
-  hPutStrLn fh $ "# --"
-  displayIO fh $ prefixSD "# " $ renderPretty 1.0 100
-                 $ (prettySpanLoc $ r_span r) <> line
-  hPutStrLn fh $ "# Cost: " ++ (show cost)
+printPlanHeader :: Handle -> Rule -> Cost -> IO ()
+printPlanHeader h r c = do
+  hPutStrLn h $ "# --"
+    -- XXX This "prefixSD" thing is the only real reason we're doing this in
+    -- IO; it'd be great if wl-pprint-extras understood how to prefix each
+    -- line it was laying out.
+  displayIO h $ prefixSD "# " $ renderPretty 1.0 100
+                $ (prettySpanLoc $ r_span r) <> line
+  hPutStrLn h $ "# Cost: " ++ (show c)
+
+-- XXX This is unforunate and wrong, but our ANF is not quite right to
+-- let us do this right.  See also Dyna.Analysis.RuleMode's use of this
+-- function.
+findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
+  case M.lookup h as of
+    Nothing            -> error "No unification for head variable?"
+    Just (Left _)      -> error "NTVar head?"
+    Just (Right (f,a)) -> Just (f, length a)
+
+printInitializer :: Handle -> Rule -> Action PyDopeBS -> IO ()
+printInitializer fh rule@(Rule _ h _ _ r _ _) dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ py fa mu r dope <> line
-  hPutStrLn fh ""
+                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA rule)
+                   `above` "def" <+> char '_' <> tupled [] <+> colon
+                   `above` pdope dope emit
+                   <> line
+ where
+   emit = "emit" <> tupled [pretty h, pretty r]
+
+-- XXX INDIR EVAL
+printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Action PyDopeBS -> IO ()
+printUpdate fh rule@(Rule _ h _ _ r _ _) (Just (f,a)) (hv,v) dope = do
+  displayIO fh $ renderPretty 1.0 100
+                 $ "@register" <> parens (pfa f a)
+                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon
+                   `above` pdope dope emit
+                   <> line
+ where
+   emit = "emit" <> tupled [pretty h, pretty r]
 
 ------------------------------------------------------------------------}}}
 -- Driver                                                               {{{
 
-driver am em is fh = do
+driver :: BackendDriver PyDopeBS
+driver am um qm is fh = do
   -- Aggregation mapping
   hPutStrLn fh $ "agg_decl = {}"
-  forM (M.toList am) $ \((f,a),v) -> do
+  forM_ (M.toList am) $ \((f,a),v) -> do
      hPutStrLn fh $ show $    "agg_decl"
                            <> brackets (dquotes $ pretty f <> "/" <> pretty a)
                            <+> equals <+> (dquotes $ pretty v)
 
+  hPutStrLn fh ""
+  hPutStrLn fh $ "# ==Updates=="
+
   -- plans aggregated by functor/arity
-  forM_ (M.toList em) $ \(fa, ps) -> do
+  forM_ (M.toList um) $ \(fa, ps) -> do
      hPutStrLn fh ""
-     hPutStrLn fh $ "# =============="
      hPutStrLn fh $ "# " ++ show fa
-     forM_ ps $ printPlan fh fa
+     forM_ ps $ \(r,c,vi,vo,act) -> do
+       printPlanHeader fh r c
+       printUpdate fh r fa (vi,vo) act
 
   hPutStrLn fh ""
-  hPutStrLn fh $ "# =============="
-  hPutStrLn fh $ "# Initializers"
+  hPutStrLn fh $ "# ==Initializers=="
+  forM_ is $ \(r,c,a) -> do
+    printPlanHeader  fh r c
+    printInitializer fh r a
 
-  forM_ is $ \(f,c,a) -> printPlan fh (findHeadFA f) (f,c,Nothing,a)
+  hPutStrLn fh $ "# ==Queries=="
 
- where
-  findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
-    case M.lookup h as of
-      Nothing            -> error "No unification for head variable?"
-      Just (Left _)      -> error "NTVar head?"
-      Just (Right (f,a)) -> (f, length a)
+  forM_ (M.toList qm) $ \(fa, ps) -> do
+    hPutStrLn fh $ "# " ++ show fa
+    forM_ ps $ \(r,c,qv,a) -> do
+      printPlanHeader fh r c
+      hPutStrLn fh $ "# " ++ show qv
+      -- XXX
+      -- displayIO fh $ renderPretty 1.0 100 $ pdope a "XXX"
+      hPutStrLn fh ""
+
 
 ------------------------------------------------------------------------}}}
 -- Export                                                               {{{
 
+pythonBackend :: Backend
 pythonBackend = Backend builtins constants driver
 
 ------------------------------------------------------------------------}}}

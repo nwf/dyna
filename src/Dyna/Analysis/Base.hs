@@ -4,18 +4,18 @@
 -- Much of this is pending rework once we get to the mode system of Mercury.
 
 module Dyna.Analysis.Base (
-	-- * Normalized Term Representations
-	NT(..), FDT, NTV, ENF, EVF,
+    -- * Normalized Term Representations
+    NT(..), FDT, NTV, ENF, EVF,
 
-	-- * Modes
-	Mode(..), Moded(..), modeOf, isBound, isFree,
+    -- * Modes
+    Mode(..), Moded(..), modeOf, isBound, isFree,
     ModedVar, varOfMV, ModedNT, evnOfMNT, ntvOfMNT,
 
-	-- * DOpAMine
+    -- * DOpAMine
     DOpAMine(..),
 
-	-- * Determinism
-	Det(..), detOfDop,
+    -- * Determinism
+    Det(..), detOfDop,
 ) where
 
 import qualified Data.ByteString            as B
@@ -28,7 +28,8 @@ import qualified Text.PrettyPrint.Free as PP
 -- | A Normalized Term, parametric in the variable case
 --
 -- The Ord instance is solely for Data.Set's use
-data NT v = NTNumeric (Either Integer Double)
+data NT v = NTBool    Bool
+          | NTNumeric (Either Integer Double)
           | NTString  B.ByteString
           | NTVar     v
  deriving (Eq,Ord,Show)
@@ -111,12 +112,23 @@ data DOpAMine fbs
               -- live and learn.
               | OPCkne     DVar        DVar                      -- ++
 
+              -- | Check that the input dvar is an interned representation
+              -- of the given functor (and arity as computed from the list
+              -- length) and if so, unpack its arguments into those dvars.
               | OPPeel     [DVar]      DVar        DFunct        -- -+
+
+              -- | The reverse of OPPeel
               | OPWrap     DVar        [DVar]      DFunct        -- -+
 
+              -- | Perform a query
               | OPIter     (ModedVar)  [ModedVar]  DFunct        -- ??
                                                    Det
                                                    (Maybe fbs)
+
+              -- | Perform an arbitrary evaluation query.  Semantically,
+              --
+              -- @OPWrap x ys f ; OPIndr z x@ is indistinguishable from
+              -- @OPIter (MF z) (map MB ys) f DetSemi Nothing@.
               | OPIndr     DVar        DVar                      -- -+
  deriving (Eq,Ord,Show)
 

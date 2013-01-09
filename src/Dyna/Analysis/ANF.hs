@@ -16,14 +16,16 @@
 --   unless explicitly evaluated, or 3) prefer to be evaluated unless
 --   explicitly quoted.
 --
--- In short, explicit marks are always obeyed; absent one, the functor's
--- self disposition is obeyed; if the functor has no preference, the outer
--- functor's argument disposition is used as a last resort.  There is,
--- however, one important caveat: /variables/ and /primitive terms/ (e.g.
--- numerics, strings, literal dynabases, foreign terms, ...) have self
--- dispositions of preferring structural interpretation.  Variables may be
--- meaningfully explicitly evaluated, with the effect of evaluating their
--- bindings.  Attempting to evaluate a primitive is an error.
+-- In short, explicit marks ('ECExplicit') are always obeyed; absent one,
+-- ('ECFunctor') the functor's self disposition ('SDQuote' or 'SDEval') is
+-- obeyed; if the functor has no preference ('SDInherit'), the outer
+-- functor's argument disposition is used as a last resort ('ADQuote' or
+-- 'ADEval').  There is, however, one important caveat: /variables/ and
+-- /primitive terms/ (e.g.  numerics, strings, literal dynabases, foreign
+-- terms, ...) have self dispositions of preferring structural
+-- interpretation.  Variables may be meaningfully explicitly evaluated, with
+-- the effect of evaluating their bindings.  Attempting to evaluate a
+-- primitive is an error.
 --
 -- Note that in rules, the head is by default not evaluated (regardless of
 -- the disposition of their outer functor), while the body is interpreted as
@@ -46,9 +48,6 @@
 -- "Dyna.Backend.Python"'s @findHeadFA@ function.
 
 -- FIXME: "str" is the same a constant str.
-
--- TODO: ANF Normalizer should return *flat terms* so that we have type-safety
--- can a lint checker can verify we have exhaustive pattern matching... etc.
 
 --     timv: should there ever be more than one side condition? shouldn't it be
 --     a single result variable after normalization? I see that if I use comma
@@ -195,6 +194,7 @@ dynaFunctorArgDispositions x = case x of
     ("and", 2) -> [ADEval, ADEval]
     ("or", 2)  -> [ADEval, ADEval]
     ("not", 1) -> [ADEval]
+    ("=",2)    -> [ADQuote,ADQuote]
     (name, arity) ->
        -- If it starts with a nonalpha, it prefers to evaluate arguments
        let d = if C.isAlphaNum $ head $ BU.toString name
@@ -263,6 +263,14 @@ normTerm_ c   ss  (P.TString s)    = do
       _                   -> return ()
     return $ NTString s
 
+-- Annotations
+--
+-- XXX this is probably the wrong thing to do
+normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
+    v <- normTerm_ c (st:ss) t >>= newAssignNT "_a"
+    newAnnot v a
+    return (NTVar v)
+
 -- Quote makes the context explicitly a quoting one
 normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
     normTerm_ (ECExplicit,ADQuote) (st:ss) t
@@ -294,14 +302,6 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
                        return $ NTNumeric (Left 42)  -- XXX ought to be NTUnit
         _          -> do
                        NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
-
--- Annotations
---
--- XXX this is probably the wrong thing to do
-normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
-    v <- normTerm_ c (st:ss) t >>= newAssignNT "_a"
-    newAnnot v a
-    return (NTVar v)
 
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
@@ -348,7 +348,7 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 -- Normalize a Rule                                                     {{{
 
 data Rule = Rule { r_index      :: Int
-                 , r_functor    :: DVar
+                 , r_head       :: DVar
                  , r_aggregator :: DAgg
                  , r_side       :: [DVar]
                  , r_result     :: DVar
@@ -371,7 +371,7 @@ normRule (P.Rule i h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
 
 -- | Run the normalization routine.
 --
--- Use as @runNormalize nRule
+-- Use as @runNormalize nRule@
 runNormalize :: ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize =
   flip runState   (AS 0 M.empty M.empty [] M.empty []) .

@@ -69,8 +69,8 @@ noBackend :: Backend
 noBackend = Backend
           { be_builtin   = \_ -> Left False
           , be_constants = S.empty
-          , be_driver    = \_ _ _ _ -> hPutStrLn stderr
-                                        "No backend specified; stopping"
+          , be_driver    = \_ _ _ _ _ -> hPutStrLn stderr
+                                          "No backend specified; stopping"
           }
 
 parseBackend :: String -> Backend
@@ -110,6 +110,9 @@ options :: [OptDescr Opt]
 options =
   [ Option ['h'] ["help"]    (NoArg  OptHelp)    "display this help message"
   , Option ['V'] ["version"] (NoArg  OptVersion) "display version and exit"
+  -- This is an excellent idea we might consider, taken from the 'pi'
+  -- program of http://www.ginac.de/CLN/
+  -- , Option [] ["bibliography"] (NoArg OptBiblio) "relevant papers"
   ]
   ++
   [ Option ['B'] ["backend"]      (ReqArg obe "BE")
@@ -196,11 +199,16 @@ processFile fileName = bracket openOut hClose go
                            $ map (\x -> (x, planInitializer be_b x)) frs
    
   
-            cPlans = combinePlans
+            cPlans = combineUpdatePlans
                      $ map (\x -> (x, planEachEval be_b
-                                                   (not . flip S.member be_c) x))
+                                                   (flip S.member be_c) x))
                            frs
-        in be_d aggm cPlans initializers out
+
+            qPlans = combineQueryPlans
+                     $ map (\x -> (x, planGroundBackchain be_b x))
+                           frs
+
+        in be_d aggm cPlans qPlans initializers out
 
   parse = do
     pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName

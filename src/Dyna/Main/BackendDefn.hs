@@ -9,7 +9,8 @@ module Dyna.Main.BackendDefn where
 import qualified Data.Set as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
-import           Dyna.Analysis.RuleMode (Action, BackendPossible, Cost, EvalMap)
+import           Dyna.Analysis.RuleMode (Action, BackendPossible, Cost,
+                                         UpdateEvalMap, QueryEvalMap)
 import           Dyna.Term.TTerm (DFunctAr)
 import           System.IO (Handle)
 
@@ -17,6 +18,13 @@ import           System.IO (Handle)
 -- only in Dyna.Analysis.RuleMode.planEachEval to avoid generating some
 -- plans, but that's not really how we should be doing it.  The right
 -- answer, of course, is to use update mode information, once we have it.
+
+type BackendDriver bs = AggMap                   -- ^ Aggregation
+                      -> UpdateEvalMap bs        -- ^ Rule update
+                      -> QueryEvalMap bs         -- ^ Rule query
+                      -> [(Rule,Cost,Action bs)] -- ^ Initializers
+                      -> Handle                  -- ^ Output
+                      -> IO ()
 
 data Backend = forall bs . Backend
              { -- | Builtin support hook for mode planning.  Options are
@@ -34,9 +42,5 @@ data Backend = forall bs . Backend
              , be_constants :: S.Set DFunctAr
               
                -- | Backend driver
-             , be_driver  :: AggMap                  -- ^ Aggregation
-                          -> EvalMap bs              -- ^ Rules
-                          -> [(Rule,Cost,Action bs)] -- ^ Initializers
-                          -> Handle                  -- ^ Output
-                          -> IO ()
+             , be_driver  :: BackendDriver bs
              }

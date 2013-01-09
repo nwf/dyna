@@ -1,6 +1,6 @@
 # -*-  indent-tabs-mode:t;  -*-
 
-all: deps
+all: build
 
 upstream:
 	git submodule init
@@ -41,6 +41,8 @@ run-parser:
 
 .PHONY: clean veryclean
 clean:
-	rm -rf examples/*.dyna.plan examples/*.dyna.d
+	rm -rf examples/*.dyna.plan  \
+           examples/*.dyna.*.out \
+           examples/*.dyna.d
 veryclean: clean
 	rm -rf dist
