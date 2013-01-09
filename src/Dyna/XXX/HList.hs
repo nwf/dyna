@@ -9,6 +9,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
@@ -28,11 +29,29 @@ module Dyna.XXX.HList(
   HRList(..), hrlmapa, hrllen, hrlmap, hrlproj, hrlTravProj,
 
   -- * Interoperation between HList and HRList
-  HLR(..), hlToHrl,
+  HLR(..), HLRFunc(..), hlToHrl,
 ) where
 
-import           Control.Applicative
+import           Prelude (Eq(..),Ord(..),Show(..),
+                          Bool(..),(&&),
+                          Ordering(..),
+                          Int,(+),
+                          (++),
+                          seq)
+import           Control.Applicative (Applicative,pure,liftA2)
 import           GHC.Prim (Constraint)
+import qualified GHC.TypeLits as TL
+
+------------------------------------------------------------------------}}}
+-- Rebind List Syntax                                                   {{{
+
+{-
+infixr 5 :
+
+class ListOp a e where
+  ([]) :: a
+  (:)  :: e -> a -> a
+-}
 
 ------------------------------------------------------------------------}}}
 -- Type-level functions                                                 {{{
@@ -41,6 +60,7 @@ import           GHC.Prim (Constraint)
 type family Append (x :: [k]) (y :: [k]) :: [k]
 type instance Append '[] y = y
 type instance Append (x ': xs) y = x ': Append xs y
+
 
 -- | Compute the type of an HList subject to some type function
 type family Map (f :: k -> k') (x :: [k]) :: [k']
@@ -52,6 +72,21 @@ type family UnMap (f :: k -> k') (x :: [k']) :: [k]
 type instance UnMap f '[] = '[]
 type instance UnMap f (f a ': fas) = a ': UnMap f fas
 
+{-
+-- | Filter
+type family Filter (f :: k -> Bool) (xs :: [k]) :: [k']
+type instance Filter f '[] = '[]
+type instance Filter f (x ': xs) = MaybeCons (f x) x (Filter f xs)
+
+type family MaybeCons (mk :: Bool) (x :: k) (xs :: [k]) :: [k]
+type instance MaybeCons False x xs = xs
+type instance MaybeCons True  x xs = x ': xs
+-}
+
+type family Length (x :: [k]) :: TL.Nat
+type instance Length '[] = 0
+type instance Length (x ': xs) = 1 TL.+ (Length xs)
+
 -- | Apply a type function yielding a constraint to each element of a
 -- lifted list.
 type family MapConstraint (f :: k -> Constraint) (x :: [k]) :: Constraint
@@ -62,7 +97,7 @@ type instance MapConstraint f (x ': xs) = (f x, MapConstraint f xs)
 -- Classes                                                              {{{
 
 -- | Assert that two lifted-lists are of the same length
-class EqLen (x :: [k]) (y :: [k']) | x -> y, y -> x
+class EqLen (x :: [k]) (y :: [k'])
 instance EqLen '[] '[]
 instance (EqLen xs ys) => EqLen (x ': xs) (y ': ys)
 
@@ -79,6 +114,16 @@ data HList a where
 instance Show (HList '[]) where show _ = "HN"
 instance (Show a, Show (HList as)) => Show (HList (a ': as)) where
     show (a :+ as) = show a ++ " :+ " ++ show as
+
+instance Eq (HList '[]) where _ == _ = True
+instance (Eq a, Eq (HList as)) => Eq (HList (a ': as)) where
+    (a :+ as) == (b :+ bs) = a == b && as == bs
+
+instance Ord (HList '[]) where compare _ _ = EQ
+instance (Ord a, Ord (HList as)) => Ord (HList (a ': as)) where
+    compare (a :+ as) (b :+ bs) = case compare a b of
+        EQ -> compare as bs
+        x  -> x
 
 hlmapa :: (Applicative m, Map c t ~ t')
        => (forall a . a -> m (c a)) -> HList t -> m (HList t')
@@ -101,13 +146,13 @@ infixr 5 :++
 
 -- | A heterogenous list in which every element is the image of some
 -- type-function @r :: * -> *@.
-data HRList r a where
+data HRList (r :: k -> *) (a :: [k]) where
  HRN   :: HRList r '[]
  (:++) :: r a -> HRList r b -> HRList r (a ': b)
 
 instance Show (HRList r '[]) where show _ = "HRN"
 instance (Show (r a), Show (HRList r as)) => Show (HRList r (a ': as)) where
-    show (a :++ as) = show a ++ " :+ " ++ show as
+    show (a :++ as) = show a ++ " :++ " ++ show as
 
 hrllen :: HRList r t -> Int
 hrllen = go 0
@@ -143,8 +188,14 @@ hlToHrl :: (forall b . b -> r b) -> HList a -> HRList r a
 hlToHrl _ HN = HRN
 hlToHrl f (a:+as) = f a :++ (hlToHrl f as)
 
-class (Map r a ~ ra, UnMap r ra ~ a)
-   => HLR (r :: * -> *) (a :: [*]) (ra :: [*])
+class (Map r a ~ ra, UnMap r ra ~ a) => HLR (r :: k -> k') (a :: [k]) (ra :: [k'])
+instance HLR r '[] '[]
+instance (ra ~ r a, HLR r as ras) => HLR r (a ': as) (ra ': ras)
+
+-- | Kind-restricted version of HLR that offers functionality for
+-- manipulating data.
+class (HLR r a ra)
+   => HLRFunc (r :: * -> *) (a :: [*]) (ra :: [*])
  where
   -- | Reinterpret an HList as an HRList
   hlAsHrl :: HList ra -> HRList r a
@@ -152,12 +203,12 @@ class (Map r a ~ ra, UnMap r ra ~ a)
   hrlAsHl :: HRList r a -> HList ra
   -- | Derive an HList by unwrapping each element.
   hrlToHl :: (forall b . r b -> b) -> HRList r a -> HList a
-instance HLR r '[] '[]
+instance HLRFunc r '[] '[]
  where
   hlAsHrl _ = HRN
   hrlAsHl _ = HN
   hrlToHl _ _ = HN
-instance (ra ~ r a, HLR r as ras) => HLR r (a ': as) (ra ': ras)
+instance (ra ~ r a, HLRFunc r as ras) => HLRFunc r (a ': as) (ra ': ras)
  where
   hlAsHrl (a :+ as) = a :++ hlAsHrl as
   hrlAsHl (a :++ as) = a :+ hrlAsHl as

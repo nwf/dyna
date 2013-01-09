@@ -42,9 +42,7 @@ promoteList = foldr pcp promotedNilT
 mkMKLT :: Name -> Int -> Q Dec
 mkMKLT _mklt n = do
   names <- mkNames n
-
-  tySynInstD _mklt [promoteList $ map varT names]
-                 $ mkTy n names
+  tySynInstD _mklt [tySynEqn [promoteList $ map varT names] $ mkTy n names]
 
 mkMKLTs t = foreachTupleSize (mkMKLT t)
 
@@ -53,8 +51,7 @@ mkMKRLT _mklrt n = do
   names <- mkNames n
   vr <- liftM varT $ newName "r"
 
-  tySynInstD _mklrt [vr, promoteList $ map varT names]
-                  $ mkRTy n vr names
+  tySynInstD _mklrt [tySynEqn [vr, promoteList $ map varT names] $ mkRTy n vr names]
 
 mkMKRLTs t = foreachTupleSize (mkMKRLT t)
 
@@ -68,14 +65,15 @@ mkTyMap nargs _ty _fn = do
 
   args <- liftM (map varT) $ mkNames nargs
 
-  nil  <- tySynInstD _ty (args++[promotedNilT]) promotedNilT
+  nil  <- tySynInstD _ty [tySynEqn (args++[promotedNilT]) promotedNilT]
 
   x  <- liftM varT $ newName "x"
   xs <- liftM varT $ newName "xs"
   let afn = genMap appT fn id args
   let aty = genMap appT ty id args
 
-  cons <- tySynInstD _ty (args++[pcp x xs]) $ pcp (afn `appT` x) (aty `appT` xs)
+  cons <- tySynInstD _ty [ tySynEqn (args++[pcp x xs])
+                         $ pcp (afn `appT` x) (aty `appT` xs) ]
   return [nil,cons]
 
 mkTyMapFlatN :: Int -> Name -> Name -> Int -> Q Dec
@@ -87,10 +85,10 @@ mkTyMapFlatN nargs _ty _fn size = do
   args <- liftM (map varT) $ mkNames nargs
   let afn = genMap appT fn id args
 
-  tySynInstD _ty (args++[promoteList $ map varT names])
-               $ genMap appT (conT $ tupleTypeName size)
-                 (appT afn . varT)
-                 names
+  tySynInstD _ty [ tySynEqn (args++[promoteList $ map varT names])
+                 $ genMap appT (conT $ tupleTypeName size)
+                   (appT afn . varT)
+                   names ]
 
 -- | The composition mkTyMap (MKLT a)
 mkTyMapFlat a b c = foreachTupleSize (mkTyMapFlatN a b c)
@@ -104,9 +102,9 @@ mkTyUnMapN _mwr nargs _ty _fn size = do
   args <- liftM (map varT) $ mkNames nargs
   let afn = genMap appT fn id args
 
-  tySynInstD _ty (args++[mkTy size names])
+  tySynInstD _ty [ tySynEqn (args++[mkTy size names])
                  $ maybe id (\_wr -> appT (conT _wr)) _mwr
-                 $ promoteList $ map (appT afn . varT) names
+                 $ promoteList $ map (appT afn . varT) names ]
 
 mkTyUnMap a b c d = foreachTupleSize (mkTyUnMapN a b c d)
 
@@ -136,8 +134,8 @@ mkTupleInstance _tc _rter _tol _hc _hn _thl _lth _opr _oprs n | n > 1 = do
                    $ map varP names
 
   instanceD (cxt []) (appT (conT _tc) ty) -- where
-            [tySynInstD _rter [ty, vr] $ mkRTy n vr names
-            ,tySynInstD _tol [ty] $ promoteList $ map varT names
+            [tySynInstD _rter [tySynEqn [ty, vr] $ mkRTy n vr names]
+            ,tySynInstD _tol [tySynEqn [ty] $ promoteList $ map varT names]
             ,funD _thl  [clause [rpa] (normalB $ lrpa) [] ]
             ,funD _lth  [clause [plpa] (normalB $ tupE $ map varE names) [] ]
             ,funD _opr  [clause [varP f, rpa] (normalB $ frpa) [] ]
@@ -164,8 +162,8 @@ mkRTupleInstance _tc _rte _rtr _opel n | n > 1 = do
   let rpa = tupP $ map varP names
   let lfrpa = listE fnames
   instanceD (cxt []) (appT (conT _tc) rty) -- where
-            [tySynInstD _rtr [rty] vr
-            ,tySynInstD _rte [rty] $ mkTy n names
+            [tySynInstD _rtr [tySynEqn [rty] vr]
+            ,tySynInstD _rte [tySynEqn [rty] $ mkTy n names]
             ,funD _opel [clause [varP f, rpa] (normalB $ lfrpa) [] ]
             ]
 
