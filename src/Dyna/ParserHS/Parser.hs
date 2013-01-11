@@ -35,7 +35,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.ParserHS.Parser (
-    Term(..), dterm, dtexpr,
+    Term(..), dterm, -- dtlexpr, dtfexpr,
     Rule(..), drule, Line(..), dline, dlines
 ) where
 
@@ -76,14 +76,13 @@ type RuleIx = Int
 --   explicit about the head being a term (though that's not an expressivity
 --   concern -- just use the parenthesized texpr case) so that there is no
 --   risk of parsing ambiguity.
-data Rule = Rule !RuleIx !(Spanned Term) !B.ByteString ![Spanned Term] !(Spanned Term)
+data Rule = Rule !RuleIx !(Spanned Term) !B.ByteString !(Spanned Term)
  deriving (Eq,Show)
 
 -- | Smart constructor for building a rule with index
 rule :: (Functor f, MonadState RuleIx f)
      => f (   Spanned Term
            -> B.ByteString
-           -> [Spanned Term]
            -> Spanned Term
            -> Rule)
 rule = Rule <$> incState
@@ -113,13 +112,26 @@ bsf = fmap BU.fromString
 
 -- | The full laundry list of punctuation symbols we "usually" mean.
 usualpunct :: CS.CharSet
-usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
+usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:.,"
 
--- | Dot operators
+-- | Dot or comma operators
+--
+-- Note that these are only safe to use in combination with 'thenAny'.
 dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
 dynaDotOperStyle = IdentifierStyle
-  { _styleName = "Dot Operator"
+  { _styleName = "Dot-Operator"
   , _styleStart   = char '.'
+  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleReserved = mempty
+  , _styleHighlight = Operator
+  , _styleReservedHighlight = ReservedOperator
+  }
+
+-- | Comma operators
+dynaCommaOperStyle :: TokenParsing m => IdentifierStyle m
+dynaCommaOperStyle = IdentifierStyle
+  { _styleName = "Comma-Operator"
+  , _styleStart   = char ','
   , _styleLetter  = oneOfSet $ usualpunct
   , _styleReserved = mempty
   , _styleHighlight = Operator
@@ -136,7 +148,7 @@ dynaDotOperStyle = IdentifierStyle
 dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
 dynaPfxOperStyle = IdentifierStyle
   { _styleName = "Prefix Operator"
-  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:"
+  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:,"
   , _styleLetter  = oneOfSet $ usualpunct
   , _styleReserved = mempty
   , _styleHighlight = Operator
@@ -147,10 +159,12 @@ dynaPfxOperStyle = IdentifierStyle
 --
 -- Dot is handled specially elsewhere due to its
 -- dual purpose as an operator and rule separator.
+-- Comma similarly has special handling due to its
+-- nature as term and subgoal separator.
 dynaOperStyle :: TokenParsing m => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
   { _styleName = "Infix Operator"
-  , _styleStart   = oneOfSet $ CS.delete '.' usualpunct
+  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".,"
   , _styleLetter  = oneOfSet $ usualpunct
   , _styleReserved = mempty
   , _styleHighlight = Operator
@@ -160,7 +174,7 @@ dynaOperStyle = IdentifierStyle
 dynaAggStyle :: TokenParsing m => IdentifierStyle m
 dynaAggStyle = IdentifierStyle
   { _styleName = "Aggregator"
-  , _styleStart   =     (oneOfSet $ CS.delete '.' usualpunct)
+  , _styleStart   =     (oneOfSet $ usualpunct CS.\\ CS.fromList ".,")
                     <|> lower
   , _styleLetter  =     (oneOfSet $ usualpunct)
                     <|> alphaNum
@@ -241,7 +255,7 @@ nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
 
 term :: DeltaParsing m => m (Spanned Term)
 term  = token $ choice
-      [       parens texpr
+      [       parens tfexpr
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
 
       ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
@@ -260,26 +274,30 @@ term  = token $ choice
   functor = highlight Identifier atom <?> "Functor"
 
   parenfunc = TFunctor <$> functor
-                       <*>  parens (texpr `sepBy` symbolic ',')
+                       <*>  parens (tlexpr `sepBy` symbolic ',')
 
   mkta ty te = TAnnot (AnnType ty) te
 
--- | The dot operator is required to have not-a-space following (to avoid
--- confusion with the end-of-rule marker, which is taken to be "dot space"
--- or "dot eof").
---
--- XXX dotAny is also likely useful when we get dynabase handling, but we're
--- not there yet.
-dotAny :: (TokenParsing m, Monad m) => m Char
-dotAny  =    char '.'							 -- is a dot
-          <* lookAhead (notFollowedBy someSpace) -- not followed by space
-          <* lookAhead anyChar					 -- and not follwed by EOF
+-- | Sometimes we require that a character not be followed by whitespace
+-- and satisfy some additional predicate before we pass it off to some other parser.
+thenAny :: (TokenParsing m, Monad m) => m a -> m Char
+thenAny p =    anyChar                             -- some character
+            <* lookAhead (notFollowedBy someSpace) -- not followed by space
+            <* lookAhead p                         -- and not follwed by the request
 
 -- | A "dot operator" is a dot followed immediately by something that looks
 -- like a typical operator.  We 'lookAhead' here to avoid the case of a dot
--- by itself as being counted as an operator.
+-- by itself as being counted as an operator; the dot operator is required
+-- to have not-a-space following (to avoid confusion with the end-of-rule
+-- marker, which is taken to be "dot space" or "dot eof").
 dotOper :: (Monad m, TokenParsing m) => m [Char]
-dotOper = try (lookAhead dotAny *> identNL dynaDotOperStyle)
+dotOper = try (lookAhead (thenAny anyChar) *> identNL dynaDotOperStyle)
+
+-- | A "comma operator" is a comma necessarily followed by something that
+-- would continue to be an operator (i.e. punctuation).
+commaOper :: (Monad m, TokenParsing m) => m [Char]
+commaOper = try (   lookAhead (thenAny $ _styleLetter dynaCommaOperStyle)
+                 *> identNL dynaCommaOperStyle)
 
 uf :: (Monad m, Applicative m)
    => m (Spanned B.ByteString)
@@ -322,26 +340,30 @@ termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
              , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
              , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
              , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
-                -- XXX "is" belongs only in the full expression parser, not
-                -- in the term table
-             , [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
+             , [ Infix  (bf (spanned $ bsf $ commaOper)) AssocRight ]
              ]
 
--- fullETable = termETable ++
---              [ [ Infix  (bf (spanned $ bsf $ symbol "is")) AssocNone ]
---             , [ Infix  (bf (spanned $ bsf $ symbol ",")) AssocRight ]
---             ]
+tlexpr :: DeltaParsing m => m (Spanned Term)
+tlexpr = buildExpressionParser termETable term <?> "Limited Expression"
 
-texpr :: DeltaParsing m => m (Spanned Term)
-texpr = buildExpressionParser termETable term <?> "Expression"
 
-dterm, dtexpr :: DeltaParsing m => m (Spanned Term)
-dterm  = unDL term
-dtexpr = unDL texpr
+fullETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
+             , [ Infix  (bf (spanned $ bsf $ symbol ","       )) AssocRight ]
+             , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone  ]
+             ]
+
+tfexpr :: DeltaParsing m => m (Spanned Term)
+tfexpr = buildExpressionParser fullETable tlexpr <?> "Expression"
+
+dterm, dtlexpr, dtfexpr :: DeltaParsing m => m (Spanned Term)
+dterm   = unDL term
+dtlexpr = unDL tlexpr
+dtfexpr = unDL tfexpr
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
+{-
 -- | Grab the head (term!) and aggregation operator from a line that
 -- we hope is a rule.
 rulepfx :: (MonadState RuleIx m, DeltaParsing m)
@@ -349,19 +371,28 @@ rulepfx :: (MonadState RuleIx m, DeltaParsing m)
 rulepfx = rule <*> term
                <*  whiteSpace
                <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
+-}
 
 parseRule :: (MonadState RuleIx m, DeltaParsing m) => m Rule
 parseRule = choice [
+
+{-
                -- HEAD OP= RESULTEXPR whenever EXPRS .
                (try (liftA flip rulepfx
-                          <*> texpr
+                          <*> tlexpr
                           <*  hrss "whenever"))
-                          <*> (texpr `sepBy1` symbolic ',')
+                          <*> (tlexpr `sepBy1` symbolic ',')
 
                -- HEAD OP= EXPRS, RESULTEXPR .
              , try (rulepfx
-                          <*> many (try (texpr <* symbolic ','))
-                          <*> texpr)
+                          <*> many (try (tlexpr <* symbolic ','))
+                          <*> tlexpr)
+-}
+
+               try $ rule <*> term 
+                          <*  whiteSpace
+                          <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
+                          <*> tfexpr
 
                -- HEAD .
                -- timv: using ':-' as the "default" aggregator for facts is
@@ -370,7 +401,7 @@ parseRule = choice [
              , do
                   h@(_ :~ s) <- term
                   ix <- get
-                  return $ Rule ix h ":-" [] (TFunctor "true" [] :~ s)
+                  return $ Rule ix h ":-" (TFunctor "true" [] :~ s)
              ]
        <* optional (char '.')
  where
@@ -385,7 +416,7 @@ drule = evalStateT (unDL (spanned parseRule)) 0
 dpragma :: DeltaParsing m => m (Spanned Term)
 dpragma =    symbol ":-"
           *> whiteSpace
-          *> texpr
+          *> tlexpr
           <* whiteSpace
           <* optional (char '.')
 
@@ -398,6 +429,8 @@ progline  =    whiteSpace
 dline :: (DeltaParsing m) => m (Spanned Line)
 dline = evalStateT (unDL (progline <* optional whiteSpace)) 0
 
+-- XXX This is not prepared for parser-altering pragmas.  We will have to
+-- fix that.
 dlines :: DeltaParsing m => m [Spanned Line]
 dlines = evalStateT (unDL (many (progline <* optional whiteSpace))) 0
 

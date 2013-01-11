@@ -168,8 +168,7 @@ newAnnot v a = do
 
 newAssignNT :: (MonadState ANFState m) => String -> NTV -> m DVar
 newAssignNT _   (NTVar x)     = return x
-newAssignNT pfx (NTString x)  = newAssign pfx (Left $ NTString x)
-newAssignNT pfx (NTNumeric x) = newAssign pfx (Left $ NTNumeric x)
+newAssignNT pfx x             = newAssign pfx $ Left x
 
 doUnif :: (MonadState ANFState m) => DVar -> DVar -> m ()
 doUnif v w = if v == w
@@ -303,6 +302,22 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
         _          -> do
                        NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
 
+-- ",/2" and "whenever/2" are also reserved words of the language and get
+-- handled here.  XXX This may be wrong, too, of course.
+--
+-- These cases both discard their side-conditions and simply transparently
+-- return the normalization of their values
+normTerm_ (_,ADEval) ss (P.TFunctor "whenever" [r T.:~ sr, i T.:~ si]) = do
+    _  <- normTerm_ (ECFunctor, ADEval) (si:ss) i
+    nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_c" . Left
+    return $ NTVar nv
+
+normTerm_ (_,ADEval) ss (P.TFunctor ","        [i T.:~ si, r T.:~ sr]) = do
+    _  <- normTerm_ (ECFunctor, ADEval) (si:ss) i
+    nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_c" . Left
+    return $ NTVar nv
+
+
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
 normTerm_ c   ss (P.TFunctor f as) = do
@@ -350,7 +365,6 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 data Rule = Rule { r_index      :: Int
                  , r_head       :: DVar
                  , r_aggregator :: DAgg
-                 , r_side       :: [DVar]
                  , r_result     :: DVar
                  , r_span       :: T.Span
                  , r_anf        :: ANFState
@@ -360,11 +374,10 @@ data Rule = Rule { r_index      :: Int
 -- XXX
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
          -> Rule
-normRule (P.Rule i h a es r T.:~ span) = uncurry ($) $ runNormalize $ do
+normRule (P.Rule i h a r T.:~ span) = uncurry ($) $ runNormalize $ do
     nh  <- normTerm False h >>= newAssignNT "_h"
     nr  <- normTerm True  r >>= newAssignNT "_r"
-    nes <- mapM (\e -> normTerm True e >>= newAssignNT "_c") es
-    return $ Rule i nh a nes nr span
+    return $ Rule i nh a nr span
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -381,7 +394,7 @@ runNormalize =
 -- Pretty Printer                                                       {{{
 
 printANF :: Rule -> Doc e
-printANF (Rule i h a s result span
+printANF (Rule i h a result span
             (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
           text ";;" <+> prettySpanLoc span
   `above`
@@ -389,7 +402,6 @@ printANF (Rule i h a s result span
   `above`
   ( parens $ (pretty a)
             <+> valign [ (pretty h)
-                       , parens $ text "side"   <+> (valign $ map pretty s)
                        , parens $ text "evals"  <+> pev
                        , parens $ text "unifs"  <+> pun
                        , parens $ text "result" <+> (pretty result)

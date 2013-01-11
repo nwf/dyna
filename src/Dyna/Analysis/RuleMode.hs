@@ -17,7 +17,7 @@
 module Dyna.Analysis.RuleMode (
     Mode(..), Moded(..), ModedNT, isBound, isFree,
 
-    Crux(..),
+    Crux, EvalCrux(..), UnifCrux(..),
 
     Action, Cost, Det(..),
     BackendPossible, 
@@ -31,7 +31,6 @@ module Dyna.Analysis.RuleMode (
     adornedQueries
 ) where
 
-import           Control.Arrow (first)
 import           Control.Monad
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.List                  as L
@@ -65,6 +64,7 @@ modedVar b x = case varMode b x of
 
 modedNT :: BindChart -> NTV -> ModedNT
 modedNT b (NTVar v)     = NTVar $ modedVar b v
+modedNT _ (NTBool b)    = NTBool b
 modedNT _ (NTString s)  = NTString s
 modedNT _ (NTNumeric x) = NTNumeric x
 
@@ -193,9 +193,7 @@ unif_cruxes (AS { as_assgn = assigns, as_unifs = unifs }) =
   ++ map (\(v1,v2) -> CFAssign v1 (NTVar v2)) unifs
  where
   crux :: DVar -> ENF -> UnifCrux DVar NTV
-  crux o (Left (NTString s))    = CFAssign o $ NTString s
-  crux o (Left (NTNumeric n))   = CFAssign o $ NTNumeric n
-  crux o (Left (NTVar i))       = CFAssign o $ NTVar i
+  crux o (Left  x)              = CFAssign o x
   crux o (Right (f,as))         = CFStruct o as f
 
 ------------------------------------------------------------------------}}}
@@ -288,6 +286,7 @@ stepPartialPlan ::
                 -> PartialPlan fbs
                 -> Either (Cost, Action fbs) [PartialPlan fbs]
 stepPartialPlan steps score mic p =
+  -- XT.traceShow ("SPP", mic, pp_binds p, pp_cruxes p) $
   if S.null (pp_cruxes p)
    then Left $ (pp_score p, pp_plan p)
    else Right $
@@ -366,27 +365,30 @@ planner_ :: -- | Available steps
          -> [(Cost, Action fbs)]
 planner_ st sc cr mic bv = stepAgenda st sc mic'
    $ PP { pp_cruxes = cr
-        , pp_binds  = S.union bv $ 
-                      maybe S.empty (\(_,i,o) -> S.fromList [i,o]) mic
+        , pp_binds  = S.union bv bi
         , pp_restrictSearch = False
         , pp_score  = 0
         , pp_plan   = ip
         }
  where
   -- XREF:INITPLAN
-  (ip,mic') = case mic of
-                Nothing -> ([],Nothing)
+  (ip,bi,mic') = case mic of
+                Nothing -> ([],S.empty,Nothing)
                 Just (CFCall o is f, hi, ho) -> ( [ OPPeel is hi f
                                                   , OPAsgn o (NTVar ho)]
+                                                , S.fromList $ o:is
                                                 , Just (Just (f,length is),o,hi))
                 Just (CFEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
                                                , OPAsgn o (NTVar ho)]
+                                             , S.fromList $ [o,i] 
                                              , Just (Nothing,o,i))
 
 anfPlanner_ st sc anf mic bv = planner_ st sc cruxes mic bv
  where
-  cruxes =           S.fromList (map Left  (eval_cruxes anf))
-           `S.union` S.fromList (map Right (unif_cruxes anf))
+  cruxes =           S.fromList (map Right $ unif_cruxes anf)
+           `S.union` ( S.map Left
+                       $ maybe id (\(ic,_,_) -> S.delete ic) mic
+                       $ S.fromList $ eval_cruxes anf)
 
 bestPlan []    = Nothing
 bestPlan plans = Just $ argmin fst plans
@@ -449,6 +451,13 @@ planGroundBackchain bp (Rule { r_anf = anf, r_head = h }) =
  where
   varify = fmap $ \(c,a) -> (c,h,a)
 
+{-
+planBackchains :: BackendPossible fbs
+               -> Rule
+               -> M.Map [Mode] (Cost, [DVar], Action fbs)
+planBackchains bp (Rule { r_anf = anf, r_head = h })
+-}
+
 ------------------------------------------------------------------------}}}
 -- Update plan combination                                              {{{
 
@@ -505,7 +514,7 @@ combineQueryPlans = go (M.empty)
 	-- XXX This is unforunate and wrong, but our ANF is not quite right to
     -- let us do this right.  See also Dyna.Backend.Python's use of this
     -- function.
-  findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
+  findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
     case M.lookup h as of
       Nothing            -> error "No unification for head variable?"
       Just (Left _)      -> error "NTVar head?"

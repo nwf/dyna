@@ -154,7 +154,7 @@ def isvar(x):
 
 def circuit(anf):
 
-    (agg, head, side, evals, unifs, result) = anf
+    (agg, head, evals, unifs, result) = anf
 
     g = Hypergraph()
     for var, op, args in evals:
@@ -165,7 +165,6 @@ def circuit(anf):
 
     g.head = head
     g.result = result
-    g.side = side
 
     g.inputs = [x for x in g.nodes if not g.incoming[x]]
     g.outputs = [x for x in g.nodes if not g.outgoing[x]]
@@ -191,9 +190,6 @@ def graph_styles(g):
 
             if isvar(x):   # input variables are bold
                 sty[x].update({'penwidth': '3'})
-
-        if x in g.side:
-            sty[x].update({'style': 'filled', 'fillcolor': 'olivedrab2'})
 
     # distinguish circuit head and result
     sty[g.head].update({'style': 'filled', 'fillcolor': 'lightblue'})

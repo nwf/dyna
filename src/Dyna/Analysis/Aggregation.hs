@@ -29,7 +29,7 @@ type AggMap = M.Map DFunctAr DAgg
 -- could report which line of the source caused an error.
 
 procANF :: Rule -> Either String (DFunctAr, DAgg)
-procANF (Rule _ h a _ _ _ (AS { as_assgn = as })) =
+procANF (Rule _ h a _ _ (AS { as_assgn = as })) =
   case M.lookup h as of
     Nothing       -> Left $ "I can't process head-variables"
     Just t -> case t of

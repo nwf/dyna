@@ -204,7 +204,7 @@ pdope _d _e =         (indent 4 $ "for _ in [None]:")
                  . go xs
 
 
-py mfa mu (Rule _ h _ _ r span _) dope =
+py mfa mu (Rule _ h _ r span _) dope =
            case mu of
              Just (hv,v) -> case mfa of
                               Nothing -> dynacSorry "Can't register indir eval"
@@ -227,14 +227,14 @@ printPlanHeader h r c = do
 -- XXX This is unforunate and wrong, but our ANF is not quite right to
 -- let us do this right.  See also Dyna.Analysis.RuleMode's use of this
 -- function.
-findHeadFA (Rule _ h _ _ _ _ (AS { as_assgn = as })) =
+findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
   case M.lookup h as of
     Nothing            -> error "No unification for head variable?"
     Just (Left _)      -> error "NTVar head?"
     Just (Right (f,a)) -> Just (f, length a)
 
 printInitializer :: Handle -> Rule -> Action PyDopeBS -> IO ()
-printInitializer fh rule@(Rule _ h _ _ r _ _) dope = do
+printInitializer fh rule@(Rule _ h _ r _ _) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA rule)
                    `above` "def" <+> char '_' <> tupled [] <+> colon
@@ -245,7 +245,7 @@ printInitializer fh rule@(Rule _ h _ _ r _ _) dope = do
 
 -- XXX INDIR EVAL
 printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Action PyDopeBS -> IO ()
-printUpdate fh rule@(Rule _ h _ _ r _ _) (Just (f,a)) (hv,v) dope = do
+printUpdate fh rule@(Rule _ h _ r _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon

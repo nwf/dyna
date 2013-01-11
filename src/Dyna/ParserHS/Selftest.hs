@@ -170,7 +170,6 @@ case_ruleFact = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
                    ":-"
-                   []
                    (TFunctor "true" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
                    :~ ts)
          :~ ts
@@ -182,7 +181,6 @@ case_ruleSimple = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+="
-                   []
                    (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
             :~ ts)
            :~ ts
@@ -208,7 +206,6 @@ case_ruleExpr = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+="
-                   []
                    (TFunctor "+"
                       [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 12 12) sr
                       ,TFunctor "bar" [] :~ Span (Columns 14 14) (Columns 18 18) sr
@@ -225,7 +222,6 @@ case_ruleDotExpr = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+="
-                   []
                    (TFunctor "."
                       [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 11 11) sr
                       ,TFunctor "bar" [] :~ Span (Columns 12 12) (Columns 15 15) sr
@@ -240,44 +236,38 @@ case_ruleDotExpr = e @=? (progline sr)
 case_ruleComma :: Assertion
 case_ruleComma = e @=? (progline sr)
  where
-  e = LRule (Rule 0 (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
-                  "+="
-                  [TFunctor "bar"
-                     [TVar "X" :~ Span (Columns 11 11) (Columns 12 12) sr]
-                    :~ Span (Columns 7 7) (Columns 13 13) sr
-                  ,TFunctor "baz"
-                     [TVar "X" :~ Span (Columns 19 19) (Columns 20 20) sr]
-                    :~ Span (Columns 15 15) (Columns 21 21) sr
-                  ]
-                  (TVar "X" :~ Span (Columns 23 23) (Columns 24 24) sr)
-                 :~ ts)
-                :~ ts
+  e =  LRule (Rule 0 (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+                   "+="
+                   (TFunctor "," [TFunctor "bar" [TVar "X" :~ Span (Columns 11 11) (Columns 12 12) sr]
+                                                :~ Span (Columns 7 7) (Columns 13 13) sr
+                    ,TFunctor "," [TFunctor "baz" [TVar "X" :~ Span (Columns 19 19) (Columns 20 20) sr]
+                                                 :~ Span (Columns 15 15) (Columns 21 21) sr
+                     ,TVar "X" :~ Span (Columns 23 23) (Columns 24 24) sr]
+                    :~ Span (Columns 15 15) (Columns 24 24) sr]
+                   :~ Span (Columns 7 7) (Columns 24 24) sr)
+                  :~ ts)
+            :~ ts
   ts = Span (Columns 0 0) (Columns 25 25) sr
   sr = "foo += bar(X), baz(X), X."
 
 case_ruleKeywordsComma :: Assertion
 case_ruleKeywordsComma = e @=? (progline sr)
  where
-  e  = LRule (Rule 0 (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
-                   "="
-                   [TFunctor "is"
-                      [TVar "X" :~ Span (Columns 21 21) (Columns 23 23) sr
-                      ,TFunctor "baz"
-                         [TVar "Y" :~ Span (Columns 30 30) (Columns 31 31) sr]
-                        :~ Span (Columns 26 26) (Columns 32 32) sr
-                      ]
-                     :~ Span (Columns 21 21) (Columns 32 32) sr
-                   ,TFunctor "is"
-                      [TVar "Y" :~ Span (Columns 34 34) (Columns 36 36) sr
-                      ,TNumeric (Left 3) :~ Span (Columns 39 39) (Columns 41 41) sr
-                      ]
-                     :~ Span (Columns 34 34) (Columns 41 41) sr
-                   ]
-                   (TFunctor "new"
-                      [TVar "X" :~ Span (Columns 10 10) (Columns 12 12) sr]
-                     :~ Span (Columns 6 6) (Columns 12 12) sr)
-                  :~ ts)
-                 :~ ts
+  e =  LRule (Rule 0 (TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+                     "="
+         (TFunctor "whenever" [TFunctor "new" [TVar "X" :~ Span (Columns 10 10) (Columns 12 12) sr]
+                             :~ Span (Columns 6 6) (Columns 12 12) sr
+          ,TFunctor "," [TFunctor "is" [TVar "X" :~ Span (Columns 21 21) (Columns 23 23) sr
+                                       ,TFunctor "baz" [TVar "Y" :~ Span (Columns 30 30) (Columns 31 31) sr]
+                                         :~ Span (Columns 26 26) (Columns 32 32) sr]
+                           :~ Span (Columns 21 21) (Columns 32 32) sr
+                                       ,TFunctor "is" [TVar "Y" :~ Span (Columns 34 34) (Columns 36 36) sr
+                                                      ,TNumeric (Left 3) :~ Span (Columns 39 39) (Columns 41 41) sr]
+                                         :~ Span (Columns 34 34) (Columns 41 41) sr]
+             :~ Span (Columns 21 21) (Columns 41 41) sr] -- End "whenever"
+            :~ Span (Columns 6 6) (Columns 41 41) sr) -- End expression
+           :~ ts) -- End rule
+          :~ ts
   ts = Span (Columns 0 0) (Columns 42 42) sr
   sr = "foo = new X whenever X is baz(Y), Y is 3 ."
 
@@ -286,13 +276,11 @@ case_rules = e @=? (proglines sr)
  where
   e = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                      "+="
-                     []
                      (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
                     :~ s1)
                    :~ s1
       , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
                     "+="
-                    []
                     (TNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
                    :~ s2)
                   :~ s2
@@ -306,13 +294,11 @@ case_rulesWhitespace = e @=? (proglines sr)
  where
   e  = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 2 2) (Lines 1 1 16 1) l0)
                      "+="
-                     []
                      (TNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
                     :~ s1)
                    :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Lines 3 1 31 1) (Lines 3 6 36 6) l3)
                      "+="
-                     []
                      (TNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
                     :~ s2)
                    :~ s2
@@ -331,7 +317,6 @@ case_rulesDotExpr = e @=? (proglines sr)
  where
   e  = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                       "+="
-                      []
                       (TFunctor "."
                          [TFunctor "foo" [] :~ Span (Columns 8 8) (Columns 11 11) sr
                          ,TFunctor "bar" [] :~ Span (Columns 12 12) (Columns 15 15) sr
@@ -342,7 +327,6 @@ case_rulesDotExpr = e @=? (proglines sr)
                     :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
                       "+="
-                      []
                       (TNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
                      :~ s2)
                     :~ s2
