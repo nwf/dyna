@@ -32,8 +32,9 @@ import qualified Text.PrettyPrint.Free               as PP
 --
 identNL :: (Monad m, TokenParsing m) => IdentifierStyle m -> m String
 identNL s = try $ do
-  name <- highlight (styleHighlight s) ((:) <$> styleStart s <*> many (styleLetter s) <?> styleName s)
-  when (HashSet.member name (styleReserved s)) $ unexpected $ "reserved " ++ styleName s ++ " " ++ show name
+  name <- highlight (_styleHighlight s)
+          ((:) <$> _styleStart s <*> many (_styleLetter s) <?> _styleName s)
+  when (HashSet.member name (_styleReserved s)) $ unexpected $ "reserved " ++ _styleName s ++ " " ++ show name
   return name
 
 ------------------------------------------------------------------------}}}

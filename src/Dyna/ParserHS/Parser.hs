@@ -118,12 +118,12 @@ usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:."
 -- | Dot operators
 dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
 dynaDotOperStyle = IdentifierStyle
-  { styleName = "Dot Operator"
-  , styleStart   = char '.'
-  , styleLetter  = oneOfSet $ usualpunct
-  , styleReserved = mempty
-  , styleHighlight = Operator
-  , styleReservedHighlight = ReservedOperator
+  { _styleName = "Dot Operator"
+  , _styleStart   = char '.'
+  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleReserved = mempty
+  , _styleHighlight = Operator
+  , _styleReservedHighlight = ReservedOperator
   }
 
 -- | Prefix operators
@@ -135,12 +135,12 @@ dynaDotOperStyle = IdentifierStyle
 -- operator, as it is a sigil for type annotations.
 dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
 dynaPfxOperStyle = IdentifierStyle
-  { styleName = "Prefix Operator"
-  , styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:"
-  , styleLetter  = oneOfSet $ usualpunct
-  , styleReserved = mempty
-  , styleHighlight = Operator
-  , styleReservedHighlight = ReservedOperator
+  { _styleName = "Prefix Operator"
+  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:"
+  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleReserved = mempty
+  , _styleHighlight = Operator
+  , _styleReservedHighlight = ReservedOperator
   }
 
 -- | Infix operators
@@ -149,45 +149,45 @@ dynaPfxOperStyle = IdentifierStyle
 -- dual purpose as an operator and rule separator.
 dynaOperStyle :: TokenParsing m => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
-  { styleName = "Infix Operator"
-  , styleStart   = oneOfSet $ CS.delete '.' usualpunct
-  , styleLetter  = oneOfSet $ usualpunct
-  , styleReserved = mempty
-  , styleHighlight = Operator
-  , styleReservedHighlight = ReservedOperator
+  { _styleName = "Infix Operator"
+  , _styleStart   = oneOfSet $ CS.delete '.' usualpunct
+  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleReserved = mempty
+  , _styleHighlight = Operator
+  , _styleReservedHighlight = ReservedOperator
   }
 
 dynaAggStyle :: TokenParsing m => IdentifierStyle m
 dynaAggStyle = IdentifierStyle
-  { styleName = "Aggregator"
-  , styleStart   =     (oneOfSet $ CS.delete '.' usualpunct)
-                   <|> lower
-  , styleLetter  =     (oneOfSet $ usualpunct)
-                   <|> alphaNum
-  , styleReserved = mempty
-  , styleHighlight = Operator
-  , styleReservedHighlight = ReservedOperator
+  { _styleName = "Aggregator"
+  , _styleStart   =     (oneOfSet $ CS.delete '.' usualpunct)
+                    <|> lower
+  , _styleLetter  =     (oneOfSet $ usualpunct)
+                    <|> alphaNum
+  , _styleReserved = mempty
+  , _styleHighlight = Operator
+  , _styleReservedHighlight = ReservedOperator
   }
 
 
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
-  { styleName = "Atom"
-  , styleStart    = (lower <|> oneOf "$")
-  , styleLetter   = (alphaNum <|> oneOf "_'")
-  , styleReserved = H.fromList [ "is", "new", "whenever" ]
-  , styleHighlight = Constant
-  , styleReservedHighlight = ReservedOperator
+  { _styleName = "Atom"
+  , _styleStart    = (lower <|> oneOf "$")
+  , _styleLetter   = (alphaNum <|> oneOf "_'")
+  , _styleReserved = H.fromList [ "is", "new", "whenever" ]
+  , _styleHighlight = Constant
+  , _styleReservedHighlight = ReservedOperator
   }
 
 dynaVarStyle :: TokenParsing m => IdentifierStyle m
 dynaVarStyle = IdentifierStyle
-  { styleName = "Variable"
-  , styleStart    = (upper <|> char '_')
-  , styleLetter   = (alphaNum <|> oneOf "_'")
-  , styleReserved = mempty
-  , styleHighlight = Identifier
-  , styleReservedHighlight = ReservedIdentifier
+  { _styleName = "Variable"
+  , _styleStart    = (upper <|> char '_')
+  , _styleLetter   = (alphaNum <|> oneOf "_'")
+  , _styleReserved = mempty
+  , _styleHighlight = Identifier
+  , _styleReservedHighlight = ReservedIdentifier
   }
 
 
@@ -196,10 +196,10 @@ dynaVarStyle = IdentifierStyle
 
 dynaCommentStyle :: CommentStyle
 dynaCommentStyle =  CommentStyle
-  { commentStart = "{%" -- XXX?
-  , commentEnd   = "%}" -- XXX?
-  , commentLine  = "%"
-  , commentNesting = True
+  { _commentStart = "{%" -- XXX?
+  , _commentEnd   = "%}" -- XXX?
+  , _commentLine  = "%"
+  , _commentNesting = True
   }
 
 newtype DynaLanguage m a = DL { unDL :: m a }
