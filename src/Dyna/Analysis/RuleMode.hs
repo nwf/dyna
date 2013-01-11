@@ -26,7 +26,7 @@ module Dyna.Analysis.RuleMode (
 
     UpdateEvalMap, combineUpdatePlans,
 
-	QueryEvalMap, combineQueryPlans,
+    QueryEvalMap, combineQueryPlans,
 
     adornedQueries
 ) where
@@ -271,18 +271,15 @@ data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar NTV)
                           , pp_plan           :: Action fbs
                           }
 
-stepPartialPlan ::
-                   -- | Possible actions
-                   Possible fbs
-
-                   -- | Plan scoring function
+stepPartialPlan :: Possible fbs 
+                -- ^ Possible actions
                 -> (PartialPlan fbs -> Action fbs -> Cost)
-
-                    -- | The 'DFunctAr', intern representation, and
-                    -- result variable of the
-                    -- initial /evaluation/ crux, if any.  This is used to
-                    -- avoid double-counting during updates.  See $dupcrux
+                -- ^ Plan scoring function
                 -> Maybe (Maybe DFunctAr, DVar, DVar)
+                -- ^ The 'DFunctAr', intern representation, and
+                -- result variable of the
+                -- initial /evaluation/ crux, if any.  This is used to
+                -- avoid double-counting during updates.  See $dupcrux
                 -> PartialPlan fbs
                 -> Either (Cost, Action fbs) [PartialPlan fbs]
 stepPartialPlan steps score mic p =
@@ -327,10 +324,10 @@ stepPartialPlan steps score mic p =
        Just (mfa,i,ov) -> concatMap $ \dop ->
          case dop of
            OPIter ov' ivs' f' _ _ |  
-				-- We must insert checks whenever this step involves
-				-- an evaluation.  As an easy optimisation, if we know
-				-- the 'DFunctAr' being updated, we can elide this check
-				-- when we're evaluating a different 'DFunctAr'.
+                -- We must insert checks whenever this step involves
+                -- an evaluation.  As an easy optimisation, if we know
+                -- the 'DFunctAr' being updated, we can elide this check
+                -- when we're evaluating a different 'DFunctAr'.
                 (maybe True (== (f',length ivs')) mfa)
              && ov > varOfMV ov'
              -> let cv = "_chk"
@@ -348,21 +345,21 @@ stepAgenda st sc mic = go [] . (\x -> [x])
                     Left df -> df : (go rs ps)
                     Right ps' -> go (ps':rs) ps
 
-planner_ :: -- | Available steps
-            Possible fbs                                
-            -- | Scoring function
+planner_ :: Possible fbs                                
+         -- ^ Available steps
          -> (PartialPlan fbs -> Action fbs -> Cost)
-            -- | Cruxes to be planned over
+         -- ^ Scoring function
          -> S.Set (Crux DVar NTV)
-            -- | Maybe the updated evaluation crux, the interned
-            -- representation of the term being updated, and
-            -- result variable.
+         -- ^ Cruxes to be planned over
          -> Maybe (EvalCrux DVar, DVar, DVar)
-            -- | Any variables bound on the way in, in addition to
-            --   the two given for an initial crux
+         -- ^ Maybe the updated evaluation crux, the interned
+         -- representation of the term being updated, and
+         -- result variable.
          -> S.Set DVar
-            -- | Plans and their costs
+         -- ^ Any variables bound on the way in, in addition to
+         --   the two given for an initial crux
          -> [(Cost, Action fbs)]
+         -- ^ Plans and their costs
 planner_ st sc cr mic bv = stepAgenda st sc mic'
    $ PP { pp_cruxes = cr
         , pp_binds  = S.union bv bi
@@ -422,20 +419,20 @@ planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
              -> [(Maybe DFunctAr, Maybe (Cost, DVar, DVar, Action fbs))]
 planEachEval bp cs (Rule { r_anf = anf })  =
   map (\(mfa,cr) -> (mfa, varify $ planUpdate bp simpleCost anf $ Just $ mic cr))
-	-- Filter out non-constant evaluations
+    -- Filter out non-constant evaluations
   $ MA.mapMaybe (\ec -> case ec of
                   CFCall _ is f | not (cs (f,length is))
                                 -> Just (Just (f,length is), ec)
                   CFCall _ _  _ -> Nothing
                   CFEval o i    -> Just (Nothing,ec))
 
-	-- Grab all evaluations
+    -- Grab all evaluations
   $ eval_cruxes anf
  where
-	-- XXX I am not terribly happy about these, but it'll do for the moment.
-	--
-	-- If the mechanism of feeding updates into these plans is to change,
-	-- please ensure that XREF:INITPLAN also changes appropriately.
+    -- XXX I am not terribly happy about these, but it'll do for the moment.
+    --
+    -- If the mechanism of feeding updates into these plans is to change,
+    -- please ensure that XREF:INITPLAN also changes appropriately.
   varify = fmap $ \(c,a) -> (c,varHead,varVal,a)
   mic x = (x,varHead,varVal)
   varHead = "__i"
@@ -511,7 +508,7 @@ combineQueryPlans = go (M.empty)
                                               m)
                                   xs
 
-	-- XXX This is unforunate and wrong, but our ANF is not quite right to
+    -- XXX This is unforunate and wrong, but our ANF is not quite right to
     -- let us do this right.  See also Dyna.Backend.Python's use of this
     -- function.
   findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
