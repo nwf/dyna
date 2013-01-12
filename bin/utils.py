@@ -62,9 +62,10 @@ def read_anf(e):
     def g(x):
         return list(_g(x))
 
-    for (agg, head, evals, unifs, [_,result]) in x:
+    for (agg, head, evals, assigns, unifs, [_,result]) in x:
         yield (agg,
                head,
                g(evals[1:]),
+               g(assigns[1:]),
                g(unifs[1:]),
                result)

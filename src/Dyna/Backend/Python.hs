@@ -151,10 +151,8 @@ pycall f vs = case (f, length vs) of
   ( "true", 0) -> "True"
   ("false", 0) -> "False"
 
-    -- fall back use the call indirection table... for now non-exhaustive pattern match error
-    -- TODO: add useful error message.
---  _ -> functorIndirect "call" f vs <> (tupled $ pretty_vs)
-
+  x            -> dynacPanic $ "Python.hs: Unknown request to pycall: "
+                               <> pretty x
 
  where pretty_vs = map (pretty . varOfMV) vs
        call name = name <> (parens $ sepBy ", " $ pretty_vs)
@@ -203,16 +201,6 @@ pdope _d _e =         (indent 4 $ "for _ in [None]:")
                  . (if indents then indent 4 else id)
                  . go xs
 
-
-py mfa mu (Rule _ h _ r span _) dope =
-           case mu of
-             Just (hv,v) -> case mfa of
-                              Nothing -> dynacSorry "Can't register indir eval"
-             Nothing -> case mfa of
-                          Nothing    -> dynacPanic "Initializer without head"
-   `above` pdope dope emit
- where
-   emit = "emit" <> tupled [pretty h, pretty r]
 
 printPlanHeader :: Handle -> Rule -> Cost -> IO ()
 printPlanHeader h r c = do

@@ -5,15 +5,19 @@
 
 
 -- Header material                                                      {{{
+{-# LANGUAGE OverloadedStrings #-}
+
 module Dyna.Analysis.Aggregation (
     AggMap, buildAggMap
 ) where
 
-import qualified Data.ByteString            as B
+-- import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import           Dyna.Analysis.ANF
+import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 import           Dyna.XXX.DataUtils
+import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
@@ -28,24 +32,25 @@ type AggMap = M.Map DFunctAr DAgg
 -- XXX These functions really would like to have span information, so they
 -- could report which line of the source caused an error.
 
-procANF :: Rule -> Either String (DFunctAr, DAgg)
-procANF (Rule _ h a _ _ (AS { as_assgn = as })) =
+procANF :: Rule -> (DFunctAr, DAgg)
+procANF r@(Rule _ h a _ _ (AS { as_assgn = as })) =
   case M.lookup h as of
-    Nothing       -> Left $ "I can't process head-variables"
+    Nothing       -> dynacSorry $ "I can't process head-variables" <+> (pretty $ show r)
     Just t -> case t of
-                Left _       -> Left "Malformed head"
-                Right (f,as) -> Right ((f,length as),a)
+                Left _       -> dynacPanic $ "Malformed head" <+> (pretty $ show r)
+                Right (f,xs) -> ((f,length xs),a)
 
-buildAggMap :: [Rule] -> Either String AggMap
+buildAggMap :: [Rule] -> AggMap
 buildAggMap = go (M.empty)
  where
-  go m []      = Right m
+  go m []      = m
   go m (ar:xs) =
-    case procANF ar of
-      Left e -> Left e 
-      Right (d,a) ->
-        case mapUpsert d a m of
-          Left a' -> Left $ "Conflicting aggregators"
-          Right m' -> go m' xs
+    let (d,a) = procANF ar
+    in case mapUpsert d a m of
+         Left a' -> dynacUserErr $     "Conflicting aggregators in rule"
+                                   <+> (pretty $ show ar)
+                                   <+> "Expected"
+                                   <+> pretty a'
+         Right m' -> go m' xs
 
 ------------------------------------------------------------------------}}}

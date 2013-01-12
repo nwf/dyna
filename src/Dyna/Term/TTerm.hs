@@ -17,6 +17,9 @@ module Dyna.Term.TTerm (
         -- * Annotations
     Annotation(..),
 
+        -- * Term Base Cases
+    TBase(..), TBaseSkolem(..),
+
         -- * Terms
     TermF(..), DTermV, DVar, DFunct, DFunctAr, DTerm,
 
@@ -28,9 +31,28 @@ module Dyna.Term.TTerm (
 ) where
 
 import           Control.Unification
-import qualified Data.ByteString     as B
-import qualified Data.Foldable       as F
-import qualified Data.Traversable    as T
+import qualified Data.ByteString       as B
+import qualified Data.Foldable         as F
+import qualified Data.Traversable      as T
+import qualified Text.PrettyPrint.Free as PP
+
+------------------------------------------------------------------------}}}
+-- Term Base Cases                                                      {{{
+
+-- | Used in mode analysis to indicate that an inst is bound to a ground
+-- (but unknown) value.
+data TBaseSkolem = TSNumeric | TSString
+ deriving (Eq,Ord,Show)
+
+-- | Term base cases.
+data TBase = TNumeric !(Either Integer Double)
+           | TString  !B.ByteString
+ deriving (Eq,Ord,Show)
+
+instance PP.Pretty TBase where
+    pretty (TNumeric (Left x))  = PP.pretty x
+    pretty (TNumeric (Right x)) = PP.pretty x
+    pretty (TString s)          = PP.dquotes (PP.pretty s)
 
 ------------------------------------------------------------------------}}}
 -- Terms                                                                {{{
@@ -39,8 +61,7 @@ data Annotation t = AnnType t
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 data TermF a t = TFunctor !a ![t]
-               | TNumeric !(Either Integer Double)
-               | TString  !B.ByteString
+               | TBase TBase
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 type DFunct = B.ByteString

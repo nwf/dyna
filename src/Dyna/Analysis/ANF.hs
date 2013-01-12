@@ -75,7 +75,7 @@ module Dyna.Analysis.ANF (
 
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Control.Unification
+-- import           Control.Unification
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
@@ -134,7 +134,7 @@ mergeDispositions = md
 data ANFState = AS
               { as_next  :: !Int
               , as_evals :: M.Map DVar EVF
-              , as_assgn :: M.Map DVar ENF
+              , as_assgn :: M.Map DVar EBF
               , as_unifs :: [(DVar,DVar)]
               , as_annot :: M.Map DVar [Annotation (T.Spanned P.Term)]
               , as_warns :: [(B.ByteString, [T.Span])]
@@ -155,10 +155,16 @@ newEval pfx t = do
     return n
 
 newAssign :: (MonadState ANFState m) => String -> ENF -> m DVar
-newAssign pfx t = do
+newAssign pfx t =
+  case t of
+    Left (NTVar  v) -> return v
+    Left (NTBase b) -> go (Left  b)
+    Right u         -> go (Right u)
+ where
+  go u = do
     n   <- nextVar pfx
     uns <- gets as_assgn
-    modify (\s -> s { as_assgn = M.insert n t uns })
+    modify (\s -> s { as_assgn = M.insert n u uns })
     return n
 
 newAnnot :: (MonadState ANFState m)
@@ -166,9 +172,11 @@ newAnnot :: (MonadState ANFState m)
 newAnnot v a = do
     modify (\s -> s { as_annot = mapInOrApp v a (as_annot s) })
 
+{-
 newAssignNT :: (MonadState ANFState m) => String -> NTV -> m DVar
 newAssignNT _   (NTVar x)     = return x
 newAssignNT pfx x             = newAssign pfx $ Left x
+-}
 
 doUnif :: (MonadState ANFState m) => DVar -> DVar -> m ()
 doUnif v w = if v == w
@@ -206,6 +214,8 @@ dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
 dynaFunctorSelfDispositions x = case x of
     ("pair",2)   -> SDQuote
     ("eval",1)   -> SDEval
+    ("true",0)   -> SDQuote
+    ("false",0)  -> SDQuote
     (name, _) ->
        -- If it starts with a nonalpha, it prefers to evaluate
        let d = if C.isAlphaNum $ head $ BU.toString name
@@ -249,26 +259,26 @@ normTerm_ c _ (P.TVar v) = do
        _                   -> return $ NTVar v'
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
-normTerm_ c   ss  (P.TNumeric n)    = do
+normTerm_ c   ss  (P.TBase x@(TNumeric _)) = do
     case c of
       (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate numeric" ss
       _                   -> return ()
-    return $ NTNumeric n
+    return $ NTBase x
 
 -- Strings too
-normTerm_ c   ss  (P.TString s)    = do
+normTerm_ c   ss  (P.TBase x@(TString _))  = do
     case c of
       (ECExplicit,ADEval) -> newWarn "Ignoring request to evaluate string" ss
       _                   -> return ()
-    return $ NTString s
+    return $ NTBase x
 
 -- Annotations
 --
 -- XXX this is probably the wrong thing to do
 normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
-    v <- normTerm_ c (st:ss) t >>= newAssignNT "_a"
+    v <- normTerm_ c (st:ss) t >>= newAssign "_a" . Left
     newAnnot v a
-    return (NTVar v)
+    return $ NTVar v
 
 -- Quote makes the context explicitly a quoting one
 normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
@@ -281,10 +291,10 @@ normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
     normTerm_ (ECExplicit,ADEval) (st:ss) t
     >>= \nt -> case c of
                 (_,ADEval) -> case nt of
-                                NTVar v -> NTVar `fmap` newEval "_s" (Left v)
-                                _       -> do
-                                            newWarn "Ignoring * of literal" ss
-                                            return nt
+                                NTVar  v -> NTVar `fmap` newEval "_s" (Left v)
+                                NTBase b -> do
+                                                    newWarn "Ignoring * of literal" ss
+                                                    return $ NTBase b
                 _          -> return nt
 
 -- "is/2" is sort of exciting.  We normalize the second argument in an
@@ -298,25 +308,26 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
     case c of
         (_,ADEval) -> do
                        _ <- doUnif nx nv
-                       return $ NTNumeric (Left 42)  -- XXX ought to be NTUnit
+                       NTVar `fmap` newAssign "_i" (Right ("true",[]))
         _          -> do
-                       NTVar `fmap` newAssign "_u" (Right ("is",[nx,nv]))
+                       NTVar `fmap` newAssign "_i" (Right ("is",[nx,nv]))
 
 -- ",/2" and "whenever/2" are also reserved words of the language and get
--- handled here.  XXX This may be wrong, too, of course.
+-- handled here.
 --
--- These cases both discard their side-conditions and simply transparently
--- return the normalization of their values
-normTerm_ (_,ADEval) ss (P.TFunctor "whenever" [r T.:~ sr, i T.:~ si]) = do
-    _  <- normTerm_ (ECFunctor, ADEval) (si:ss) i
-    nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_c" . Left
-    return $ NTVar nv
-
+-- XXX This is wrong, too, of course; these should really be moved into a
+-- standard prelude.  But there's no facility for that right now and no
+-- reason to make the backend know about them since that's also wrong!
 normTerm_ (_,ADEval) ss (P.TFunctor ","        [i T.:~ si, r T.:~ sr]) = do
-    _  <- normTerm_ (ECFunctor, ADEval) (si:ss) i
-    nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_c" . Left
+    ni <- normTerm_ (ECFunctor, ADEval) (si:ss) i >>= newAssign "_e" . Left
+    nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_e" . Left
+
+    t' <- newAssign "_e" (Right ("true",[]))
+    _  <- doUnif ni t'
     return $ NTVar nv
 
+normTerm_ c@(_,ADEval) ss (P.TFunctor "whenever" [sr, si]) =
+    normTerm_ c ss (P.TFunctor "," [si,sr])
 
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
@@ -332,13 +343,10 @@ normTerm_ c   ss (P.TFunctor f as) = do
     -- example, correctly reject updates that are not the right shape.
     normas' <- let delin (vs,r) x = do
                      case x of
-                       x@(NTVar v) | v `elem` vs -> do
-                            v' <- newAssign   "_x" (Left x)
-                            return (vs,v':r)
-                       NTVar v -> do
+                       NTVar v | not (v `elem` vs) -> do
                             return (v:vs,v:r)
                        _ -> do
-                            v' <- newAssignNT "_x" x
+                            v' <- newAssign "_x" (Left x)
                             return (vs,v':r)
                in (reverse . snd) `fmap` foldM delin ([],[]) normas
 
@@ -374,10 +382,10 @@ data Rule = Rule { r_index      :: Int
 -- XXX
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
          -> Rule
-normRule (P.Rule i h a r T.:~ span) = uncurry ($) $ runNormalize $ do
-    nh  <- normTerm False h >>= newAssignNT "_h"
-    nr  <- normTerm True  r >>= newAssignNT "_r"
-    return $ Rule i nh a nr span
+normRule (P.Rule i h a r T.:~ sp) = uncurry ($) $ runNormalize $ do
+    nh  <- normTerm False h >>= newAssign "_h" . Left
+    nr  <- normTerm True  r >>= newAssign "_r" . Left
+    return $ Rule i nh a nr sp
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -394,15 +402,16 @@ runNormalize =
 -- Pretty Printer                                                       {{{
 
 printANF :: Rule -> Doc e
-printANF (Rule i h a result span
+printANF (Rule i h a result sp
             (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
-          text ";;" <+> prettySpanLoc span
+          text ";;" <+> prettySpanLoc sp
   `above`
           text ";; index" <+> pretty i
   `above`
   ( parens $ (pretty a)
             <+> valign [ (pretty h)
                        , parens $ text "evals"  <+> pev
+                       , parens $ text "assign" <+> pas
                        , parens $ text "unifs"  <+> pun
                        , parens $ text "result" <+> (pretty result)
                        ]
@@ -411,20 +420,15 @@ printANF (Rule i h a result span
     pft :: FDT -> Doc e
     pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
 
-    pevf :: EVF -> Doc e
-    pevf (Left v)   = pretty v
-    pevf (Right t)  = pft t
+    pe :: Pretty a => Either a FDT -> Doc e
+    pe = either pretty pft
 
-    penf :: ENF -> Doc e
-    penf (Left n)   = pretty n
-    penf (Right t)  = pft t
-
-    pev = valign $ map (\(y,z)-> parens $ pretty y <+> pevf z)
+    pev = valign $ map (\(y,z)-> parens $ pretty y <+> pe z)
                  $ M.toList evals
 
-    pun = valign $    map (\(y,z)-> parens $ pretty y <+> penf z)
-                          (M.toList assgn)
-                   ++ map (\(y,z) -> parens $ pretty y <+> pretty z)
-                          unifs
+    pas = valign $ map (\(y,z)-> parens $ pretty y <+> pe z)
+                       (M.toList assgn)
+    pun = valign $ map (\(y,z) -> parens $ pretty y <+> pretty z)
+                       unifs
 
 ------------------------------------------------------------------------}}}

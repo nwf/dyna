@@ -31,11 +31,14 @@ import           Text.Trifecta
 import           Text.Trifecta.Delta
 
 import           Dyna.ParserHS.Parser
-import           Dyna.Term.TTerm (Annotation(..))
+import           Dyna.Term.TTerm (Annotation(..), TBase(..))
 import           Dyna.XXX.TrifectaTest
 
 ------------------------------------------------------------------------}}}
 -- Terms and basic handling                                             {{{
+
+_tNumeric :: Either Integer Double -> Term
+_tNumeric = TBase . TNumeric
 
 term :: ByteString -> Spanned Term
 term = unsafeParse dterm
@@ -89,8 +92,8 @@ case_basicFunctorNLComment :: Assertion
 case_basicFunctorNLComment = e @=? (term sfb)
  where
   e =  TFunctor "foo"
-         [TNumeric (Left 1) :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
-         ,TNumeric (Left 2) :~ Span (Lines 1 2 11 2) (Lines 2 0 13 0) "1,2\n"
+         [_tNumeric (Left 1) :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
+         ,_tNumeric (Left 2) :~ Span (Lines 1 2 11 2) (Lines 2 0 13 0) "1,2\n"
          ]
         :~ Span (Columns 0 0) (Lines 2 1 14 1) "foo(%xxx\n"
 
@@ -181,7 +184,7 @@ case_ruleSimple = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+="
-                   (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
+                   (_tNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
             :~ ts)
            :~ ts
   ts = Span (Columns 0 0) (Columns 10 10) sr
@@ -195,7 +198,7 @@ case_ruleSimple = e @=? (progline sr)
 --   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
 --                    "+="
 --                    []
---                    (TNumeric (Left 0) :~ Span (Columns 8 8) (Columns 9 9) sr)
+--                    (_tNumeric (Left 0) :~ Span (Columns 8 8) (Columns 9 9) sr)
 --             :~ ts)
 --            :~ ts
 --   ts = Span (Columns 0 0) (Columns 10 10) sr
@@ -262,7 +265,7 @@ case_ruleKeywordsComma = e @=? (progline sr)
                                          :~ Span (Columns 26 26) (Columns 32 32) sr]
                            :~ Span (Columns 21 21) (Columns 32 32) sr
                                        ,TFunctor "is" [TVar "Y" :~ Span (Columns 34 34) (Columns 36 36) sr
-                                                      ,TNumeric (Left 3) :~ Span (Columns 39 39) (Columns 41 41) sr]
+                                                      ,_tNumeric (Left 3) :~ Span (Columns 39 39) (Columns 41 41) sr]
                                          :~ Span (Columns 34 34) (Columns 41 41) sr]
              :~ Span (Columns 21 21) (Columns 41 41) sr] -- End "whenever"
             :~ Span (Columns 6 6) (Columns 41 41) sr) -- End expression
@@ -276,12 +279,12 @@ case_rules = e @=? (proglines sr)
  where
   e = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                      "+="
-                     (TNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
+                     (_tNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
                     :~ s1)
                    :~ s1
       , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
                     "+="
-                    (TNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
+                    (_tNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
                    :~ s2)
                   :~ s2
       ]
@@ -294,12 +297,12 @@ case_rulesWhitespace = e @=? (proglines sr)
  where
   e  = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 2 2) (Lines 1 1 16 1) l0)
                      "+="
-                     (TNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
+                     (_tNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
                     :~ s1)
                    :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Lines 3 1 31 1) (Lines 3 6 36 6) l3)
                      "+="
-                     (TNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
+                     (_tNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
                     :~ s2)
                    :~ s2
        ]
@@ -327,7 +330,7 @@ case_rulesDotExpr = e @=? (proglines sr)
                     :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
                       "+="
-                      (TNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
+                      (_tNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
                      :~ s2)
                     :~ s2
        ]

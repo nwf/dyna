@@ -84,14 +84,18 @@ t/3
 =================
 
 
+true/0
+=================
+
+
 word/2
 =================
-word('.',7)                    := True
-word('Papa',0)                 := True
-word('a',5)                    := True
-word('ate',1)                  := True
-word('caviar',3)               := True
-word('spoon',6)                := True
-word('the',2)                  := True
-word('with',4)                 := True
+word('.',7)                    := true
+word('Papa',0)                 := true
+word('a',5)                    := true
+word('ate',1)                  := true
+word('caviar',3)               := true
+word('spoon',6)                := true
+word('the',2)                  := true
+word('with',4)                 := true
 

@@ -184,9 +184,7 @@ processFile fileName = bracket openOut hClose go
 
     dump DumpANF (vcat $ map printANF frs)
 
-    aggm <- case buildAggMap frs of
-              Left e -> dynacThrow $ UserProgramError (text e)
-              Right x -> return x
+    aggm <- return $! buildAggMap frs
 
     dump DumpAgg (M.foldlWithKey (\d f a -> d `above`
                                     (pretty f <+> colon <+> pretty a))

@@ -31,21 +31,20 @@ module Dyna.Analysis.RuleMode (
     adornedQueries
 ) where
 
-import           Control.Monad
+-- import           Control.Monad
 import qualified Data.ByteString.Char8      as BC
-import qualified Data.List                  as L
+-- import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 import qualified Data.Set                   as S
-import qualified Debug.Trace                as XT
+-- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
 import           Dyna.Main.Exception
-import qualified Dyna.ParserHS.Parser       as DP
 import           Dyna.XXX.DataUtils(argmin,mapInOrApp)
 import           Dyna.XXX.Trifecta (prettySpanLoc)
-import           Dyna.XXX.TrifectaTest
+-- import           Dyna.XXX.TrifectaTest
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
@@ -63,10 +62,8 @@ modedVar b x = case varMode b x of
                  MFree  -> MF x
 
 modedNT :: BindChart -> NTV -> ModedNT
-modedNT b (NTVar v)     = NTVar $ modedVar b v
-modedNT _ (NTBool b)    = NTBool b
-modedNT _ (NTString s)  = NTString s
-modedNT _ (NTNumeric x) = NTNumeric x
+modedNT b (NTVar  v)     = NTVar $ modedVar b v
+modedNT _ (NTBase b)     = NTBase b
 
 ------------------------------------------------------------------------}}}
 -- Cruxes                                                               {{{
@@ -81,6 +78,7 @@ data UnifCrux v n = CFStruct v [v] DFunct
 
 type Crux v n = Either (EvalCrux v) (UnifCrux v n)
 
+cruxIsEval :: Crux v n -> Bool
 cruxIsEval (Left _) = True
 cruxIsEval (Right _) = False
 
@@ -192,8 +190,8 @@ unif_cruxes (AS { as_assgn = assigns, as_unifs = unifs }) =
      M.foldrWithKey (\o i -> (crux o i :)) [] assigns
   ++ map (\(v1,v2) -> CFAssign v1 (NTVar v2)) unifs
  where
-  crux :: DVar -> ENF -> UnifCrux DVar NTV
-  crux o (Left  x)              = CFAssign o x
+  crux :: DVar -> EBF -> UnifCrux DVar NTV
+  crux o (Left  x)              = CFAssign o (NTBase x)
   crux o (Right (f,as))         = CFStruct o as f
 
 ------------------------------------------------------------------------}}}
@@ -337,14 +335,6 @@ stepPartialPlan steps score mic p =
                    ]
            _ -> [dop]
 
-stepAgenda st sc mic = go [] . (\x -> [x])
- where
-  go [] []     = []
-  go (r:rs) [] = go rs r
-  go rs (p:ps) = case stepPartialPlan st sc mic p of
-                    Left df -> df : (go rs ps)
-                    Right ps' -> go (ps':rs) ps
-
 planner_ :: Possible fbs                                
          -- ^ Available steps
          -> (PartialPlan fbs -> Action fbs -> Cost)
@@ -360,7 +350,7 @@ planner_ :: Possible fbs
          --   the two given for an initial crux
          -> [(Cost, Action fbs)]
          -- ^ Plans and their costs
-planner_ st sc cr mic bv = stepAgenda st sc mic'
+planner_ st sc cr mic bv = runAgenda
    $ PP { pp_cruxes = cr
         , pp_binds  = S.union bv bi
         , pp_restrictSearch = False
@@ -368,6 +358,14 @@ planner_ st sc cr mic bv = stepAgenda st sc mic'
         , pp_plan   = ip
         }
  where
+  runAgenda = go [] . (\x -> [x])
+   where
+    go [] []     = []
+    go (r:rs) [] = go rs r
+    go rs (p:ps) = case stepPartialPlan st sc mic' p of
+                     Left df -> df : (go rs ps)
+                     Right ps' -> go (ps':rs) ps
+
   -- XREF:INITPLAN
   (ip,bi,mic') = case mic of
                 Nothing -> ([],S.empty,Nothing)
@@ -387,6 +385,7 @@ anfPlanner_ st sc anf mic bv = planner_ st sc cruxes mic bv
                        $ maybe id (\(ic,_,_) -> S.delete ic) mic
                        $ S.fromList $ eval_cruxes anf)
 
+bestPlan :: [(Cost, Action fbs)] -> Maybe (Cost, Action fbs)
 bestPlan []    = Nothing
 bestPlan plans = Just $ argmin fst plans
 
@@ -424,7 +423,7 @@ planEachEval bp cs (Rule { r_anf = anf })  =
                   CFCall _ is f | not (cs (f,length is))
                                 -> Just (Just (f,length is), ec)
                   CFCall _ _  _ -> Nothing
-                  CFEval o i    -> Just (Nothing,ec))
+                  CFEval _ _    -> Just (Nothing,ec))
 
     -- Grab all evaluations
   $ eval_cruxes anf
@@ -500,9 +499,9 @@ combineQueryPlans = go (M.empty)
   go m []              = m
   go m ((fr,mcva):xs)  = go' xs fr mcva m
 
-  go' xs fr Nothing      m = dynacUserErr
-                             $ "No query plan for rule at"
-                             <+> (prettySpanLoc $ r_span fr)
+  go' _  fr Nothing        _ = dynacUserErr
+                               $ "No query plan for rule at"
+                                 <+> (prettySpanLoc $ r_span fr)
   go' xs fr (Just (c,v,a)) m = go (mapInOrApp (findHeadFA fr)
                                               (fr,c,v,a)
                                               m)

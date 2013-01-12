@@ -154,14 +154,17 @@ def isvar(x):
 
 def circuit(anf):
 
-    (agg, head, evals, unifs, result) = anf
+    (agg, head, evals, assigns, unifs, result) = anf
 
     g = Hypergraph()
     for var, op, args in evals:
         g.edge(head=var, label=op, body=args)
 
-    for var, op, args in unifs:
+    for var, op, args in assigns:
         g.edge(head=var, label='& %s' % op, body=args)
+
+    for var, op, val in unifs:
+        g.edge(head=var, label='& ', body=[op])
 
     g.head = head
     g.result = result

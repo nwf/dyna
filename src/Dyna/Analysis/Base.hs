@@ -5,7 +5,7 @@
 
 module Dyna.Analysis.Base (
     -- * Normalized Term Representations
-    NT(..), FDT, NTV, ENF, EVF,
+    NT(..), FDT, NTV, EBF, ENF, EVF,
 
     -- * Modes
     Mode(..), Moded(..), modeOf, isBound, isFree,
@@ -18,7 +18,7 @@ module Dyna.Analysis.Base (
     Det(..), detOfDop,
 ) where
 
-import qualified Data.ByteString            as B
+-- import qualified Data.ByteString            as B
 import           Dyna.Term.TTerm
 import qualified Text.PrettyPrint.Free as PP
 
@@ -26,26 +26,22 @@ import qualified Text.PrettyPrint.Free as PP
 -- Normalized Term Representations                                      {{{
 
 -- | A Normalized Term, parametric in the variable case
---
--- The Ord instance is solely for Data.Set's use
-data NT v = NTBool    Bool
-          | NTNumeric (Either Integer Double)
-          | NTString  B.ByteString
-          | NTVar     v
+data NT v = NTVar v
+          | NTBase TBase
  deriving (Eq,Ord,Show)
 
-instance (PP.Pretty v) => PP.Pretty (NT v) where
-    pretty (NTNumeric (Left x))  = PP.pretty x
-    pretty (NTNumeric (Right x)) = PP.pretty x
-    pretty (NTString s)          = PP.dquotes (PP.pretty s)
-    pretty (NTVar v)             = PP.pretty v
-
+instance PP.Pretty v => PP.Pretty (NT v) where
+  pretty (NTVar  v) = PP.pretty v
+  pretty (NTBase t) = PP.pretty t
 
 -- | Normalized Term over 'DVar' (that is, either a primitive or a variable)
 type NTV = NT DVar
 
 -- | Flat Dyna Term (that is, a functor over variables)
 type FDT = (DFunct,[DVar])
+
+-- | Either a base case or flat term
+type EBF = Either TBase FDT
 
 -- | Either a variable or a functor of variables)
 type EVF = Either DVar FDT
@@ -80,16 +76,14 @@ varOfMV (MB x) = x
 type ModedNT = NT (ModedVar)
 
 evnOfMNT :: ModedNT -> Either DVar NTV
-evnOfMNT (NTVar mv)    = case mv of
+evnOfMNT (NTVar mv)     = case mv of
                            MB v -> Right (NTVar v)
                            MF v -> Left  v
-evnOfMNT (NTString s)  = Right (NTString s)
-evnOfMNT (NTNumeric n) = Right (NTNumeric n)
+evnOfMNT (NTBase b)     = Right (NTBase b)
 
 ntvOfMNT :: ModedNT -> NTV
-ntvOfMNT (NTVar mx)    = NTVar $ varOfMV mx
-ntvOfMNT (NTString s)  = NTString s
-ntvOfMNT (NTNumeric n) = NTNumeric n
+ntvOfMNT (NTVar mx)     = NTVar  $ varOfMV mx
+ntvOfMNT (NTBase b)     = NTBase b
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine                                                             {{{

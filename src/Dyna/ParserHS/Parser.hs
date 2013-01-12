@@ -7,9 +7,6 @@
 --
 -- TODO (XXX):
 --
---   * There is certainly too much special handling of the comma operator,
---     but see COMMAOP below for why it's not so easy to fix.
---
 --   * We might want to use T.T.Literate, too, in the end.
 --
 --   * Doesn't understand dynabase literals ("{ ... }")
@@ -35,7 +32,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.ParserHS.Parser (
-    Term(..), dterm, -- dtlexpr, dtfexpr,
+    Term(..), dterm,
     Rule(..), drule, Line(..), dline, dlines
 ) where
 
@@ -44,7 +41,7 @@ import           Control.Monad
 import           Control.Monad.State
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
-import           Data.Char (isSpace)
+-- import           Data.Char (isSpace)
 import qualified Data.CharSet                     as CS
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
@@ -54,7 +51,7 @@ import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
 import           Text.Trifecta
 
-import           Dyna.Term.TTerm (Annotation(..))
+import           Dyna.Term.TTerm (Annotation(..), TBase(..))
 import           Dyna.XXX.MonadUtils (incState)
 import           Dyna.XXX.Trifecta (identNL,stringLiteralSQ)
 
@@ -65,9 +62,8 @@ data Term = TFunctor !B.ByteString
                      ![Spanned Term]
           | TAnnot   !(Annotation (Spanned Term))
                      !(Spanned Term)
-          | TNumeric !(Either Integer Double)
-          | TString  !B.ByteString
           | TVar     !B.ByteString
+          | TBase    !TBase
  deriving (Eq,Ord,Show)
 
 type RuleIx = Int
@@ -260,9 +256,9 @@ term  = token $ choice
 
       ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
 
-      , try $ spanned $ TString  <$> bsf stringLiteral
+      , try $ spanned $ TBase . TString  <$> bsf stringLiteral
 
-      , try $ spanned $ TNumeric <$> naturalOrDouble
+      , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
 
       , try $ spanned $ flip TFunctor [] <$> atom
                       <* (notFollowedBy $ char '(')
@@ -318,21 +314,6 @@ bf f = do
 -- XXX right now all binops are at equal precedence and left-associative;
 -- that's wrong.
 --
--- XXX I remember now why we didn't handle ',' as an operator: if it were,
--- we'd have no way of distinguishing between @f(a,b)@ as
---
---   > TFunctor "f" [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _]
---
--- and
---
---   > TFunctor "f" [TFunctor "," [TFunctor "a" [] :~ _, TFunctor "b" [] :~ _] :~ _]
---
--- COMMAOP
--- We can fix this, but it means that we should have a separate expression
--- parser for contexts where "comma means argument separation" and "comma
--- means evaluation separator".  I don't yet know how I feel about
--- the "whenever" (and "is"?) operator(s) being available in the former table.
---
 -- XXX timv suggests that this should be assocnone for binops as a quick
 -- fix.  Eventually we should still do this properly.
 termETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
@@ -346,7 +327,7 @@ termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
 tlexpr :: DeltaParsing m => m (Spanned Term)
 tlexpr = buildExpressionParser termETable term <?> "Limited Expression"
 
-
+fullETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
 fullETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
              , [ Infix  (bf (spanned $ bsf $ symbol ","       )) AssocRight ]
              , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone  ]
@@ -355,40 +336,15 @@ fullETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
 tfexpr :: DeltaParsing m => m (Spanned Term)
 tfexpr = buildExpressionParser fullETable tlexpr <?> "Expression"
 
-dterm, dtlexpr, dtfexpr :: DeltaParsing m => m (Spanned Term)
+dterm :: DeltaParsing m => m (Spanned Term)
 dterm   = unDL term
-dtlexpr = unDL tlexpr
-dtfexpr = unDL tfexpr
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
-{-
--- | Grab the head (term!) and aggregation operator from a line that
--- we hope is a rule.
-rulepfx :: (MonadState RuleIx m, DeltaParsing m)
-        => m ([Spanned Term] -> Spanned Term -> Rule)
-rulepfx = rule <*> term
-               <*  whiteSpace
-               <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
--}
-
 parseRule :: (MonadState RuleIx m, DeltaParsing m) => m Rule
 parseRule = choice [
-
-{-
-               -- HEAD OP= RESULTEXPR whenever EXPRS .
-               (try (liftA flip rulepfx
-                          <*> tlexpr
-                          <*  hrss "whenever"))
-                          <*> (tlexpr `sepBy1` symbolic ',')
-
-               -- HEAD OP= EXPRS, RESULTEXPR .
-             , try (rulepfx
-                          <*> many (try (tlexpr <* symbolic ','))
-                          <*> tlexpr)
--}
-
+               -- HEAD AGGR TFEXPR .
                try $ rule <*> term 
                           <*  whiteSpace
                           <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
@@ -404,8 +360,6 @@ parseRule = choice [
                   return $ Rule ix h ":-" (TFunctor "true" [] :~ s)
              ]
        <* optional (char '.')
- where
-  hrss = highlight ReservedOperator . spanned . symbol
 
 drule :: (DeltaParsing m) => m (Spanned Rule)
 drule = evalStateT (unDL (spanned parseRule)) 0
