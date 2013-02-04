@@ -13,7 +13,7 @@ module Dyna.Main.Driver where
 
 import           Control.Applicative ((<*))
 import           Control.Exception
-import           Control.Monad
+-- import           Control.Monad
 import           Data.Char
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
@@ -75,12 +75,17 @@ noBackend = Backend
                                           "No backend specified; stopping"
           }
 
+backendmap :: M.Map String (Doc e,Backend)
+backendmap = M.fromList
+             [ ("none", ("null backend for early stages only", noBackend))
+             , ("python", ("generate python code",pythonBackend))
+             ]
+
 parseBackend :: String -> Backend
-parseBackend s = case map toLower s of
-                   "none" -> noBackend
-                   "python" -> pythonBackend
-                   _ -> dynacThrow $ InvocationError
-                                   $ "Unknown backend:" <+> pretty s
+parseBackend s = maybe (dynacThrow $ InvocationError
+                                   $ "Unknown backend:" <+> pretty s)
+                       snd
+                       $ M.lookup (map toLower s) backendmap
 
 ------------------------------------------------------------------------}}}
 -- DynacConfiguration                                                   {{{
@@ -101,64 +106,100 @@ defaultDynacConfig = DynacConfig
 ------------------------------------------------------------------------}}}
 -- Options and Argument Handling                                        {{{
 
-data Opt = OptVersion
-         | OptHelp
+data QuickExit = QEBiblio
+               | QEHelp
+               | QEHelpBackend
+               | QEHelpDump
+               | QEVersion
+
+quickExit :: QuickExit -> IO ()
+-- XXX
+quickExit QEBiblio = putStrLn "Bibliographic suggestions would appear here"
+quickExit QEHelp =
+  putStrLn (usageInfo h helpfulOptions)
+ where
+  h = "\nUsage: dyna -B backend -o FILE.out FILE.dyna\n\nOption summary:"
+quickExit QEHelpBackend = do
+  putDoc $ above "\nBackends available: "
+           $ indent 4 $ vcat
+                      $ map (\(k,v) -> pretty k <+> colon <+> fst v)
+                      $ M.assocs backendmap
+  putStrLn ""
+quickExit QEHelpDump = putStrLn (usageInfo "\nDump options:" $ dumpOpts False)
+quickExit QEVersion = return ()
+
+
+data Opt = OptQE QuickExit
          | OptBackend Backend
          | OptDump (DumpMap -> DumpMap)
          | OptOutput  FilePath
 
+helpOpt :: OptDescr Opt
+helpOpt = Option ['h'] ["help"]    (NoArg $ OptQE QEHelp)    "display this help message"
 
-options :: [OptDescr Opt]
-options =
-  [ Option ['h'] ["help"]    (NoArg  OptHelp)    "display this help message"
-  , Option ['V'] ["version"] (NoArg  OptVersion) "display version and exit"
+helpMoreOpts :: [OptDescr Opt]
+helpMoreOpts =
+  [ Option [] ["help-dump"] (NoArg $ OptQE QEHelpDump) "show --dump-* options"
+  , Option [] ["help-backend"] (NoArg $ OptQE QEHelpBackend) "show backend information"
+  ]
+
+infoOpts :: [OptDescr Opt]
+infoOpts = 
+  [ Option ['V'] ["version"] (NoArg $ OptQE QEVersion) "display version and exit"
   -- This is an excellent idea we might consider, taken from the 'pi'
   -- program of http://www.ginac.de/CLN/
-  -- , Option [] ["bibliography"] (NoArg OptBiblio) "relevant papers"
+  , Option [] ["bibliography"] (NoArg $ OptQE QEBiblio) "relevant papers"
   ]
-  ++
+
+coreOpts :: [OptDescr Opt]
+coreOpts =
   [ Option ['B'] ["backend"]      (ReqArg obe "BE")
     "use backend BE"
   , Option ['o'] ["out","output"] (ReqArg OptOutput "FILE")
     "write generated output to FILE"
   ]
-  -- XXX we'd like these to not be documented, at least not by default, but
-  -- that would require patching the getopt library
-  ++ mkDumpOpt "agg"   DumpAgg
-  ++ mkDumpOpt "anf"   DumpANF
-  ++ mkDumpOpt "parse" DumpParsed
  where
   obe = OptBackend . parseBackend
 
-  mkDumpOpt arg fl =
-    [ Option [] ["dump-"    ++ arg] (OptArg (OptDump . sfl) "FILE") ""
-    , Option [] ["no-dump-" ++ arg] (NoArg  (OptDump   cfl)       ) ""
-    ]
+dumpOpts :: Bool -> [OptDescr Opt]
+dumpOpts nos =
+     mkDumpOpt "agg"   DumpAgg     "Aggregator summary"
+  ++ mkDumpOpt "anf"   DumpANF     "Administrative Normal Form"
+  ++ mkDumpOpt "parse" DumpParsed  "Parser output"
+ where
+  mkDumpOpt arg fl hm =
+    Option [] ["dump-"    ++ arg] (OptArg (OptDump . sfl) "FILE") hm
+    : if nos
+       then [ Option [] ["no-dump-" ++ arg] (NoArg (OptDump cfl)) "" ]
+       else []
    where
     sfl x fs = M.insert fl x fs
     cfl   fs = M.delete fl   fs
 
+allOptions :: [OptDescr Opt]
+allOptions =
+  helpOpt : helpMoreOpts ++ infoOpts ++ coreOpts ++ (dumpOpts True)
+
+-- When the user has asked for help, what do they want to see?
+helpfulOptions :: [OptDescr Opt]
+helpfulOptions = helpMoreOpts ++ infoOpts ++ coreOpts
 
 procArgs :: [String] -> IO (DynacConfig, [String])
 procArgs argv = do
-  case getOpt Permute options argv of
+  case getOpt Permute allOptions argv of
     (os,as,[]) -> case foldOpts os of
                     Left x -> do
                                putStrLn "Dyna 0.4"
-                               when x $ putStrLn (usageInfo "" options)
+                               quickExit x
                                exitSuccess
                     Right f -> return $ (f defaultDynacConfig, as)
-    (_,_,es)   -> dynacThrow $ InvocationError
-                             $ vcat (map pretty es)
-                                `above`
-                                pretty (usageInfo "" options)
+    (_,_,es)   -> dynacThrow $ InvocationError $ "Arguments not understood: " <> vcat (map pretty es)
  where
-  foldOpts :: [Opt] -> Either Bool (DynacConfig -> DynacConfig)
+  foldOpts :: [Opt] -> Either QuickExit (DynacConfig -> DynacConfig)
   foldOpts = go id
    where
     go f []                = Right f
-    go _ (OptHelp:_)       = Left True
-    go _ (OptVersion:_)    = Left False
+    go _ (OptQE x:_)       = Left x
     go f (OptBackend b:os) = go (setBackend b  . f) os
     go f (OptDump f':os)   = go (mungeDump  f' . f) os
     go f (OptOutput fn:os) = go (setOutput fn  . f) os
