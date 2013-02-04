@@ -24,18 +24,13 @@ First, ensure that you have GHC 7.6 or later.  (Though in a pinch, if you're
 only interested in the frontend stuff and the Python backend, apparently as
 early as 7.0 continues to be servicable.)
 
-Then, sadly, I have to ask you to build some upstream packages out of their
-repositories.  I thought they were going to be released "soon" when I
-switched to these later versions, but it hasn't happened yet:
-
-    make upstream
-
 Build K3, if that's your thing, which requires OCaml:
 
     git submodule update external/damsl-k3
     (cd external/damsl-k3; make)
 
-Then fetch, build, and install any dependencies
+Then fetch, build, and install any dependencies (for the moment, we seem to
+be doing OK with vanilla upstreams!)
 
     make deps
 

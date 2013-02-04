@@ -15,22 +15,24 @@ import           Control.Applicative ((<*))
 import           Control.Exception
 import           Control.Monad
 import           Data.Char
-import qualified Data.Map                   as M
-import qualified Data.Maybe                 as MA
-import qualified Data.Set                   as S
+import qualified Data.Map                     as M
+import qualified Data.Maybe                   as MA
+import qualified Data.Set                     as S
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.Python
 import           Dyna.Main.BackendDefn
 import           Dyna.Main.Exception
-import qualified Dyna.ParserHS.Parser       as P
+import qualified Dyna.ParserHS.Parser         as P
 import           System.Console.GetOpt
 import           System.Environment
 import           System.Exit
 import           System.IO
 import           Text.PrettyPrint.Free
-import qualified Text.Trifecta              as T
+import qualified Text.PrettyPrint.ANSI.Leijen as PPA
+import qualified Text.Trifecta                as T
+import qualified Text.Trifecta.Result         as TR
 
 ------------------------------------------------------------------------}}}
 -- Dumping                                                              {{{
@@ -211,8 +213,8 @@ processFile fileName = bracket openOut hClose go
   parse = do
     pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
     case pr of
-      T.Failure td -> dynacUserErr $ align ("Parser error" `above` td)
-      T.Success rs -> return rs
+      TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
+      TR.Success rs -> return rs
 
 ------------------------------------------------------------------------}}}
 -- Main                                                                 {{{

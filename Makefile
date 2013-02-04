@@ -5,13 +5,14 @@ all: build
 upstream:
 	git submodule init
 	git submodule update external/ekmett-parsers external/ekmett-trifecta
-	(cd external/ekmett-parsers; cabal install --user)
-	(cd external/ekmett-trifecta; cabal install --user)
+	cabal install --user --enable-tests --only-dependencies \
+      external/ekmett-parsers external/ekmett-trifecta .
+	cabal install --user external/ekmett-parsers external/ekmett-trifecta 
 
 deps:
-	(cabal install --enable-tests --only-dependencies)
+	cabal install --user --enable-tests --only-dependencies .
 
-build: deps
+build:
 	cabal configure --user --enable-tests
 	cabal build
 	cabal test

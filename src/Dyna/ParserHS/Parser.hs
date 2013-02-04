@@ -47,6 +47,7 @@ import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
 import           Text.Parser.Expression
+import           Text.Parser.LookAhead
 import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
 import           Text.Trifecta
@@ -213,7 +214,8 @@ dynaCommentStyle =  CommentStyle
   }
 
 newtype DynaLanguage m a = DL { unDL :: m a }
-  deriving (Functor,Applicative,Alternative,Monad,MonadPlus,Parsing,CharParsing)
+  deriving (Functor,Applicative,Alternative,Monad,MonadPlus,
+            Parsing,CharParsing,LookAheadParsing)
 
 instance MonadTrans DynaLanguage where
   lift = DL
@@ -249,7 +251,8 @@ nullaryStar :: DeltaParsing m => m (Spanned Term)
 nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
                       <* (notFollowedBy $ char '(')
 
-term :: DeltaParsing m => m (Spanned Term)
+term :: (DeltaParsing m, LookAheadParsing m)
+     => m (Spanned Term)
 term  = token $ choice
       [       parens tfexpr
       ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
@@ -276,7 +279,8 @@ term  = token $ choice
 
 -- | Sometimes we require that a character not be followed by whitespace
 -- and satisfy some additional predicate before we pass it off to some other parser.
-thenAny :: (TokenParsing m, Monad m) => m a -> m Char
+thenAny :: (Monad m, TokenParsing m, LookAheadParsing m)
+        => m a -> m Char
 thenAny p =    anyChar                             -- some character
             <* lookAhead (notFollowedBy someSpace) -- not followed by space
             <* lookAhead p                         -- and not follwed by the request
@@ -286,12 +290,14 @@ thenAny p =    anyChar                             -- some character
 -- by itself as being counted as an operator; the dot operator is required
 -- to have not-a-space following (to avoid confusion with the end-of-rule
 -- marker, which is taken to be "dot space" or "dot eof").
-dotOper :: (Monad m, TokenParsing m) => m [Char]
+dotOper :: (Monad m, TokenParsing m, LookAheadParsing m)
+        => m [Char]
 dotOper = try (lookAhead (thenAny anyChar) *> identNL dynaDotOperStyle)
 
 -- | A "comma operator" is a comma necessarily followed by something that
 -- would continue to be an operator (i.e. punctuation).
-commaOper :: (Monad m, TokenParsing m) => m [Char]
+commaOper :: (Monad m, TokenParsing m, LookAheadParsing m)
+          => m [Char]
 commaOper = try (   lookAhead (thenAny $ _styleLetter dynaCommaOperStyle)
                  *> identNL dynaCommaOperStyle)
 
@@ -316,7 +322,8 @@ bf f = do
 --
 -- XXX timv suggests that this should be assocnone for binops as a quick
 -- fix.  Eventually we should still do this properly.
-termETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
+termETable :: (DeltaParsing m, LookAheadParsing m)
+           => [[Operator m (Spanned Term)]]
 termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
              , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
              , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
@@ -324,7 +331,8 @@ termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
              , [ Infix  (bf (spanned $ bsf $ commaOper)) AssocRight ]
              ]
 
-tlexpr :: DeltaParsing m => m (Spanned Term)
+tlexpr :: (DeltaParsing m, LookAheadParsing m)
+       => m (Spanned Term)
 tlexpr = buildExpressionParser termETable term <?> "Limited Expression"
 
 fullETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
@@ -333,16 +341,17 @@ fullETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
              , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone  ]
              ]
 
-tfexpr :: DeltaParsing m => m (Spanned Term)
+tfexpr :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
 tfexpr = buildExpressionParser fullETable tlexpr <?> "Expression"
 
-dterm :: DeltaParsing m => m (Spanned Term)
+dterm :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
 dterm   = unDL term
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
-parseRule :: (MonadState RuleIx m, DeltaParsing m) => m Rule
+parseRule :: (MonadState RuleIx m, DeltaParsing m, LookAheadParsing m)
+          => m Rule
 parseRule = choice [
                -- HEAD AGGR TFEXPR .
                try $ rule <*> term 
@@ -361,31 +370,31 @@ parseRule = choice [
              ]
        <* optional (char '.')
 
-drule :: (DeltaParsing m) => m (Spanned Rule)
+drule :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Rule)
 drule = evalStateT (unDL (spanned parseRule)) 0
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
 
-dpragma :: DeltaParsing m => m (Spanned Term)
+dpragma :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
 dpragma =    symbol ":-"
           *> whiteSpace
           *> tlexpr
           <* whiteSpace
           <* optional (char '.')
 
-progline :: (MonadState RuleIx m, DeltaParsing m) => m (Spanned Line)
+progline :: (MonadState RuleIx m, DeltaParsing m, LookAheadParsing m)
+         => m (Spanned Line)
 progline  =    whiteSpace
             *> spanned (choice [ LRule <$> spanned parseRule
                                , LPragma <$> dpragma
                                ])
 
-dline :: (DeltaParsing m) => m (Spanned Line)
+dline :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Line)
 dline = evalStateT (unDL (progline <* optional whiteSpace)) 0
 
--- XXX This is not prepared for parser-altering pragmas.  We will have to
--- fix that.
-dlines :: DeltaParsing m => m [Spanned Line]
+-- XXX This is not prepared for parser-altering pragmas.
+dlines :: (DeltaParsing m, LookAheadParsing m) => m [Spanned Line]
 dlines = evalStateT (unDL (many (progline <* optional whiteSpace))) 0
 
 ------------------------------------------------------------------------}}}

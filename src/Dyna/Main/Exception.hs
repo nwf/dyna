@@ -13,6 +13,7 @@ import           Control.Exception
 import qualified Data.Typeable                       as DT
 import qualified System.Console.Terminfo.PrettyPrint as TP
 import qualified Text.PrettyPrint.Free               as PP
+import qualified Text.PrettyPrint.ANSI.Leijen        as PPA
 
 ------------------------------------------------------------------------}}}
 -- Dyna Compiler Exceptions                                             {{{
@@ -20,6 +21,9 @@ import qualified Text.PrettyPrint.Free               as PP
 data DynacException =
     -- | The user program contains an error
     UserProgramError (PP.Doc TP.Effect)
+
+    -- | Same as 'UserProgramError' but with ANSI documentation
+  | UserProgramANSIError PPA.Doc
 
     -- | Something went wrong when trying to understand arguments
   | InvocationError (PP.Doc TP.Effect)
@@ -41,6 +45,9 @@ dynacUserErr, dynacSorry, dynacPanic :: PP.Doc TP.Effect -> a
 dynacUserErr = throw . UserProgramError
 dynacSorry = throw . Sorry
 dynacPanic = throw . Panic
+
+dynacUserANSIErr :: PPA.Doc -> a
+dynacUserANSIErr = throw . UserProgramANSIError
 
 dynacThrow :: DynacException -> a
 dynacThrow = throw

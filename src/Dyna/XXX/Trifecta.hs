@@ -10,16 +10,16 @@ module Dyna.XXX.Trifecta (
 import           Control.Applicative
 import           Control.Monad (when)
 import qualified Data.ByteString.UTF8                as BU
-import           Data.Char
-import           Data.List (foldl')
 import           Data.Monoid (mempty)
 import           Data.HashSet as HashSet (member)
 import qualified Data.Semigroup.Reducer              as R
+import qualified Data.Int                            as I
 import           Text.Parser.Token.Highlight
 import           Text.Trifecta
 import           Text.Trifecta.Delta
-
+import           Text.Trifecta.Result
 import qualified Text.PrettyPrint.Free               as PP
+import qualified Text.PrettyPrint.ANSI.Leijen        as PPA
 
 -- import Debug.Trace
 
@@ -46,54 +46,9 @@ identNL s = try $ do
 stringLiteralSQ :: TokenParsing m => m String
 stringLiteralSQ = token (highlight StringLiteral lit) where
   lit = Prelude.foldr (maybe id (:)) ""
-    <$> between (char '\'') (char '\'' <?> "end of string") (many stringChar)
+    <$> between (char '\'') (char '\'' <?> "end of string") (many $ Just <$> characterChar)
     <?> "string"
-  stringChar = Just <$> stringLetter
-           <|> stringEscape
-       <?> "string character"
-  stringLetter    = satisfy (\c -> (c /= '\'') && (c /= '\\') && (c > '\026'))
-                    -- XXX That is, charLetter
-
-  stringEscape = highlight EscapeCode $ char '\\' *> esc where
-    esc = Nothing <$ escapeGap
-      <|> Nothing <$ escapeEmpty
-      <|> Just <$> escapeCode
-  escapeEmpty = char '&'
-  escapeGap = skipSome space *> (char '\\' <?> "end of string gap")
 {-# INLINE stringLiteralSQ #-}
-
--- XXX Duplicated from Text.Parser.Token
-escapeCode :: TokenParsing m => m Char
-escapeCode = (charEsc <|> charNum <|> charAscii <|> charControl) <?> "escape code"
-  where
-  charControl = (\c -> toEnum (fromEnum c - fromEnum 'A')) <$> (char '^' *> upper)
-  charNum     = toEnum . fromInteger <$> num where
-    num = decimal
-      <|> (char 'o' *> number 8 octDigit)
-      <|> (char 'x' *> number 16 hexDigit)
-  charEsc = choice $ parseEsc <$> escMap
-  parseEsc (c,code) = code <$ char c
-  escMap = zip ("abfnrtv\\\"\'") ("\a\b\f\n\r\t\v\\\"\'")
-  charAscii = choice $ parseAscii <$> asciiMap
-  parseAscii (asc,code) = try $ code <$ string asc
-  asciiMap = zip (ascii3codes ++ ascii2codes) (ascii3 ++ ascii2)
-  ascii2codes, ascii3codes :: [String]
-  ascii2codes = [ "BS","HT","LF","VT","FF","CR","SO"
-                , "SI","EM","FS","GS","RS","US","SP"]
-  ascii3codes = ["NUL","SOH","STX","ETX","EOT","ENQ","ACK"
-                ,"BEL","DLE","DC1","DC2","DC3","DC4","NAK"
-                ,"SYN","ETB","CAN","SUB","ESC","DEL"]
-  ascii2, ascii3 :: [Char]
-  ascii2 = ['\BS','\HT','\LF','\VT','\FF','\CR','\SO','\SI'
-           ,'\EM','\FS','\GS','\RS','\US','\SP']
-  ascii3 = ['\NUL','\SOH','\STX','\ETX','\EOT','\ENQ','\ACK'
-           ,'\BEL','\DLE','\DC1','\DC2','\DC3','\DC4','\NAK'
-           ,'\SYN','\ETB','\CAN','\SUB','\ESC','\DEL']
-
--- XXX Duplicated from Text.Parser.Token
-number :: TokenParsing m => Integer -> m Char -> m Integer
-number base baseDigit =
-  foldl' (\x d -> base*x + toInteger (digitToInt d)) 0 <$> some baseDigit
 
 ------------------------------------------------------------------------}}}
 -- pureSpanned                                                          {{{
@@ -115,7 +70,7 @@ triInteract :: (Monad m, Show a)
             => (Parser a)                 -- ^ Parser
             -> (m (Maybe String))         -- ^ Continuation callback
             -> (a -> m b)                 -- ^ Success callback
-            -> (TermDoc -> m b)           -- ^ Failure callback
+            -> (PPA.Doc -> m b)          -- ^ Failure callback
             -> String                     -- ^ Initial input
             -> m b
 triInteract p c s f i = loop (feed (BU.fromString i) $ stepParser (release dd *> p) dd mempty)
@@ -138,6 +93,24 @@ triInteract p c s f i = loop (feed (BU.fromString i) $ stepParser (release dd *>
 -- results in the lie of "(interactive)".  In any case, this function is
 -- here as a placeholder for doing the right thing.
 prettySpanLoc :: Span -> PP.Doc e
-prettySpanLoc (Span s e l) = PP.pretty s PP.<> PP.char '-' PP.<> PP.pretty e
+prettySpanLoc (Span s e _) = doPretty s PP.<> PP.char '-' PP.<> doPretty e
+ where
+  -- This is pretty from the Pretty Delta instance of Text.Trifecta.Delta
+  -- stripped of its ANSI commands so that it works with
+  -- Text.PrettyPrint.Free.  Le sigh!  XXX
+  doPretty d = case d of
+    Columns c _ -> k f 0 c
+    Tab x y _ -> k f 0 (nextTab x + y)
+    Lines l c _ _ -> k f l c
+    Directed fn l c _ _ -> k fn l c
+   where
+      k :: BU.ByteString -> I.Int64 -> I.Int64 -> PP.Doc e
+      k fn ln cn =       PP.pretty fn
+                   PP.<> PP.char ':'
+                   PP.<> PP.pretty (ln+1)
+                   PP.<> PP.char ':'
+                   PP.<> PP.pretty (cn+1)
+      f :: BU.ByteString
+      f = "(interactive)"
 
 ------------------------------------------------------------------------}}}

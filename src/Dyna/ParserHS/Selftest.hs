@@ -143,7 +143,7 @@ case_colonFunctor = e @=? (term pvv)
 
 case_failIncompleteExpr :: Assertion
 case_failIncompleteExpr = checkParseFail dterm "foo +"
-  "(interactive):1:5: error: expected: \"(\",\n    end of input\nfoo +<EOF> "
+  "(interactive):1:5: error: expected: \"(\",\nend of input\nfoo +<EOF> \n    ^      "
 
 ------------------------------------------------------------------------}}}
 -- Annotations                                                          {{{
@@ -191,13 +191,15 @@ case_ruleSimple = e @=? (progline sr)
   sr = "goal += 1."
 
 -- XXX for some reason parser is fine with "1." but not "0."
--- This is almost surely a bug upstream
+-- This is almost surely a bug upstream; it's fixed in parsers
+-- c707806109119e3f54c3064039a4ee2624f18ff1, but that isn't yet cut into a
+-- release.
+--
 -- case_ruleSimple0 :: Assertion
 -- case_ruleSimple0 = e @=? (progline sr)
 --  where
 --   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
 --                    "+="
---                    []
 --                    (_tNumeric (Left 0) :~ Span (Columns 8 8) (Columns 9 9) sr)
 --             :~ ts)
 --            :~ ts

@@ -29,31 +29,33 @@ Library
 
 
     Exposed-Modules:    Dyna.Analysis.ANF,
+                        Dyna.Analysis.Base,
                         Dyna.Analysis.Mode,
-                        Dyna.Backend.K3.AST,
-                        Dyna.Backend.K3.Automation,
-                        Dyna.Backend.K3.Render,
+                        Dyna.Main.BackendDefn,
+                        Dyna.Main.Driver,
+                        Dyna.Main.Exception,
                         Dyna.ParserHS.Parser,
-                        Dyna.XXX.HList,
-                        Dyna.XXX.THTuple,
                         Dyna.XXX.Trifecta
 
-    Build-Depends:      base >=4,
+    Build-Depends:      ansi-wl-pprint >= 0.6,
+                        base >=4,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
                         ghc-prim >= 0.3,
+                        HUnit >=1.2,
                         mtl >=2.1,
-                        parsers >=0.2,
+                        parsers >=0.5,
                         reducers >=3.0,
                         semigroups >=0.8,
                         tagged >= 0.4.4,
                         template-haskell,
-                        trifecta >=0.90,
+                        trifecta >= 1.0,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
-                        wl-pprint-extras >=3.0
+                        wl-pprint-extras >=3.0,
+                        wl-pprint-terminfo >=3.0
 
 Executable drepl
     Default-Language:   Haskell2010
@@ -62,18 +64,19 @@ Executable drepl
     ghc-options:        -Wall
                         -main-is Dyna.REPL
 
-    Build-Depends:      base >=4,
+    Build-Depends:      ansi-wl-pprint >= 0.6,
+                        base >=4,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
                         haskeline >=0.6,
                         mtl >=2.1,
-                        parsers >=0.2,
+                        parsers >=0.5,
                         process >=1.1,
                         reducers >=3.0,
                         semigroups >=0.8,
                         tagged >= 0.4.4,
-                        trifecta >=0.90,
+                        trifecta >= 1.0,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
@@ -89,19 +92,20 @@ Executable dyna
     ghc-options:        -Wall
                         -main-is Dyna.Main.Driver
 
-    Build-Depends:      base >=4,
+    Build-Depends:      ansi-wl-pprint >= 0.6,
+                        base >=4,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
                         haskeline >=0.6,
                         HUnit >=1.2,
                         mtl >=2.1,
-                        parsers >=0.2,
+                        parsers >=0.5,
                         process >=1.1,
                         reducers >=3.0,
                         semigroups >=0.8,
                         tagged >= 0.4.4,
-                        trifecta >=0.90,
+                        trifecta >= 1.0,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
@@ -118,14 +122,15 @@ Test-suite dyna-selftests
     ghc-options:        -Wall
                         -main-is Dyna.Main.TestsDriver
 
-    Build-Depends:      base >=4,
+    Build-Depends:      ansi-wl-pprint >= 0.6,
+                        base >=4,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
                         ghc-prim >= 0.3,
                         HUnit >=1.2,
                         mtl >=2.1,
-                        parsers >=0.2,
+                        parsers >=0.5,
                         process >=1.1,
                         reducers >=3.0,
                         semigroups >=0.8,
@@ -135,12 +140,10 @@ Test-suite dyna-selftests
                         test-framework-hunit >=0.2,
                         test-framework-th >=0.2,
                         test-framework-golden >= 1.1,
-                        trifecta >=0.90,
+                        trifecta >= 1.0,
                         unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0
-
-    Other-Modules:      Dyna.Backend.K3.Examples
 
     Main-Is: Dyna/Main/TestsDriver.hs

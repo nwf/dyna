@@ -4,11 +4,14 @@ module Dyna.REPL where
 import           Control.Applicative ((<*))
 import           Control.Monad.Trans (liftIO)
 import           System.Console.Haskeline
-import           Text.PrettyPrint.Free
-import           Text.Trifecta
+import           System.IO
+import           System.Process
+import qualified Text.PrettyPrint.ANSI.Leijen as PPA
+import           Text.Trifecta                as T
+import           Text.Trifecta.Result         as TR
 
-import qualified Dyna.ParserHS.Parser      as DP
--- import qualified Dyna.NormalizeParse       as DNP
+import qualified Dyna.ParserHS.Parser         as DP
+-- import qualified Dyna.NormalizeParse          as DNP
 import           Dyna.XXX.Trifecta
 
 main :: IO () 
@@ -36,5 +39,5 @@ main = do
                    loop
 
      failure td = do
-                   liftIO $ displayLn td
+                   liftIO $ PPA.hPutDoc stdout td
                    loop
