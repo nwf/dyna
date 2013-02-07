@@ -100,10 +100,10 @@ data DOpAMine fbs
               -- | Check that two dvars are not equal.  This is used to
               -- prevent double-counting of hyper-edges when any of their
               -- tails can be made to be the same item by specialization.
-              -- 
-              -- XXX While inspired by Blatz & Eisner 2006, it's unclear
-              -- that this is actually what we should be doing.  Oh well,
-              -- live and learn.
+              --
+              -- XXX While inspired by (Eisner, Goldlust, and Smith 2005),
+              -- it's unclear that this is actually what we should be doing.
+              -- Oh well, live and learn.
               | OPCkne     DVar        DVar                      -- ++
 
               -- | Check that the input dvar is an interned representation

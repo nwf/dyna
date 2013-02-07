@@ -35,7 +35,7 @@
 -- we need to end up.  Especially of note is that we do not yet parse any
 -- sort of pragmas for augmenting our disposition list.
 --
--- XXX The handling for "is/2" is probably wrong, but differently wrong than
+-- XXX The handling for \"is/2\" is probably wrong, but differently wrong than
 -- before, at least.
 --
 -- XXX We really should do some CSE/GVN somewhere right after this pass, but
@@ -60,7 +60,6 @@
 --     against this.
 --
 
-
 -- Header material                                                      {{{
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -70,7 +69,10 @@
 
 module Dyna.Analysis.ANF (
     ANFState(..),  Rule(..),
-    normTerm, normRule, runNormalize, printANF
+    normTerm, normRule, runNormalize, printANF,
+
+	-- * Internals
+	SelfDispos(..), ArgDispos(..), ECSrc(..), EvalCtx,
 ) where
 
 import           Control.Monad.Reader

@@ -9,11 +9,11 @@
 --
 --   * We might want to use T.T.Literate, too, in the end.
 --
---   * Doesn't understand dynabase literals ("{ ... }")
+--   * Doesn't understand dynabase literals (\"{ ... }\")
 --
 --   * Doesn't handle parenthesized aggregators
 --
---   * Doesn't handle shared subgoals ("whenever ... { ... }")
+--   * Doesn't handle shared subgoals (\"whenever ... { ... }\")
 --
 --   * Doesn't understand nullary star for gensym correctly
 --      (it's a available in term context but not texpr context;
