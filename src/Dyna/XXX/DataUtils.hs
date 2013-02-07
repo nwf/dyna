@@ -9,6 +9,8 @@ module Dyna.XXX.DataUtils (
   mapUpsert,
   -- ** Insertion into a map of lists
   mapInOrApp,
+  -- ** Unification-style utilities
+  mapSemiprune,
   -- * 'Data.Set' utilities
   -- ** Quantification
   setExists, setForall
@@ -55,3 +57,28 @@ mapInOrApp k v m = M.alter (\mv -> Just $ v:nel mv) k m
  where
   nel Nothing  = []
   nel (Just x) = x
+
+
+-- | For all those times one builds a map which may yield non-productive
+-- steps of variable-to-variable aliasing.  Note that this function may
+-- leave the map with identity mappings, which should be carefully
+-- interpreted by the user (probably as a free variable)
+mapSemiprune :: (Ord k)
+             => (v -> Maybe k)	-- ^ Is this a variable link?
+             -> (k -> v)		-- ^ What should we store to indicate
+                                -- a pointer to this variable?
+             -> k               -- ^ Initial variable
+             -> M.Map k v		-- ^ In this map
+             -> (k, M.Map k v)	-- ^ (terminus of chain, pruned map)
+mapSemiprune q p k m = case M.lookup k m >>= q of
+                         Nothing -> (k, m)
+                         Just k' -> go (S.singleton k) k'
+ where
+  go v k' =
+    case M.lookup k' m >>= q of
+      Nothing                     -> (k', setAll m v k')
+      Just k'' | k'' `S.member` v -> (k'', setAll m v k'') -- (M.delete k'' m) (S.delete k'' v) k'')
+      Just k''                    -> go (k' `S.insert` v) k''
+
+  setAll m' v k' = M.fromList (map (\x -> (x,p k')) $ S.toList v)
+                   `M.union` m'
