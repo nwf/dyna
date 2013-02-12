@@ -1,20 +1,22 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Dyna.XXX.MonadUtils(
   -- * Data utilities generalizing 'Dyna.XXX.DataUtils'
-  mapForallM, mapExistsM,
+  mapForallM, mapExistsM, setForallM, setExistsM,
   -- * Logic utilities
   andM, andM1, orM, orM1, allM, anyM,
   -- * MonadState utilities
   bracketState, incState,
   -- * Context classes
-  MC(..),
+  MCR(..), MCW(..), MCF(..),
 ) where
 
 import           Control.Applicative
 import           Control.Monad.State
 import qualified Data.Map  as M
+import qualified Data.Set  as S
 
 andM :: Monad m => m Bool -> m Bool -> m Bool
 andM x y = x >>= flip andM1 y 
@@ -41,6 +43,12 @@ mapForallM, mapExistsM :: (Monad m)
 mapForallM p m = M.foldrWithKey (\k v -> (andM $ p k v)) (return True ) m
 mapExistsM p m = M.foldrWithKey (\k v -> (orM  $ p k v)) (return False) m
 
+setForallM, setExistsM :: (Monad m)
+                       => (e -> m Bool) -> S.Set e -> m Bool
+setForallM p m = S.foldr (\e -> (andM $ p e)) (return True ) m
+setExistsM p m = S.foldr (\e -> (orM  $ p e)) (return False) m
+
+
 bracketState :: (MonadState s m) => s -> m t -> m (t, s)
 bracketState bs m = do
  s <- get
@@ -56,8 +64,12 @@ incState = do
   put $! (s+1)
   return s
 
--- | Assert the the monad @m@ has a context of type @k -> v@.
-class (Monad m) => MC m k v where
+-- | Assert the the monad @m@ has a readable context of type @k -> v@
+class (Monad m) => MCR m k v | m k -> v where
   clookup :: k -> m v
+
+class (MCR m k v) => MCW m k v | m k -> v where
   cassign :: k -> v -> m ()
+
+class (Monad m) => MCF m k where
   cfresh  :: m k

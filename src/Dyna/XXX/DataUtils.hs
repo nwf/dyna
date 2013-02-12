@@ -2,6 +2,8 @@ module Dyna.XXX.DataUtils (
   -- * 'Data.List' utilities
   -- ** Argmin/argmax idiom
   argmax, argmin,
+  -- ** A more faithful zipWith
+  zipWithTails,
   -- * 'Data.Map' utilities
   -- ** Quantification
   mapExists, mapForall,
@@ -51,6 +53,10 @@ mapUpsert k v m =
      r        = Right m'
  in maybe r (\o -> if o == v then r else Left o) mo
 
+
+-- | Add @v@ to the list of values at @k@, possibly after creating an empty
+-- bucket there.
+
 -- XXX maybe consider generalizing this to any collection type?
 mapInOrApp :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
 mapInOrApp k v m = M.alter (\mv -> Just $ v:nel mv) k m
@@ -82,3 +88,14 @@ mapSemiprune q p k m = case M.lookup k m >>= q of
 
   setAll m' v k' = M.fromList (map (\x -> (x,p k')) $ S.toList v)
                    `M.union` m'
+
+
+-- | A generalized version of 'zipWith' that gives access to tail elements
+-- as well.
+zipWithTails :: (a -> b -> c) -> (a -> c) -> (b -> c) -> [a] -> [b] -> [c]
+zipWithTails fb fl fr = go
+ where
+  go [] [] = []
+  go [] (r:rs) = fr r : map fr rs
+  go (l:ls) [] = fl l : map fl ls
+  go (l:ls) (r:rs) = fb l r : go ls rs
