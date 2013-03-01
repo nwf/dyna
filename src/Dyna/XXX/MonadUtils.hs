@@ -1,7 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 module Dyna.XXX.MonadUtils(
   -- * Data utilities generalizing 'Dyna.XXX.DataUtils'
   mapForallM, mapExistsM, setForallM, setExistsM,
@@ -9,11 +5,10 @@ module Dyna.XXX.MonadUtils(
   andM, andM1, orM, orM1, allM, anyM,
   -- * MonadState utilities
   bracketState, incState,
-  -- * Context classes
-  MCR(..), MCW(..), MCF(..),
 ) where
 
 import           Control.Applicative
+import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map  as M
 import qualified Data.Set  as S
@@ -59,17 +54,4 @@ bracketState bs m = do
  return (r, bs)
 
 incState :: (Num a, MonadState a m) => m a
-incState = do
-  s <- get
-  put $! (s+1)
-  return s
-
--- | Assert the the monad @m@ has a readable context of type @k -> v@
-class (Monad m) => MCR m k v | m k -> v where
-  clookup :: k -> m v
-
-class (MCR m k v) => MCW m k v | m k -> v where
-  cassign :: k -> v -> m ()
-
-class (Monad m) => MCF m k where
-  cfresh  :: m k
+incState = id <<%= (+1)

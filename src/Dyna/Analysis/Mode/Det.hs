@@ -6,7 +6,7 @@
 
 -- Header material                                                      {{{
 {-# OPTIONS_GHC -Wall #-}
-module Dyna.Analysis.Mode.Det(Det(..), detLt) where
+module Dyna.Analysis.Mode.Det(Det(..), detLt, detLe) where
 ------------------------------------------------------------------------}}}
 -- Determinism                                                          {{{
 
@@ -35,6 +35,12 @@ detLt Det          DetNon     = True
 detLt DetSemi      DetNon     = True
 detLt DetMulti     DetNon     = True
 detLt _            _          = False
-{-# INLINE detLt #-}
+{-# INLINABLE detLt #-}
+
+-- | Determinism lattice transitive, reflexive partial ordering function
+detLe :: Det -> Det -> Bool
+detLe a b | a == b = True
+detLe a b          = detLt a b
+{-# INLINABLE detLe #-}
 
 ------------------------------------------------------------------------}}}
