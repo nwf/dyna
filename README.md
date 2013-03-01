@@ -5,17 +5,16 @@ An overview of the source tree
     *  expected/       -- Expected output for self-tests.  Named by program and backend, both.
 * external/
     * damsl-k3         -- The DAMSL K3 tree, tracked as a git submodule.
-    * ekmett-parsers   -- ekmett's parsers combinator library, tracked as a git submodule.
-    * ekmett-trifecta  -- ekmett's trifecta parser combinator library, tracked as a git submodule.
 * src/Dyna/
-    * Backend
+    * Analysis         -- The heart of the compiler
+        * Mode         -- A re-implementation of the Mercury mode system
+    * Backend          -- Compilation to target languages
         * K3           -- An AST and printer for K3, done in finally-tagless style.
         * Python       -- A Python code generator
-    * Backend          -- Compilation to target languages
     * Main             -- Dyna compiler drivers (main and test) and definitions used throughout the pipeline
     * ParserHS         -- the Haskell front-end parser and selftests
     * Term             -- Different representations of terms and utilities
-    * XXX              -- code that should probably go upstream; modules here are named by the upstream package.
+    * XXX              -- code that should probably go upstream or be made freestanding.
 
 Building
 --------
@@ -24,13 +23,15 @@ First, ensure that you have GHC 7.6 or later.  (Though in a pinch, if you're
 only interested in the frontend stuff and the Python backend, apparently as
 early as 7.0 continues to be servicable.)
 
-Build K3, if that's your thing, which requires OCaml:
+Ensure that you have the Haskell platform available, either through your
+favorite package manager or by installing it stand-alone.  You should
+probably run
 
-    git submodule update external/damsl-k3
-    (cd external/damsl-k3; make)
+    cabal update
 
-Then fetch, build, and install any dependencies (for the moment, we seem to
-be doing OK with vanilla upstreams!)
+before proceeding, just to make sure that your package database is
+up-to-date.  Then fetch, build, and install any dependencies (for the
+moment, we seem to be doing OK with vanilla upstreams!)
 
     make deps
 
@@ -39,18 +40,21 @@ Build Dyna:
     make build
 
 (If that doesn't work, you might try `make ghcbuild` which ignores the Cabal
-infrastructure.)
+infrastructure.  If you get an error about the `ghc-prim` package, it means
+that your compiler is older than what I've tested on; you may be able to
+make things work by dropping the lower bound on the package in dyna.cabal.)
+
+You'll want to have the following programs installed, too:
+
+    * IPython
+    * Pygments (for pretty code output in our debugging tools)
 
 Run the test harness:
 
     make tests
 
-And then run the REPL:
-
-    ./dist/build/drepl/drepl
-
-OK, that last bit is probably not quite true.  At this point, the code is
-still rather "in the works" so you probably want to...
+At this point, the code is still rather "in the works" so you probably want
+to...
 
 * load some module in GHCi; for example:
 
