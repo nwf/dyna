@@ -284,15 +284,15 @@ case_rules = e @=? (proglines sr)
                      (_tNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
                     :~ s1)
                    :~ s1
-      , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
-                    "+="
-                    (_tNumeric (Left 2) :~ Span (Columns 20 20) (Columns 22 22) sr)
+      , LRule (Rule 1 (TFunctor "laog" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
+                    "min="
+                    (_tNumeric (Left 2) :~ Span (Columns 22 22) (Columns 24 24) sr)
                    :~ s2)
                   :~ s2
       ]
   s1 = Span (Columns 0 0) (Columns 11 11) sr
-  s2 = Span (Columns 12 12) (Columns 23 23) sr
-  sr = "goal += 1 . goal += 2 ."
+  s2 = Span (Columns 12 12) (Columns 25 25) sr
+  sr = "goal += 1 . laog min= 2 ."
 
 case_rulesWhitespace :: Assertion
 case_rulesWhitespace = e @=? (proglines sr)

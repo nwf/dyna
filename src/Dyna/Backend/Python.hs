@@ -86,6 +86,7 @@ constants = S.fromList
     , ("<=",2)
     , (">",2)
     , (">=",2)
+    , ("=",2)
     , ("!",1)
     , ("mod",1)
     , ("abs",1)
@@ -131,6 +132,7 @@ pycall f vs = case (f, length vs) of
   (  "^", 2) -> infixOp " ** "
   (  "&", 2) -> infixOp " and " -- note: python's 'and' and 'or' operate on more than bool
   (  "|", 2) -> infixOp " or "
+  (  "=", 2) -> infixOp " == "
   (  "<", 2) -> infixOp " < "
   ( "<=", 2) -> infixOp " <= "
   (  ">", 2) -> infixOp " > "

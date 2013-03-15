@@ -22,6 +22,7 @@
 --      anywhere else in the pipeline yet)
 
 --   Header material                                                      {{{
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -29,6 +30,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.ParserHS.Parser (
@@ -43,6 +45,7 @@ import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
 -- import           Data.Char (isSpace)
 import qualified Data.CharSet                     as CS
+import qualified Data.Data                        as D
 import qualified Data.HashSet                     as H
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
@@ -65,7 +68,7 @@ data Term = TFunctor !B.ByteString
                      !(Spanned Term)
           | TVar     !B.ByteString
           | TBase    !TBase
- deriving (Eq,Ord,Show)
+ deriving (D.Data,D.Typeable,Eq,Ord,Show)
 
 type RuleIx = Int
 
@@ -365,7 +368,7 @@ parseRule = choice [
                -- logical aggregators.
              , do
                   h@(_ :~ s) <- term
-                  ix <- get
+                  ix <- incState
                   return $ Rule ix h ":-" (TFunctor "true" [] :~ s)
              ]
        <* optional (char '.')

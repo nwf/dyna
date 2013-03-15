@@ -55,6 +55,7 @@ aggregator = aggregator_indirect()
 
 
 chart = chart_indirect()
+
 _delete = False
 agenda = set()
 #aggregator = defaultdict(Counter)
@@ -231,6 +232,14 @@ def peel(fn, item):
     functor/arity, `fn`. Returns the arguments of term as a tuple of intern idxs
     and constants (possibly an empty tuple).
     """
+
+    if fn == "true/0" :
+      assert (item is True)
+      return
+    if fn == "false/0" :
+      assert (item is False)
+      return
+
     assert isinstance(item, tuple)
     (fa, idx) = item
     assert fa == fn
@@ -238,6 +247,9 @@ def peel(fn, item):
 
 
 def build(fn, *args):
+    if fn == "true/0" : return True
+    if fn == "false/0" : return False
+
     idx = chart[fn].lookup(args)
     if idx is None:
         idx = chart[fn].insert(args, None)   # don't know val yet.

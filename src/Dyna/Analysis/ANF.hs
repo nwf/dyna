@@ -47,6 +47,8 @@
 -- structured term.  None of our as_* fields give us that guarantee.  See
 -- "Dyna.Backend.Python"'s @findHeadFA@ function.
 
+-- XXX This module does not use Control.Lens but should.
+
 -- FIXME: "str" is the same a constant str.
 
 --     timv: should there ever be more than one side condition? shouldn't it be
@@ -83,6 +85,7 @@ import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
 import qualified Data.Char                  as C
 import qualified Data.Map                   as M
+-- import qualified Debug.Trace                as XT
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
@@ -295,8 +298,8 @@ normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
                 (_,ADEval) -> case nt of
                                 NTVar  v -> NTVar `fmap` newEval "_s" (Left v)
                                 NTBase b -> do
-                                                    newWarn "Ignoring * of literal" ss
-                                                    return $ NTBase b
+                                             newWarn "Ignoring * of literal" ss
+                                             return $ NTBase b
                 _          -> return nt
 
 -- "is/2" is sort of exciting.  We normalize the second argument in an
@@ -343,10 +346,14 @@ normTerm_ c   ss (P.TFunctor f as) = do
     -- pass to strip duplicate vars out.  We need pattern matching to be
     -- linear-with-checks in later pipeline stages so that we can, for
     -- example, correctly reject updates that are not the right shape.
-    normas' <- let delin (vs,r) x = do
+    normas' <- let delin (vs,r) x =
                      case x of
                        NTVar v | not (v `elem` vs) -> do
                             return (v:vs,v:r)
+                       NTVar v -> do
+                            v' <- nextVar "_x"
+                            doUnif v v'
+                            return (vs,v':r)
                        _ -> do
                             v' <- newAssign "_x" (Left x)
                             return (vs,v':r)
