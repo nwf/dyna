@@ -14,8 +14,11 @@ module Dyna.Analysis.Mode.Execution.Functions(
   -- * Named inst functions
   nWellFormed, nGround, nLeq, nLeqGLB, nSub, nSubGLB, nSubLUB,
   -- * Unification
-  unifyVV,
-  -- * Matching
+  unifyVV, unifyNV,
+  -- * Matching,
+  subVN,
+  -- * Calls
+  doCall,
 ) where
 
 import           Control.Lens
@@ -27,10 +30,16 @@ import           Dyna.Analysis.Mode.Execution.Base
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.XXX.MonadContext
+import           Dyna.XXX.MonadUtils
 import qualified Debug.Trace                       as XT
 
 ------------------------------------------------------------------------}}}
 -- Named inst functions                                                 {{{
+
+-- These functions all use StateT transformers to handle cyclic reasoning.
+--
+-- XXX It is possible that we will be hitting some of these tests often and
+-- should do some form of caching in our contexts.
 
 nWellFormed :: forall f m n .
                (MCVT m n ~ InstF f n, MCR m n, Ord n)
@@ -62,16 +71,19 @@ nGround i0 = evalStateT (q i0) S.empty
            i <- lift $ clookup v
            iGround_ q (i :: InstF f n)
 
-nCompare :: (MCVT m n ~ InstF f n, MCR m n, Ord n, Ord f --,
-             -- m' ~ StateT (S.Set (v,InstF f v), S.Set (v,v)) m
-            )
-         => (forall m' .
-                (Monad m')
-             => (n -> InstF f n -> m' Bool)
-             -> (n -> n -> m' Bool)
-             -> InstF f n -> InstF f n -> m' Bool)
-         -> n -> n -> m Bool
-nCompare cmp i0 j0 = evalStateT (qb i0 j0) (S.empty, S.empty)
+tieKnotCompare :: (MCVT m n ~ InstF f n, MCR m n, Ord n, Ord f)
+               => (forall m' .
+                      (Monad m')
+                   => (n -> InstF f n -> m' Bool)
+                   -> (n -> n -> m' Bool)
+                   -> InstF f n -> InstF f n -> m' Bool)
+               -> (forall t .
+                      (MonadTrans t, Monad (t m))
+                   => (n -> InstF f n -> t m Bool)
+                   -> (n -> n -> t m Bool)
+                   -> t m Bool)
+               -> m Bool
+tieKnotCompare cmp start = evalStateT (start qa qb) (S.empty, S.empty)
  where
   qa v j = do
    already <- gets $ S.member (v,j) . fst
@@ -93,6 +105,16 @@ nCompare cmp i0 j0 = evalStateT (qb i0 j0) (S.empty, S.empty)
           cmp qa qb i j
 
 
+nCompare :: (MCVT m n ~ InstF f n, MCR m n, Ord n, Ord f --,
+             -- m' ~ StateT (S.Set (v,InstF f v), S.Set (v,v)) m
+            )
+         => (forall m' .
+                (Monad m')
+             => (n -> InstF f n -> m' Bool)
+             -> (n -> n -> m' Bool)
+             -> InstF f n -> InstF f n -> m' Bool)
+         -> n -> n -> m Bool
+nCompare cmp i0 j0 = tieKnotCompare cmp (\_ qb -> qb i0 j0)
 
 nLeq, nSub :: forall f n m .
               (Ord f, Ord n, MCVT m n ~ InstF f n, MCR m n)
@@ -131,7 +153,8 @@ nTotalBin f i0 j0 = evalStateT (q i0 j0) M.empty
                     return (k',nk)
         return nk
 
-nLeqGLB, nSubGLB :: (MonadFix m, Ord n, MCVT m n ~ InstF f n, MCR m n, MCN m n, Ord f)
+nLeqGLB, nSubGLB :: (Ord f, Ord n,
+                     MonadFix m, MCVT m n ~ InstF f n, MCR m n, MCN m n)
                  => n -> n -> m n
 nLeqGLB = nTotalBin (iLeqGLB_ return return)
 nSubGLB = nTotalBin (iSubGLB_ return return)
@@ -167,9 +190,9 @@ nSubLUB i0 j0 = evalStateT (runMaybeT (q i0 j0)) M.empty
 -- clobbered state.
 --
 -- In words, a unification can enter its arguments whenever
--- 	1. both inputs are not free variables (a free variable turns
--- 	   unification into assignment; two makes it aliasing)
---  2. either input represents more than one possible term
+--     1. both inputs are not free variables (a free variable turns
+--        unification into assignment; two makes it aliasing)
+--     2. either input represents more than one possible term
 --
 -- The thesis will invoke this function (or rather, its negation) to allow a
 -- /dead/ unification to succeed.  Live unifications are probably (yes? XXX?)
@@ -207,6 +230,8 @@ unifyNN l a b = XT.traceShow ("UNN",a,b) $ do
 -- | Name-on-Key unification.  This updates the key's bindings and leaves
 --   the name alone (we assume that the source of the name will be updated
 --   by the caller, if applicable)
+--
+-- This function returns the key given as a convenient shorthand.
 unifyNK :: forall f k m n .
            (Eq k, Ord f, Ord n, Show n, Show k,
             MonadFix m,
@@ -229,15 +254,15 @@ unifyEE :: forall f k m n .
         -> m (ENKRI f n k)
 unifyEE l (Left  na) (Left  nb) = liftM Left $ unifyNN l na nb
 unifyEE l (Left  na) (Right qb) = do
-    ia <- clookup na
-    when (not l) $ semidet_clobbered_unify ia qb >>= flip when (fail "UEE NQ SCU")
-    liftM Right $ iLeqGLB_ (return . Left) return
-                           (\n j -> unifyJJ l (Left n) j) ia qb
+  ia <- clookup na
+  when (not l) $ semidet_clobbered_unify ia qb >>= flip when (fail "UEE NQ SCU")
+  liftM Right $ iLeqGLB_ (return . Left) return
+                         (\n j -> unifyJJ l (Left n) j) ia qb
 unifyEE l (Right qa) (Left  nb) = do
-    ib <- clookup nb
-    when (not l) $ semidet_clobbered_unify qa ib >>= flip when (fail "UEE QN SCU")
-    liftM Right $ iLeqGLB_ return (return . Left)
-                           (\j n -> unifyJJ l j (Left n)) qa ib
+  ib <- clookup nb
+  when (not l) $ semidet_clobbered_unify qa ib >>= flip when (fail "UEE QN SCU")
+  liftM Right $ iLeqGLB_ return (return . Left)
+                         (\j n -> unifyJJ l j (Left n)) qa ib
 unifyEE l (Right qa) (Right qb) = liftM Right $ unifyQQ l qa qb
 
 unifyQQ :: forall f k m n .
@@ -287,9 +312,9 @@ unifyKK l a b          = XT.traceShow ("UKK",a,b) $ calias (unifyEE l) a b
 unifyUU :: (Eq u, Eq k, Ord f, Ord n, MonadFix m, Show k, Show n,
             MCVT m n ~ InstF f n, MCR m n, MCN m n,
             MCVT m k ~ ENKRI f n k, MCA m k, MCD m k, MCM m k, MCN m k,
-            MCVT m u ~ InstF f (VR n k u), MCD m u, MCR m u)
+            MCVT m u ~ UR f n k u, MCD m u, MCR m u)
         => Bool -> u -> u -> m k
-unifyUU _ a b | a == b = cdelete a >>= aliasW
+unifyUU _ a b | a == b = cdelete a >>= aliasW -- XXX probably should be error
 unifyUU l a b          = do
   ka <- cdelete a >>= aliasW
   kb <- cdelete b >>= aliasW
@@ -327,7 +352,11 @@ unifyXX l (VRStruct ua) (VRKey    kb) = do
                                          unifyKK l ka kb
 unifyXX l (VRStruct ua) (VRStruct ub) = unifyUU l ua ub
 
+
 -- | Variable-on-variable unification.  Ah, finally.
+--
+-- XXX We probably do not handle free-free unification correctly, in light
+-- of §5.4.1.  For the moment, I am skipping this.
 unifyVV :: forall f k m n u v .
            (Eq k, Eq u, Ord f, Ord n, Show n, Show k,
             MonadFix m,
@@ -335,10 +364,184 @@ unifyVV :: forall f k m n u v .
             MCVT m n ~ InstF f n, MCN m n, MCR m n,
             MCVT m u ~ UR f n k u, MCD m u, MCR m u,
             MCVT m v ~ VR n k u, MCA m v)
-        => v
+        => (v -> Bool)
+        -> v
         -> v
         -> m v
-unifyVV va vb = calias (\a' b' -> liftM VRKey $ unifyXX True {- XXX -} a' b') va vb
+unifyVV lf va vb =
+  calias (\a' b' -> liftM VRKey $ unifyXX (lf va || lf vb) a' b') va vb
 
+
+-- | Name-on-Variable unification.  This should not be called on names
+-- looked up from the context, as that would omit important updates to the
+-- context for alias tracking; instead, only call this on ``freestanding''
+-- named insts which are known for other reasons, such as part of a
+-- predicate mode.
+--
+-- This function returns the variable given as a convenient shorthand.
+unifyNV :: forall f k m n u v .
+           (Eq k, Eq u, Ord f, Ord n, Show n, Show k,
+            MonadFix m,
+            MCVT m k ~ ENKRI f n k, MCA m k, MCM m k,
+            MCVT m n ~ InstF f n, MCN m n, MCR m n,
+            MCVT m u ~ UR f n k u, MCR m u, MCW m u,
+            MCVT m v ~ VR n k u, MCR m v, MCW m v)
+        => Bool
+        -> n
+        -> v
+        -> m v
+unifyNV l n0 v0 = do
+  x0 <- clookup v0
+  xu <- unifyNX n0 x0
+  cassign v0 xu
+  return v0
+ where
+  unifyNX :: n -> VR n k u -> m (VR n k u)
+  unifyNX na (VRName   nb) = liftM VRName   $ unifyNN l na nb
+  unifyNX na (VRKey    kb) = liftM VRKey    $ unifyNK l na kb
+  unifyNX na (VRStruct ub) = liftM VRStruct $ unifyNU   na ub
+
+  unifyNU :: n -> u -> m u
+  unifyNU na ub = do
+    wb <- clookup ub
+    wu <- unifyNW na wb 
+    cassign ub wu
+    return ub
+
+  unifyNW :: n -> UR f n k u -> m (UR f n k u)
+  unifyNW na ub = do
+    ia <- clookup na
+    when (not l) $ semidet_clobbered_unify ia ub >>= flip when (fail "UNU SCU")
+    iLeqGLB_ (return . VRName) return unifyNX ia ub
+
+
+------------------------------------------------------------------------}}}
+-- Matching                                                             {{{
+
+subNN :: (Ord f, Ord n, Show n, MCVT m n ~ InstF f n, MCR m n)
+      => n -> n -> m Bool
+subNN a b = XT.traceShow ("SNN",a,b) $ nSub a b
+
+iCompare :: (MCVT m n ~ InstF f n, MCR m n, Ord n, Ord f --,
+             -- m' ~ StateT (S.Set (v,InstF f v), S.Set (v,v)) m
+            )
+         => (forall m' .
+                (Monad m')
+             => (n -> InstF f n -> m' Bool)
+             -> (n -> n -> m' Bool)
+             -> InstF f n -> InstF f n -> m' Bool)
+         -> InstF f n -> InstF f n -> m Bool
+iCompare cmp i0 j0 = tieKnotCompare cmp (\qa qb -> cmp qa qb i0 j0)
+
+subNI n i = XT.traceShow ("SNI",n,i) $ do
+  ni <- clookup n
+  iCompare iSub_ ni i
+
+subJN j = either subNN subKN j
+
+subJI j = either subNI subKI j
+
+subQI q i = XT.traceShow ("SQI",q,i) $ iSub_ subJI subJN q i
+
+subQN q n = XT.traceShow ("SQN",q,n) $ do
+  ni <- clookup n
+  iSub_ subJI subJN q ni
+
+subKN k n = XT.traceShow ("SKN",k,n) $ do
+  kq <- clookup k
+  (either subNN subQN kq) n
+
+subKI k i = XT.traceShow ("SKI",k,i) $ do
+  kq <- clookup k
+  (either subNI subQI kq) i
+
+subUI u i = XT.traceShow ("SUI",u,i) $ do
+  uw <- clookup u
+  iSub_ subXI subXN uw i
+
+subXI x i = XT.traceShow ("SXI",x,i) $ do
+  case x of
+    VRName   xn -> subNI xn i
+    VRKey    xk -> subKI xk i
+    VRStruct xu -> subUI xu i
+
+subXN :: forall f k m n u .
+         (Ord n, Ord f, MonadFix m, Show n, Show f, Show k, Show u,
+          MCVT m n ~ InstF f n, MCR m n,
+          MCVT m k ~ ENKRI f n k, MCR m k,
+          MCVT m u ~ UR f n k u, MCR m u)
+      => VR n k u -> n -> m Bool
+subXN x n = XT.traceShow ("SXN",x,n) $ do
+  case x of
+    VRName   xn -> subNN xn n
+    VRKey    xk -> subKN xk n
+    VRStruct xu -> subUN xu n
+
+subUN :: forall f k m n u .
+         (Ord n, Ord f, MonadFix m, Show n, Show f, Show k, Show u,
+          MCVT m n ~ InstF f n, MCR m n,
+          MCVT m k ~ ENKRI f n k, MCR m k,
+          MCVT m u ~ UR f n k u, MCR m u)
+      => u -> n -> m Bool
+subUN u n = XT.traceShow ("SUN",u,n) $ do
+  uw <- clookup u
+  ni <- clookup n
+  iSub_ subXI subXN uw ni
+
+subVN :: forall f k m n u v .
+         (Ord n, Ord f, MonadFix m, Show n, Show f, Show k, Show u, Show v,
+          MCVT m n ~ InstF f n, MCR m n,
+          MCVT m k ~ ENKRI f n k, MCR m k,
+          MCVT m u ~ UR f n k u, MCR m u,
+          MCVT m v ~ VR n k u, MCR m v)
+      => v
+      -> n
+      -> m Bool
+subVN v n = XT.traceShow ("SVN",v,n) $ do
+  vx <- clookup v
+  case vx of
+    VRName   un -> subNN un n
+    VRKey    uk -> subKN uk n
+    VRStruct ui -> subUN ui n
+
+-- | Enact a particular call.
+--
+-- Notice that if this fails the unification variables have been updated and
+-- so should be discarded.
+--
+-- XXX This doesn't do mode polymorphism, but it at least seems to be
+-- vaguely right at the moment.
+--
+-- XXX I am confused as to why this is "do all the subs then do all the
+-- unifies" but that seems to be how the thesis rule is written unless I
+-- misread.
+--
+-- Based on Figure 5.7, p104
+doCall :: forall f k m n u v .
+          (Ord n, Ord f, Eq u, Eq k,
+           Show n, Show f, Show k, Show u, Show v,
+           MonadFix m, 
+           MCVT m n ~ InstF f n, MCR m n, MCN m n,
+           MCVT m k ~ ENKRI f n k, MCA m k, MCM m k, MCR m k,
+           MCVT m u ~ UR f n k u, MCR m u, MCW m u,
+           MCVT m v ~ VR n k u, MCR m v, MCW m v)
+        => (v -> Bool) -- Liveness predicate
+        -> [v]         -- Call with these arguments
+        -> [(n, n)]    -- Against this pattern
+        -> m Bool
+doCall l as0 cs0 = go as0 (map fst cs0)
+ where
+  go []     []     = goUnify as0 (map snd cs0)
+  go (a:as) (c:cs) = andM (subVN a c) (go as cs)
+  go _      _      = return False
+
+  goUnify []     []     = return True
+  goUnify (a:as) (c:cs) = unifyNV (l a) c a >> goUnify as cs
+  goUnify _      _      = return False
+
+------------------------------------------------------------------------}}}
+-- Merging                                                              {{{
+
+-- XXX Unimplemented
 
 ------------------------------------------------------------------------}}}

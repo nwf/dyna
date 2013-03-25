@@ -22,7 +22,7 @@ module Dyna.Analysis.Mode.Execution.Base (
     -- $naming
 
     -- ** Named Insts
-    NI(..), di_unique, di_inst,
+    NI(..), ni_unique, ni_inst,
     -- ** Inst Keys (§5.3.1, p94)
     KI(..), KR(..), KRI, ENKRI,
     -- ** Unaliased Insts
@@ -71,8 +71,8 @@ import qualified Debug.Trace              as XT
 -- Despite this, we continue to provide 'MCR' and 'MCN' instances for named
 -- insts, just for uniformity of calling code and ease of changing the
 -- underlying representation.
-data NI f = NI { _di_unique :: Unique
-               , _di_inst   :: InstF f (NI f)
+data NI f = NI { _ni_unique :: Unique
+               , _ni_inst   :: InstF f (NI f)
                }
 $(makeLenses ''NI)
 
@@ -81,7 +81,7 @@ instance Eq (NI f) where
   (NI a _) == (NI b _) = a == b
 
 instance Ord (NI f) where
-  compare = on compare _di_unique
+  compare = on compare _ni_unique
 
 instance Show (NI f) where
   show (NI u _) = "<NI h=" ++ (show $ hashUnique u) ++ ">"
@@ -243,7 +243,7 @@ key_lookup k = do
   XT.traceShow ("KL",k,ck,r) $ return ()
   return r
  where
-  krenkri (KRKey k') = error $ "User context noncanonical: "
+  krenkri (KRKey k') = error $ "Key context noncanonical: "
                                  ++ (show (k,k'))
   krenkri (KRName n) = Left n
   krenkri (KRInst i) = Right i
@@ -269,15 +269,14 @@ instance (Show f, Monad m) => MCM (SIMCT m f) KI where
   cmerge f k v = SIMCT $ do
     ck <- key_canon k
     m <- use simctx_map_k
-    mm <- maybe (assert (ck == k) $
-                   return $ M.insert k (either KRName KRInst v) m)
-                (\v' -> do
-                   merged <- unSIMCT $ f (krenkri v') v
-                   return $ M.insert ck (either KRName KRInst merged) m)
-              $ M.lookup ck m
-    simctx_map_k .= mm
+    maybe (assert (ck == k) $ error $ "Key context miss in merge: "
+                                      ++ (show k))
+          (\v' -> do
+             merged <- unSIMCT $ f (krenkri v') v
+             simctx_map_k .= M.insert ck (either KRName KRInst merged) m)
+        $ M.lookup ck m
    where
-    krenkri (KRKey k') = error $ "User context noncanonical in merge: "
+    krenkri (KRKey k') = error $ "Key context noncanonical in merge: "
                                   ++ (show (k,k'))
     krenkri (KRName n) = Left n
     krenkri (KRInst i) = Right i
@@ -331,6 +330,17 @@ instance (Show f, Monad m) => MCD (SIMCT m f) UI where
     r <- unaliased_lookup k
     simctx_map_u %= M.delete k
     XT.traceShow ("UD",k,r) $ return r
+
+{-
+instance (Show f, Monad m) => MCM (SIMCT m f) UI where
+  cmerge f k v = SIMCT $ do
+    m <- use simctx_map_u
+    maybe (error $ "User context miss in merge: " ++ (show k))
+          (\v' -> do
+             merged <- unSIMCT $ f v' v
+             simctx_map_u .= M.insert k merged m)
+        $ M.lookup k m
+-}
 
 -- | Move an unaliased structure to the aliased table
 aliasW :: forall f n k u m .
