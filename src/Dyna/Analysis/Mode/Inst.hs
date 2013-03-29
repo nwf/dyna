@@ -35,7 +35,7 @@ import qualified Data.Foldable            as F
 import qualified Data.Traversable         as T
 import qualified Data.Map                 as M
 -- import qualified Data.Set                 as S
-import           Dyna.XXX.DataUtils
+import           Dyna.XXX.DataUtils       as XDU
 import           Dyna.XXX.MonadUtils
 
 import           Dyna.Analysis.Mode.Uniq
@@ -446,9 +446,9 @@ mergeBoundUB :: (Monad m, Ord f)
              -> (i' -> m i'')
              -> M.Map f [i] -> M.Map f [i'] -> m (M.Map f [i''])
 mergeBoundUB q l r lm rm = T.sequence
-                       $ M.mergeWithKey (\_ a b -> Just $ sequence $ zipWith q a b)
-                                        (fmap (T.mapM l))
-                                        (fmap (T.mapM r))
-                                        lm rm
+                       $ XDU.mergeWithKey (\_ a b -> Just $ sequence $ zipWith q a b)
+                                          (fmap (T.mapM l))
+                                          (fmap (T.mapM r))
+                                          lm rm
 
 ------------------------------------------------------------------------}}}
