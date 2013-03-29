@@ -53,7 +53,6 @@ Library
                         template-haskell,
                         transformers >= 0.3,
                         trifecta >= 1.0,
-                        unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0,
@@ -82,7 +81,6 @@ Executable drepl
                         tagged >= 0.4.4,
                         transformers >= 0.3,
                         trifecta >= 1.0,
-                        unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0
@@ -114,7 +112,6 @@ Executable dyna
                         tagged >= 0.4.4,
                         transformers >= 0.3,
                         trifecta >= 1.0,
-                        unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0,
@@ -153,7 +150,6 @@ Test-suite dyna-selftests
                         test-framework-golden >= 1.1,
                         transformers >= 0.3,
                         trifecta >= 1.0,
-                        unification-fd,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
                         wl-pprint-extras >=3.0

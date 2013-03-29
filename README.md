@@ -19,18 +19,20 @@ An overview of the source tree
 Building
 --------
 
-First, ensure that you have GHC 7.6 or later.  (Though in a pinch, if you're
-only interested in the frontend stuff and the Python backend, apparently as
-early as 7.0 continues to be servicable.)
-
-Ensure that you have the Haskell platform available, either through your
-favorite package manager or by installing it stand-alone.  You should
-probably run
+First, ensure that you have the Haskell platform 2012.2 or later installed,
+either through your favorite package manager or by installing it
+stand-alone.  You should probably run
 
     cabal update
 
 before proceeding, just to make sure that your package database is
-up-to-date.  Then fetch, build, and install any dependencies (for the
+up-to-date.  Some of our transitive dependencies assume that you have
+`alex` and `happy` available -- either fetch those from your package manager
+or add `~/.cabal/bin` to your `PATH` and run
+
+    cabal install alex happy
+
+Then fetch, build, and install any dependencies (for the
 moment, we seem to be doing OK with vanilla upstreams!)
 
     make deps

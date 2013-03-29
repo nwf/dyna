@@ -5,6 +5,7 @@
 -- complicated things, but it suffices for now?
 
 -- Header material                                                      {{{
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -21,17 +22,17 @@ module Dyna.Term.TTerm (
     TBase(..), TBaseSkolem(..),
 
         -- * Terms
-    TermF(..), DTermV, DVar, DFunct, DFunctAr, DTerm,
+    TermF(..), {- DTermV, -} DVar, DFunct, DFunctAr, {- DTerm, -}
 
         -- * Rules
     DAgg, {- DRule(..), -}
 
         -- * Convenience re-export
-    UTerm(..)
+    -- UTerm(..)
 ) where
 
-import           Control.Unification
 import qualified Data.ByteString       as B
+import qualified Data.Data             as D
 import qualified Data.Foldable         as F
 import qualified Data.Traversable      as T
 import qualified Text.PrettyPrint.Free as PP
@@ -39,15 +40,13 @@ import qualified Text.PrettyPrint.Free as PP
 ------------------------------------------------------------------------}}}
 -- Term Base Cases                                                      {{{
 
--- | Used in mode analysis to indicate that an inst is bound to a ground
--- (but unknown) value.
 data TBaseSkolem = TSNumeric | TSString
  deriving (Eq,Ord,Show)
 
 -- | Term base cases.
 data TBase = TNumeric !(Either Integer Double)
            | TString  !B.ByteString
- deriving (Eq,Ord,Show)
+ deriving (D.Data,D.Typeable,Eq,Ord,Show)
 
 instance PP.Pretty TBase where
     pretty (TNumeric (Left x))  = PP.pretty x
@@ -58,27 +57,27 @@ instance PP.Pretty TBase where
 -- Terms                                                                {{{
 
 data Annotation t = AnnType t
- deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
+ deriving (D.Data,D.Typeable,Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 data TermF a t = TFunctor !a ![t]
-               | TBase TBase
+               | TBase !TBase
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 type DFunct = B.ByteString
 type DFunctAr = (DFunct,Int)
-type DTermV v = UTerm (TermF DFunct) v
 
 type DVar  = B.ByteString
-type DTerm = DTermV DVar
 
 ------------------------------------------------------------------------}}}
 -- Instances                                                            {{{
 
+{-
 instance (Eq a) => Unifiable (TermF a) where
   zipMatch (TFunctor a as) (TFunctor b bs) | a == b
                                              && length as == length bs
      = Just (TFunctor a (zipWith (\aa ba -> Right (aa,ba)) as bs))
   zipMatch _ _                                      = Nothing
+-}
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
