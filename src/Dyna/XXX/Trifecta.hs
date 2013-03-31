@@ -4,7 +4,8 @@
 
 -- Header material                                                      {{{
 module Dyna.XXX.Trifecta (
-    identNL, pureSpanned, stringLiteralSQ, triInteract, prettySpanLoc
+    identNL, pureSpanned, stringLiteralSQ, triInteract, prettySpanLoc,
+    unSpan
 ) where
 
 import           Control.Applicative
@@ -58,6 +59,13 @@ stringLiteralSQ = token (highlight StringLiteral lit) where
 -- belongs in Text.Trifecta.Diagnostic.Rendering.Span
 pureSpanned :: DeltaParsing m => a -> m (Spanned a)
 pureSpanned r = (liftA (r :~) $ Span <$> position <*> position <*> line)
+
+------------------------------------------------------------------------}}}
+-- unSpan                                                               {{{
+
+unSpan :: Spanned a -> a
+unSpan (x :~ _) = x
+{-# INLINE unSpan #-}
 
 ------------------------------------------------------------------------}}}
 -- Interaction                                                          {{{

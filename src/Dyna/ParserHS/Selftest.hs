@@ -32,6 +32,7 @@ import           Text.Trifecta.Delta
 
 import           Dyna.ParserHS.Parser
 import           Dyna.Term.TTerm (Annotation(..), TBase(..))
+import           Dyna.Term.SurfaceSyntax (defDisposTab)
 import           Dyna.XXX.TrifectaTest
 
 ------------------------------------------------------------------------}}}
@@ -41,7 +42,7 @@ _tNumeric :: Either Integer Double -> Term
 _tNumeric = TBase . TNumeric
 
 term :: ByteString -> Spanned Term
-term = unsafeParse dterm
+term = unsafeParse (rawDTerm <* eof)
 
 case_basicAtom :: Assertion
 case_basicAtom = e @=? (term "foo")
@@ -142,7 +143,7 @@ case_colonFunctor = e @=? (term pvv)
 --   gs = "gensym(*)"
 
 case_failIncompleteExpr :: Assertion
-case_failIncompleteExpr = checkParseFail dterm "foo +"
+case_failIncompleteExpr = checkParseFail rawDTerm "foo +"
   "(interactive):1:5: error: expected: \"(\",\nend of input\nfoo +<EOF> \n    ^      "
 
 ------------------------------------------------------------------------}}}
@@ -163,17 +164,18 @@ case_tyAnnot = e @=? (term fintx)
 -- Rules and lines                                                      {{{
 
 progline :: ByteString -> Spanned Line
-progline = unsafeParse (dline <* eof)
+progline = unsafeParse (rawDLine <* eof)
 
 proglines :: ByteString -> [Spanned Line]
-proglines = unsafeParse (dlines <* eof)
+proglines = unsafeParse (rawDLines <* eof)
 
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progline sr)
  where
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
-                   ":-"
+                   "&="
                    (TFunctor "true" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+                   defDisposTab
                    :~ ts)
          :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
@@ -185,6 +187,7 @@ case_ruleSimple = e @=? (progline sr)
   e  = LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                    "+="
                    (_tNumeric (Left 1) :~ Span (Columns 8 8) (Columns 9 9) sr)
+                   defDisposTab
             :~ ts)
            :~ ts
   ts = Span (Columns 0 0) (Columns 10 10) sr
@@ -217,6 +220,7 @@ case_ruleExpr = e @=? (progline sr)
                       ]
                      :~ Span (Columns 8 8) (Columns 18 18) sr
                    )
+                   defDisposTab
                   :~ ts)
                  :~ ts
   ts = Span (Columns 0 0) (Columns 19 19) sr
@@ -233,6 +237,7 @@ case_ruleDotExpr = e @=? (progline sr)
                       ]
                      :~ Span (Columns 8 8) (Columns 15 15) sr
                    )
+                   defDisposTab
                   :~ ts)
                  :~ ts
   ts = Span (Columns 0 0) (Columns 16 16) sr
@@ -250,6 +255,7 @@ case_ruleComma = e @=? (progline sr)
                      ,TVar "X" :~ Span (Columns 23 23) (Columns 24 24) sr]
                     :~ Span (Columns 15 15) (Columns 24 24) sr]
                    :~ Span (Columns 7 7) (Columns 24 24) sr)
+                   defDisposTab
                   :~ ts)
             :~ ts
   ts = Span (Columns 0 0) (Columns 25 25) sr
@@ -271,6 +277,7 @@ case_ruleKeywordsComma = e @=? (progline sr)
                                          :~ Span (Columns 34 34) (Columns 41 41) sr]
              :~ Span (Columns 21 21) (Columns 41 41) sr] -- End "whenever"
             :~ Span (Columns 6 6) (Columns 41 41) sr) -- End expression
+            defDisposTab
            :~ ts) -- End rule
           :~ ts
   ts = Span (Columns 0 0) (Columns 42 42) sr
@@ -282,11 +289,13 @@ case_rules = e @=? (proglines sr)
   e = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
                      "+="
                      (_tNumeric (Left 1) :~ Span (Columns 8 8) (Columns 10 10) sr)
+                     defDisposTab
                     :~ s1)
                    :~ s1
       , LRule (Rule 1 (TFunctor "laog" [] :~ Span (Columns 12 12) (Columns 17 17) sr)
                     "min="
                     (_tNumeric (Left 2) :~ Span (Columns 22 22) (Columns 24 24) sr)
+                    defDisposTab
                    :~ s2)
                   :~ s2
       ]
@@ -300,11 +309,13 @@ case_rulesWhitespace = e @=? (proglines sr)
   e  = [ LRule (Rule 0 (TFunctor "goal" [] :~ Span (Columns 2 2) (Lines 1 1 16 1) l0)
                      "+="
                      (_tNumeric (Left 1) :~ Span (Lines 1 4 19 4) (Lines 1 6 21 6) l1)
+                     defDisposTab
                     :~ s1)
                    :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Lines 3 1 31 1) (Lines 3 6 36 6) l3)
                      "+="
                      (_tNumeric (Left 2) :~ Span (Lines 3 9 39 9) (Lines 3 11 41 11) l3)
+                     defDisposTab
                     :~ s2)
                    :~ s2
        ]
@@ -328,11 +339,13 @@ case_rulesDotExpr = e @=? (proglines sr)
                          ]
                         :~ Span (Columns 8 8) (Columns 15 15) sr
                       )
+                      defDisposTab
                      :~ s1)
                     :~ s1
        , LRule (Rule 1 (TFunctor "goal" [] :~ Span (Columns 17 17) (Columns 22 22) sr)
                       "+="
                       (_tNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
+                      defDisposTab
                      :~ s2)
                     :~ s2
        ]

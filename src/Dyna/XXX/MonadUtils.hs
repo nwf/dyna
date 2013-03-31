@@ -7,7 +7,7 @@ module Dyna.XXX.MonadUtils(
   bracketState, incState,
 ) where
 
-import           Control.Applicative
+-- import           Control.Applicative
 import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map  as M
@@ -51,7 +51,7 @@ bracketState bs m = do
  r <- m
  s' <- get
  put s
- return (r, bs)
+ return (r, s')
 
 incState :: (Num a, MonadState a m) => m a
 incState = id <<%= (+1)

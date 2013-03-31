@@ -20,12 +20,16 @@
 --      this depends on an upstream fix in Text.Parser.Expression.
 --      But: I am not worried about it since we don't handle gensyms
 --      anywhere else in the pipeline yet)
+--
+-- Note that, due to @TemplateHaskell@ that this file is not necessarily in
+-- the most human-readable order.
 
 --   Header material                                                      {{{
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -34,12 +38,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dyna.ParserHS.Parser (
-    Term(..), dterm,
-    Rule(..), drule, Line(..), dline, dlines
+    PCS, defPCS,
+    Term(..), rawDTerm,
+    Rule(..), rawDRule, Line(..), rawDLine, rawDLines
 ) where
 
 import           Control.Applicative
+import           Control.Lens
 import           Control.Monad
+import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
@@ -56,8 +63,9 @@ import           Text.Parser.Token.Style
 import           Text.Trifecta
 
 import           Dyna.Term.TTerm (Annotation(..), TBase(..))
+import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.MonadUtils (incState)
-import           Dyna.XXX.Trifecta (identNL,stringLiteralSQ)
+import           Dyna.XXX.Trifecta (identNL,stringLiteralSQ,unSpan)
 
 ------------------------------------------------------------------------}}}
 -- Parsed output definition                                             {{{
@@ -77,35 +85,126 @@ type RuleIx = Int
 --   concern -- just use the parenthesized texpr case) so that there is no
 --   risk of parsing ambiguity.
 data Rule = Rule !RuleIx !(Spanned Term) !B.ByteString !(Spanned Term)
+                 !DisposTab
  deriving (Eq,Show)
 
--- | Smart constructor for building a rule with index
-rule :: (Functor f, MonadState RuleIx f)
-     => f (   Spanned Term
-           -> B.ByteString
-           -> Spanned Term
-           -> Rule)
-rule = Rule <$> incState
+-- | Pragmas that are recognized by the parser
+data Pragma = PDispos !SelfDispos !B.ByteString ![ArgDispos]
+            | PMisc !Term
+ deriving (Eq,Show)
 
---   XXX Having one kind of Pragma is probably wrong
 data Line = LRule (Spanned Rule)
-          | LPragma !(Spanned Term)
+          | LPragma Pragma
  deriving (Eq,Show)
+
+------------------------------------------------------------------------}}}
+-- Comment handling                                                     {{{
+
+dynaCommentStyle :: CommentStyle
+dynaCommentStyle =  CommentStyle
+  { _commentStart = "{%" -- XXX?
+  , _commentEnd   = "%}" -- XXX?
+  , _commentLine  = "%"
+  , _commentNesting = True
+  }
+
+newtype DynaLanguage m a = DL { unDL :: m a }
+  deriving (Functor,Applicative,Alternative,Monad,MonadPlus,
+            Parsing,CharParsing,LookAheadParsing)
+
+instance MonadTrans DynaLanguage where
+  lift = DL
+
+instance (TokenParsing m, MonadPlus m) => TokenParsing (DynaLanguage m) where
+  someSpace = buildSomeSpaceParser (lift someSpace) dynaCommentStyle
+  semi      = lift semi
+  highlight h (DL m) = DL (highlight h m)
+
+instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
+  line = lift line
+  position = lift position
+  slicedWith f (DL m) = DL $ slicedWith f m
+  rend = lift rend
+  restOfLine = lift restOfLine
+
+instance MonadState s m => MonadState s (DynaLanguage m) where
+  get = lift get
+  put = lift . put
+  state = lift . state
+
+instance MonadReader r m => MonadReader r (DynaLanguage m) where
+  ask = lift ask
+  local f m = DL $ local f (unDL m)
 
 ------------------------------------------------------------------------}}}
 -- Parser Configuration State                                           {{{
 
-{-
--- | Configuration data threaded deeply into the parser
-data PC m = PC { pc_opertab :: OperatorTable m (Spanned Term) }
-type PCM m a = StateT (PC m) m a
--}
+-- | Existentialized operator table; this is a bit of a hack, but it will
+-- do just fine for now, I hope.
+--
+-- XXX
+newtype EOT = EOT { unEOT :: forall m .
+                             (DeltaParsing m, LookAheadParsing m)
+                          => OperatorTable m (Spanned Term)
+                  }
+
+-- | Configuration state threaded into the parser
+--
+-- Note that this type is hidden with the exception of some accessors below.
+data PCS =
+  PCS { _pcs_opertab   :: EOT
+      , _pcs_dispostab :: DisposTab
+      , _pcs_ruleix    :: Int
+      }
+$(makeLenses ''PCS)
+
+newtype PCM im a = PCM { unPCM :: StateT PCS im a }
+ deriving (Alternative,Applicative,CharParsing,DeltaParsing,
+           Functor,LookAheadParsing,Monad,MonadPlus,Parsing,TokenParsing)
+
+instance (Monad im) => MonadState PCS (PCM im) where
+  get = PCM get
+  put = PCM . put
+  state = PCM . state
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
 bsf :: Functor f => f String -> f B.ByteString
 bsf = fmap BU.fromString
+
+-- | Smart constructor for building a rule with index
+rule :: (Functor f, MonadState PCS f)
+     => f (   Spanned Term
+           -> B.ByteString
+           -> Spanned Term
+           -> DisposTab
+           -> Rule)
+rule = Rule <$> (pcs_ruleix <<%= (+1))
+
+rs x = get >>= runReaderT x
+
+defPCS = PCS { _pcs_dispostab = defDisposTab
+             , _pcs_ruleix    = 0
+			 , _pcs_opertab   = EOT $
+				-- | The basic expression table for limited expressions.
+                --
+				-- Notably, this excludes @,@ (which is important
+				-- syntactically) and @whenever@ and @is@ (which are
+				-- nonsensical in local context)
+				-- XXX right now all binops are at equal precedence and
+				-- left-associative; that's wrong.
+                --
+				-- XXX timv suggests that this should be assocnone for
+				-- binops as a quick fix.  Eventually we should still do
+				-- this properly.
+                [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
+                , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
+                , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
+                , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
+                , [ Infix  (bf (spanned $ bsf $ commaOper)) AssocRight ]
+                ]
+             }
 
 ------------------------------------------------------------------------}}}
 -- Identifier Syles                                                     {{{
@@ -183,6 +282,10 @@ dynaAggStyle = IdentifierStyle
   , _styleReservedHighlight = ReservedOperator
   }
 
+-- | Aggregators must end with one of these symbols; used to prevent
+-- an over-zealous interpretation of concatenation as a rule.
+aggTermSyms :: H.HashSet Char
+aggTermSyms = H.fromList "=-"
 
 dynaAtomStyle :: TokenParsing m => IdentifierStyle m
 dynaAtomStyle = IdentifierStyle
@@ -206,46 +309,13 @@ dynaVarStyle = IdentifierStyle
 
 
 ------------------------------------------------------------------------}}}
--- Comment handling                                                     {{{
-
-dynaCommentStyle :: CommentStyle
-dynaCommentStyle =  CommentStyle
-  { _commentStart = "{%" -- XXX?
-  , _commentEnd   = "%}" -- XXX?
-  , _commentLine  = "%"
-  , _commentNesting = True
-  }
-
-newtype DynaLanguage m a = DL { unDL :: m a }
-  deriving (Functor,Applicative,Alternative,Monad,MonadPlus,
-            Parsing,CharParsing,LookAheadParsing)
-
-instance MonadTrans DynaLanguage where
-  lift = DL
-
-instance (TokenParsing m, MonadPlus m) => TokenParsing (DynaLanguage m) where
-  someSpace = buildSomeSpaceParser (lift someSpace) dynaCommentStyle
-  semi      = lift semi
-  highlight h (DL m) = DL (highlight h m)
-
-instance DeltaParsing m => DeltaParsing (DynaLanguage m) where
-  line = lift line
-  position = lift position
-  slicedWith f (DL m) = DL $ slicedWith f m
-  rend = lift rend
-  restOfLine = lift restOfLine
-
-instance MonadState s m => MonadState s (DynaLanguage m) where
-  get = lift get
-  put = lift . put
-  state = lift . state
-
-------------------------------------------------------------------------}}}
 -- Atoms                                                                {{{
 
 atom :: (Monad m, TokenParsing m) => m B.ByteString
 atom =     liftA BU.fromString stringLiteralSQ
        <|> (bsf $ ident dynaAtomStyle)
+
+functor = highlight Identifier atom <?> "Functor"
 
 ------------------------------------------------------------------------}}}
 -- Terms and term expressions                                           {{{
@@ -254,27 +324,23 @@ nullaryStar :: DeltaParsing m => m (Spanned Term)
 nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
                       <* (notFollowedBy $ char '(')
 
-term :: (DeltaParsing m, LookAheadParsing m)
-     => m (Spanned Term)
-term  = token $ choice
-      [       parens tfexpr
-      ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
+term = token $ choice
+        [       parens tfexpr
+        ,       spanned $ TVar <$> (bsf $ ident dynaVarStyle)
 
-      ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
+        ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
 
-      , try $ spanned $ TBase . TString  <$> bsf stringLiteral
+        , try $ spanned $ TBase . TString  <$> bsf stringLiteral
 
-      , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
+        , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
 
-      , try $ spanned $ flip TFunctor [] <$> atom
-                      <* (notFollowedBy $ char '(')
+        , try $ spanned $ flip TFunctor [] <$> atom
+                        <* (notFollowedBy $ char '(')
 
-      , try $ nullaryStar
-      ,       spanned $ parenfunc
-      ]
+        , try $ nullaryStar
+        ,       spanned $ parenfunc
+        ]
  where
-  functor = highlight Identifier atom <?> "Functor"
-
   parenfunc = TFunctor <$> functor
                        <*>  parens (tlexpr `sepBy` symbolic ',')
 
@@ -318,86 +384,115 @@ bf f = do
   (x:~spx)  <- f
   pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
 
--- | The basic expression table
---
--- XXX right now all binops are at equal precedence and left-associative;
--- that's wrong.
---
--- XXX timv suggests that this should be assocnone for binops as a quick
--- fix.  Eventually we should still do this properly.
-termETable :: (DeltaParsing m, LookAheadParsing m)
-           => [[Operator m (Spanned Term)]]
-termETable = [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
-             , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
-             , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
-             , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
-             , [ Infix  (bf (spanned $ bsf $ commaOper)) AssocRight ]
-             ]
 
-tlexpr :: (DeltaParsing m, LookAheadParsing m)
+tlexpr :: (DeltaParsing m, LookAheadParsing m, MonadReader PCS m)
        => m (Spanned Term)
-tlexpr = buildExpressionParser termETable term <?> "Limited Expression"
+tlexpr = view pcs_opertab >>= flip buildExpressionParser term . unEOT
 
-fullETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
-fullETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
+moreETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
+moreETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
              , [ Infix  (bf (spanned $ bsf $ symbol ","       )) AssocRight ]
              , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone  ]
              ]
 
-tfexpr :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
-tfexpr = buildExpressionParser fullETable tlexpr <?> "Expression"
+-- | Full Expression
+tfexpr :: (DeltaParsing m, LookAheadParsing m, MonadReader PCS m)
+       => m (Spanned Term)
+tfexpr = buildExpressionParser moreETable tlexpr <?> "Expression"
 
-dterm :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
-dterm   = unDL term
+rawDTerm :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
+rawDTerm = runReaderT (unDL term) defPCS
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
-parseRule :: (MonadState RuleIx m, DeltaParsing m, LookAheadParsing m)
+parseAggr :: (DeltaParsing m) => m B.ByteString
+parseAggr =
+ (do
+   a <- ident dynaAggStyle
+   when (not $ (last a) `H.member` aggTermSyms) $
+     unexpected "Improper terminal character in aggregator"
+   bsf (pure a)
+ ) <?> "Aggregator"
+
+parseRule :: (DeltaParsing m, LookAheadParsing m, MonadState PCS m)
           => m Rule
 parseRule = choice [
                -- HEAD AGGR TFEXPR .
-               try $ rule <*> term 
+               try $ rule <*> rs term
                           <*  whiteSpace
-                          <*> (bsf $ ident dynaAggStyle <?> "Aggregator")
-                          <*> tfexpr
+                          <*> parseAggr
+                          <*> rs tfexpr
+                          <*> use pcs_dispostab
 
                -- HEAD .
-               -- timv: using ':-' as the "default" aggregator for facts is
-               -- probably incorrect because it conflicts with '&=' and other
-               -- logical aggregators.
              , do
-                  h@(_ :~ s) <- term
-                  ix <- incState
-                  return $ Rule ix h ":-" (TFunctor "true" [] :~ s)
+                  h@(_ :~ s) <- rs term
+                  rule <*> pure h
+                       <*> pure "&="
+                       <*> pure (TFunctor "true" [] :~ s)
+                       <*> use pcs_dispostab
              ]
-       <* optional (char '.')
+       <* {- optional -} (char '.')
 
-drule :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Rule)
-drule = evalStateT (unDL (spanned parseRule)) 0
+rawDRule :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Rule)
+rawDRule = evalStateT (unPCM $ unDL $ spanned parseRule) defPCS
+
+------------------------------------------------------------------------}}}
+-- Pragmas                                                              {{{
+
+parsePragma = choice
+  [ symbol "dispos" *> parseDisposition
+  -- , symbol "oper"   *> parseOper
+  ]
+ where
+  parseDisposition = PDispos <$> selfdis
+                             <*> functor
+                             <*> (parens (argdis `sepBy` symbol ",")
+                                  <|> pure [])
+   where
+    argdis  = choice [ symbol "&" *> pure ADQuote
+                     , symbol "*" *> pure ADEval
+                     ]
+    selfdis = choice [ symbol "&" *> pure SDQuote
+                     , symbol "*" *> pure SDEval
+                     , pure SDInherit
+                     ]
+
+  parseOper = undefined
+
+dpragma :: (DeltaParsing m, LookAheadParsing m, MonadReader PCS m)
+        => m Pragma
+dpragma =    symbol ":-"
+          *> whiteSpace
+          *> (parsePragma
+               <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma"))
+          <* whiteSpace
+          <* {- optional -} (char '.')
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
 
-dpragma :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Term)
-dpragma =    symbol ":-"
-          *> whiteSpace
-          *> tlexpr
-          <* whiteSpace
-          <* optional (char '.')
-
-progline :: (MonadState RuleIx m, DeltaParsing m, LookAheadParsing m)
+progline :: (MonadState PCS m, DeltaParsing m, LookAheadParsing m)
          => m (Spanned Line)
 progline  =    whiteSpace
-            *> spanned (choice [ LRule <$> spanned parseRule
-                               , LPragma <$> dpragma
+            *> spanned (choice [ LPragma <$> rs dpragma
+                               , LRule <$> spanned parseRule
                                ])
 
-dline :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Line)
-dline = evalStateT (unDL (progline <* optional whiteSpace)) 0
+rawDLine :: (DeltaParsing m, LookAheadParsing m) => m (Spanned Line)
+rawDLine = evalStateT (unPCM $ unDL $ progline <* optional whiteSpace) defPCS
 
--- XXX This is not prepared for parser-altering pragmas.
-dlines :: (DeltaParsing m, LookAheadParsing m) => m [Spanned Line]
-dlines = evalStateT (unDL (many (progline <* optional whiteSpace))) 0
+interpretProgline = do
+  ls@(l :~ _) <- progline
+  case l of
+    LPragma (PDispos s f as) -> do
+       pcs_dispostab %= dtMerge (f,length as) (s,as)
+       interpretProgline
+    _ -> return ls
+
+dparse = (unPCM $ unDL $ many (interpretProgline <* optional whiteSpace) <* eof)
+
+rawDLines = evalStateT dparse defPCS
 
 ------------------------------------------------------------------------}}}

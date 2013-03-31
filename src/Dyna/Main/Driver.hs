@@ -252,7 +252,7 @@ processFile fileName = bracket openOut hClose go
         in be_d aggm cPlans qPlans initializers out
 
   parse = do
-    pr <- T.parseFromFileEx (P.dlines <* T.eof) fileName
+    pr <- T.parseFromFileEx (P.rawDLines <* T.eof) fileName
     case pr of
       TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
       TR.Success rs -> return rs

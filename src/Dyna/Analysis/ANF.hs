@@ -89,6 +89,7 @@ import qualified Data.Map                   as M
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
+import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint (valign)
 -- import           Dyna.Test.Trifecta         -- XXX
@@ -101,19 +102,13 @@ import           Dyna.XXX.Trifecta (prettySpanLoc)
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
 
-data SelfDispos = SDInherit
-                | SDEval
-                | SDQuote
-
-data ArgDispos = ADEval
-               | ADQuote
-
 data ECSrc = ECFunctor
            | ECExplicit
 
 type EvalCtx = (ECSrc,ArgDispos)
 
-data ANFDict = AD
+newtype ANFDict = AD { ad_dt :: DisposTab }
+{-
   { -- | A map from (functor,arity) to a list of bits indicating whether to
     -- (True) or not to (False) evaluate that positional argument.
     --
@@ -126,6 +121,7 @@ data ANFDict = AD
     -- | A map from (functor,arity) to self disposition.
   , ad_self_dispos :: (DFunct,Int) -> SelfDispos
   }
+-}
 
 mergeDispositions :: SelfDispos -> (ECSrc, ArgDispos) -> ArgDispos
 mergeDispositions = md
@@ -190,43 +186,6 @@ doUnif v w = if v == w
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
-
-------------------------------------------------------------------------}}}
--- Disposition computations                                             {{{
-
--- XXX These should be read from declarations
-dynaFunctorArgDispositions :: (DFunct, Int) -> [ArgDispos]
-dynaFunctorArgDispositions x = case x of
-    -- evaluate arithmetic / math
-    ("exp", 1) -> [ADEval]
-    ("log", 1) -> [ADEval]
-    ("mod", 2) -> [ADEval, ADEval]
-    ("abs", 1) -> [ADEval]
-     -- logic
-    ("and", 2) -> [ADEval, ADEval]
-    ("or", 2)  -> [ADEval, ADEval]
-    ("not", 1) -> [ADEval]
-    ("=",2)    -> [ADQuote,ADQuote]
-    (name, arity) ->
-       -- If it starts with a nonalpha, it prefers to evaluate arguments
-       let d = if C.isAlphaNum $ head $ BU.toString name
-                then ADQuote
-                else ADEval
-       in take arity $ repeat $ d
-
--- XXX These should be read from declarations
-dynaFunctorSelfDispositions :: (DFunct,Int) -> SelfDispos
-dynaFunctorSelfDispositions x = case x of
-    ("pair",2)   -> SDQuote
-    ("eval",1)   -> SDEval
-    ("true",0)   -> SDQuote
-    ("false",0)  -> SDQuote
-    (name, _) ->
-       -- If it starts with a nonalpha, it prefers to evaluate
-       let d = if C.isAlphaNum $ head $ BU.toString name
-                then SDInherit
-                else SDEval
-       in d
 
 ------------------------------------------------------------------------}}}
 -- Normalize a Term                                                     {{{
@@ -338,7 +297,7 @@ normTerm_ c@(_,ADEval) ss (P.TFunctor "whenever" [sr, si]) =
 -- their handling.
 normTerm_ c   ss (P.TFunctor f as) = do
 
-    argdispos <- asks $ flip ($) (f,length as) . ad_arg_dispos
+    argdispos <- asks $ flip fArgEvalDispos (f,length as) . ad_dt
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
@@ -359,7 +318,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
                             return (vs,v':r)
                in (reverse . snd) `fmap` foldM delin ([],[]) normas
 
-    selfdispos <- asks $ flip ($) (f,length as) . ad_self_dispos
+    selfdispos <- asks $ flip fSelfEvalDispos (f,length as) . ad_dt
 
     let dispos = mergeDispositions selfdispos c
 
@@ -388,10 +347,9 @@ data Rule = Rule { r_index      :: Int
                  }
  deriving (Show)
 
--- XXX
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
          -> Rule
-normRule (P.Rule i h a r T.:~ sp) = uncurry ($) $ runNormalize $ do
+normRule (P.Rule i h a r dt T.:~ sp) = uncurry ($) $ runNormalize dt $ do
     nh  <- normTerm False h >>= newAssign "_h" . Left
     nr  <- normTerm True  r >>= newAssign "_r" . Left
     return $ Rule i nh a nr sp
@@ -402,10 +360,11 @@ normRule (P.Rule i h a r T.:~ sp) = uncurry ($) $ runNormalize $ do
 -- | Run the normalization routine.
 --
 -- Use as @runNormalize nRule@
-runNormalize :: ReaderT ANFDict (State ANFState) a -> (a, ANFState)
-runNormalize =
+runNormalize :: DisposTab
+             -> ReaderT ANFDict (State ANFState) a -> (a, ANFState)
+runNormalize dt =
   flip runState   (AS 0 M.empty M.empty [] M.empty []) .
-  flip runReaderT (AD dynaFunctorArgDispositions dynaFunctorSelfDispositions)
+  flip runReaderT (AD dt)
 
 ------------------------------------------------------------------------}}}
 -- Pretty Printer                                                       {{{

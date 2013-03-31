@@ -45,6 +45,7 @@ Library
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
+                        -- logict >=0.6,
                         parsers >=0.5,
                         recursion-schemes >=3.0,
                         reducers >=3.0,
@@ -58,34 +59,34 @@ Library
                         wl-pprint-extras >=3.0,
                         wl-pprint-terminfo >=3.0
 
-Executable drepl
-    Default-Language:   Haskell2010
-    Hs-Source-Dirs:     src
-
-    ghc-options:        -Wall
-                        -main-is Dyna.REPL
-
-    Build-Depends:      ansi-wl-pprint >= 0.6,
-                        base >=4,
-                        bytestring >=0.9,
-                        charset >=0.3,
-                        containers >=0.4,
-                        haskeline >=0.6,
-                        mtl >=2.1,
-                        lens >=3.8,
-                        parsers >=0.5,
-                        process >=1.1,
-                        recursion-schemes >=3.0,
-                        reducers >=3.0,
-                        semigroups >=0.8,
-                        tagged >= 0.4.4,
-                        transformers >= 0.3,
-                        trifecta >= 1.0,
-                        unordered-containers>=0.2,
-                        utf8-string >=0.3,
-                        wl-pprint-extras >=3.0
-    
-    Main-Is: Dyna/REPL.hs
+-- Executable drepl
+--     Default-Language:   Haskell2010
+--     Hs-Source-Dirs:     src
+-- 
+--     ghc-options:        -Wall
+--                         -main-is Dyna.REPL
+-- 
+--     Build-Depends:      ansi-wl-pprint >= 0.6,
+--                         base >=4,
+--                         bytestring >=0.9,
+--                         charset >=0.3,
+--                         containers >=0.4,
+--                         haskeline >=0.6,
+--                         mtl >=2.1,
+--                         lens >=3.8,
+--                         parsers >=0.5,
+--                         process >=1.1,
+--                         recursion-schemes >=3.0,
+--                         reducers >=3.0,
+--                         semigroups >=0.8,
+--                         tagged >= 0.4.4,
+--                         transformers >= 0.3,
+--                         trifecta >= 1.0,
+--                         unordered-containers>=0.2,
+--                         utf8-string >=0.3,
+--                         wl-pprint-extras >=3.0
+--     
+--     Main-Is: Dyna/REPL.hs
 
 Executable dyna
 
@@ -104,6 +105,7 @@ Executable dyna
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
+                        -- logict >=0.6,
                         parsers >=0.5,
                         process >=1.1,
                         recursion-schemes >=3.0,
@@ -135,6 +137,7 @@ Test-suite dyna-selftests
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
+                        -- logict >=0.6,
                         parsers >=0.5,
                         process >=1.1,
                         QuickCheck >= 2.5,
