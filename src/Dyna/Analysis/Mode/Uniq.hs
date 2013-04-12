@@ -21,17 +21,37 @@ module Dyna.Analysis.Mode.Uniq(Uniq(..)) where
 -- u2, then it is safe to use u1 in a context expecting u2.
 --
 -- The Mostly variants are intended (see p26) to handle trailing (i.e. undo
--- logs).  See also the discussion on p48
+-- logs).  See also the discussion on p48.
 data Uniq = UUnique
                 -- ^ All references are known to the mode analysis system.
+                --
+                -- The system is permitted to issue both reads and untrailed
+                -- writes.
                 --
                 -- In a system without alias tracking, this more obviously
                 -- means \"unique reference\" (see prose, p90, \"This is a
                 -- subtle change in what we mean by unique.\").
           | UMostlyUnique
+                -- ^ All references are known, but the value is used on
+                -- backtracking.
+                --
+                -- The system is permitted to issue reads and writes, but
+                -- all writes must be trailed or otherwise inverted.
           | UShared
+                -- ^ This position may be reached by multiple paths.
+                --
+                -- The system may read, but may not write to this location.
           | UMostlyClobbered
+                -- ^ This location has been clobbered but it is available
+                -- for backtracking.
+                --
+                -- The system may not read from this location.
           | UClobbered
+                -- ^ This location has been clobbered and is unavailable
+                -- even in the trail.
+                --
+                -- The system may issue neither reads nor writes to this
+                -- location.
  deriving (Bounded, Enum, Eq, Ord, Show)
 
 {-

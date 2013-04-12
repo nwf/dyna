@@ -5,6 +5,7 @@
 -- fly.
 
 -- Header material                                                      {{{
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -16,17 +17,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Dyna.Analysis.Mode.Execution.Base (
+module Dyna.Analysis.Mode.Execution.Context (
     -- * Inst Types
     -- ** Naming Conventions
     -- $naming
 
-    -- ** Named Insts
-    NI(..), ni_unique, ni_inst,
     -- ** Inst Keys (§5.3.1, p94)
     KI(..), KR(..), KRI, ENKRI,
-    -- ** Unaliased Insts
-    UI(..), UR,
     -- ** Variables
     VV(..), VR(..),
 
@@ -40,53 +37,31 @@ module Dyna.Analysis.Mode.Execution.Base (
     SIMCtx(..), emptySIMCtx,
 
     -- ** Internal helper functions
-    aliasW,
+    aliasX, aliasY,
 )where
 
 import           Control.Exception(assert)
 import           Control.Lens
 import           Control.Monad
+import           Control.Monad.Error.Class
 import           Control.Monad.State
-import           Data.Function
+import           Control.Monad.Trans.Either
+import           Control.Monad.Trans.State
+-- import           Data.Function
 import qualified Data.Map                 as M
 import qualified Data.Traversable         as T
-import           Data.Unique
+-- import           Data.Unique
+import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
+import           Dyna.Analysis.Mode.Unification
+import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils
 import           Dyna.XXX.MonadContext
 import qualified Debug.Trace              as XT
+import qualified Text.PrettyPrint.Free    as PP
 
 ------------------------------------------------------------------------}}}
 -- Inst Types                                                           {{{
--- Insts: Named Insts                                                   {{{
-
--- | A named inst.  These are used when we need recursive Insts.  Notice
--- that they are only permitted to recurse as themselves.  See prose, p60.
---
--- Our implementation relies on globally unique keys created by the runtime
--- system and the use of laziness to tie the knot.  This allows them to be
--- garbage collected when no longer used and means that we do not have to
--- carry around another map in our context.
---
--- Despite this, we continue to provide 'MCR' and 'MCN' instances for named
--- insts, just for uniformity of calling code and ease of changing the
--- underlying representation.
-data NI f = NI { _ni_unique :: Unique
-               , _ni_inst   :: InstF f (NI f)
-               }
-$(makeLenses ''NI)
-
--- | The 'Eq' instance here is for exact object equality.
-instance Eq (NI f) where
-  (NI a _) == (NI b _) = a == b
-
-instance Ord (NI f) where
-  compare = on compare _ni_unique
-
-instance Show (NI f) where
-  show (NI u _) = "<NI h=" ++ (show $ hashUnique u) ++ ">"
-
-------------------------------------------------------------------------}}}
 -- Insts: Inst Keys (§5.3.1, p94)                                       {{{
 
 -- | An aliased variable, also known as an Inst Key.  See §5.3.1, p94.
@@ -128,6 +103,7 @@ type ENKRI f n k = Either n (KRI f n k)
 ------------------------------------------------------------------------}}}
 -- Insts: Unaliased Insts                                               {{{
 
+{-
 -- | An unaliased variable.  Again we use 'Int' internally for the moment.
 newtype UI = UI { unUI :: Int } deriving (Eq,Num,Ord,Show)
 
@@ -137,6 +113,7 @@ newtype UI = UI { unUI :: Int } deriving (Eq,Num,Ord,Show)
 -- Note that Vars are defined to be acyclic (XXX again, no occurs check
 -- right now)
 type UR f n k u = InstF f (VR n k u)
+-}
 
 ------------------------------------------------------------------------}}}
 -- Insts: Variables                                                     {{{
@@ -145,11 +122,11 @@ type UR f n k u = InstF f (VR n k u)
 newtype VV = VV { unVV :: String } deriving (Eq,Ord,Show)
 
 -- | Variables (and unaliased structure) bindings
-data VR n k u =
+data VR f n k =
   -- | Defined named inst (unaliased)
     VRName   n
   -- | Unaliased structure
-  | VRStruct u
+  | VRStruct (InstF f (VR f n k))
   -- | Aliased structure
   | VRKey    k
  deriving (Eq,Ord,Show)
@@ -158,62 +135,39 @@ data VR n k u =
 ------------------------------------------------------------------------}}}
 -- Context                                                              {{{
 -- Context : Basics                                                     {{{
-data SIMCtx f = SIMCtx { {- _simctx_next_iv   :: NI
-                       , _simctx_map_iv    :: InstMap f NI NI
-                       , -}
-                         _simctx_next_k :: KI
-                       , _simctx_next_u :: UI
 
-                       , _simctx_map_k  :: M.Map KI (KR f (NI f) KI)
-                       , _simctx_map_u  :: M.Map UI (UR f (NI f) KI UI)
-                       , _simctx_map_v  :: M.Map VV (VR (NI f) KI UI)
+-- | Simplistic InstMap Context
+data SIMCtx f = SIMCtx { _simctx_next_k   :: KI
+                       , _simctx_map_k    :: M.Map KI (KR f (NIX f) KI)
+                       , _simctx_map_v    :: M.Map VV (VR f (NIX f) KI)
                        }
  deriving (Show)
 $(makeLenses ''SIMCtx)
 
-newtype SIMCT m f a = SIMCT { unSIMCT :: StateT (SIMCtx f) m a }
+newtype SIMCT m f a = SIMCT { unSIMCT :: StateT (SIMCtx f) (EitherT UnifFail m) a }
  deriving (Monad,MonadFix)
 
-emptySIMCtx :: SIMCtx f
-emptySIMCtx = SIMCtx 0 0 M.empty M.empty M.empty
+instance (Monad m) => MonadError UnifFail (SIMCT m f) where
+  throwError e = SIMCT (lift (left e))
+  catchError a f = SIMCT (liftCatch catchError (unSIMCT a) (unSIMCT . f))
 
-runSIMCT :: SIMCT m f a -> SIMCtx f -> m (a, SIMCtx f)
-runSIMCT q x = runStateT (unSIMCT q) x
-
-------------------------------------------------------------------------}}}
--- Context : Named Insts                                                {{{
-
-type instance MCVT (SIMCT m f) (NI f) = InstF f (NI f)
-
-instance (Monad m) => MCR (SIMCT m f) (NI f) where
-  clookup (NI _ v) = SIMCT $ return v
-
-instance (MonadIO m) => MCN (SIMCT m f) (NI f) where
-  cnew v = SIMCT $ do
-    nu <- liftIO $ newUnique
-    return $ NI nu v
+instance MonadIO m => MonadIO (SIMCT m f) where
+  liftIO m = SIMCT $ lift (liftIO m)
 
 {-
--- For the old NI definition, which required another map; kept in case we
--- like that better.  A little stale.
-
-instance (Monad m) => MCR (SIMCT m f) NI (InstF f NI) where
-  clookup v = SIMCT $ get >>= return . imLookup v . view simctx_map_iv
-
-instance (Monad m) => MCN (SIMCT m f) NI (InstF f NI) where
-  cnew v = SIMCT $ do
-    k <- simctx_next_iv <+= 1
-    simctx_map_iv %= imAssign k v
-    return k
-
-instance (Monad m) => MCW (SIMCT m f) NI (InstF f NI) where
-  cassign v b = SIMCT $ simctx_map_iv %= (imAssign v b)
-
-instance (Monad m) => MCF (SIMCT m f) NI where
-  cfresh = SIMCT $ do
-     x <- simctx_next_iv <+= 1
-     return x
+ - XXX maybe
+ 
+instance (Monad m) => MonadState (SIMCtx f) (SIMCT m f) where
+  get = SIMCT get
+  put = SIMCT . get
+  state = SIMCT . state
 -}
+
+emptySIMCtx :: SIMCtx f
+emptySIMCtx = SIMCtx 0 M.empty M.empty
+
+runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
+runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
 
 ------------------------------------------------------------------------}}}
 -- Context : Aliased Keys                                               {{{
@@ -233,11 +187,12 @@ key_canon k = do
 
 key_lookup :: (MonadState (SIMCtx f) m, Show f)
            => KI
-           -> m (ENKRI f (NI f) KI)
+           -> m (ENKRI f (NIX f) KI)
 key_lookup k = do
   ck <- key_canon k
   m <- use simctx_map_k
-  let r = maybe (error $ "Key context miss: " ++ (show (k,ck)))
+  let r = maybe (dynacPanic $ PP.text "Key context miss:"
+                              PP.<+> PP.text (show (k,ck)))
                 krenkri
               $ M.lookup ck m
   XT.traceShow ("KL",k,ck,r) $ return ()
@@ -248,7 +203,7 @@ key_lookup k = do
   krenkri (KRName n) = Left n
   krenkri (KRInst i) = Right i
 
-type instance MCVT (SIMCT m f) KI = ENKRI f (NI f) KI
+type instance MCVT (SIMCT m f) KI = ENKRI f (NIX f) KI
 
 instance (Show f, Monad m) => MCR (SIMCT m f) KI where
   clookup = SIMCT . key_lookup
@@ -281,10 +236,12 @@ instance (Show f, Monad m) => MCM (SIMCT m f) KI where
     krenkri (KRName n) = Left n
     krenkri (KRInst i) = Right i
 
+type instance MCNC KI m = ()
 instance (Show f, Monad m) => MCN (SIMCT m f) KI where
-  cnew q = SIMCT $ do
-    k <- simctx_next_k <+= 1
-    simctx_map_k %= M.insert k (either KRName KRInst q)
+  cnew lf f = do
+    k <- lf $ SIMCT $ simctx_next_k <+= 1
+    q <- f k
+    lf $ SIMCT $ simctx_map_k %= M.insert k (either KRName KRInst q)
     return k
 
 instance (Show f, Monad m) => MCA (SIMCT m f) KI where
@@ -303,67 +260,24 @@ instance (Show f, Monad m) => MCA (SIMCT m f) KI where
     return cr
 
 ------------------------------------------------------------------------}}}
--- Context : Unaliased                                                  {{{
+-- Context : Constructing Aliased Keys                                  {{{
 
-unaliased_lookup :: (MonadState (SIMCtx f) m, Show f)
-                 => UI
-                 -> m (UR f (NI f) KI UI)
-unaliased_lookup v = do
-    m <- use simctx_map_u
-    r <- maybe (error $ "Unaliased context miss: " ++ (show v))
-               return
-             $ M.lookup v m
-    return r
-
-type instance MCVT (SIMCT m f) UI = UR f (NI f) KI UI
-
-instance (Show f, Monad m) => MCR (SIMCT m f) UI where
-  clookup k = SIMCT $ do
-    r <- unaliased_lookup k
-    XT.traceShow ("UL",k) $ return r
-
-instance (Show f, Monad m) => MCW (SIMCT m f) UI where
-  cassign v w = SIMCT $ simctx_map_u %= M.insert v w
-
-instance (Show f, Monad m) => MCD (SIMCT m f) UI where
-  cdelete k = SIMCT $ do
-    r <- unaliased_lookup k
-    simctx_map_u %= M.delete k
-    XT.traceShow ("UD",k,r) $ return r
-
-{-
-instance (Show f, Monad m) => MCM (SIMCT m f) UI where
-  cmerge f k v = SIMCT $ do
-    m <- use simctx_map_u
-    maybe (error $ "User context miss in merge: " ++ (show k))
-          (\v' -> do
-             merged <- unSIMCT $ f v' v
-             simctx_map_u .= M.insert k merged m)
-        $ M.lookup k m
--}
-
--- | Move an unaliased structure to the aliased table
-aliasW :: forall f n k u m .
+aliasX :: forall f n k m .
           (Monad m,
-           MCVT m u ~ UR f n k u,
-           MCR m u, MCD m u,
            MCVT m k ~ ENKRI f n k,
-           MCN m k)
-       => UR f n k u
-       -> m k
-aliasW x = T.sequence (fmap (liftM Right . aliasX) x) >>= cnew . Right
-
-aliasX :: forall f n k u m .
-          (Monad m,
-           MCVT m u ~ UR f n k u,
-           MCR m u, MCD m u,
-           MCVT m k ~ ENKRI f n k,
-           MCN m k)
-       => VR n k u -> m k
-aliasX (VRName n)   = cnew (Left n)
+           MCN m k, MCNC k m)
+       => VR f n k -> m k
+aliasX (VRName n)   = cnew id $ const $ return $ Left n
 aliasX (VRKey  k)   = return k
-aliasX (VRStruct u) = cdelete u >>= T.sequence . fmap (liftM Right . aliasX)
-                                >>= cnew . Right
+aliasX (VRStruct u) = aliasY u
+
+aliasY :: forall f n k m .
+          (Monad m,
+           MCVT m k ~ ENKRI f n k,
+           MCN m k, MCNC k m)
+       => InstF f (VR f n k) -> m k
+aliasY u = T.sequence (fmap (liftM Right . aliasX) u)
+            >>= cnew id . const . return . Right
 
 {-
 -- | Called when we are moving a singleton alias key to unaliased structure.
@@ -396,23 +310,22 @@ unalias s k0 = do
 
 user_lookup :: (MonadState (SIMCtx f) m, Show f)
             => VV
-            -> m (VR (NI f) KI UI)
+            -> m (VR f (NIX f) KI)
 user_lookup v = do
     m <- use simctx_map_v
-    r <- maybe (error $ "Unaliased context miss: " ++ (show v))
+    r <- maybe (error $ "User variable context miss: " ++ (show v))
                return
              $ M.lookup v m
     XT.traceShow ("VL",v,r) $ return ()
     return r
 
-type instance MCVT (SIMCT m f) VV = VR (NI f) KI UI
+type instance MCVT (SIMCT m f) VV = VR f (NIX f) KI
 
 instance (Show f, Monad m) => MCR (SIMCT m f) VV where
   clookup = SIMCT . user_lookup
 
 instance (Show f, Monad m) => MCW (SIMCT m f) VV where
   cassign v w = SIMCT $ simctx_map_v %= M.insert v w
-
 
 instance (Show f, Monad m) => MCA (SIMCT m f) VV where
   ccanon x = return x
@@ -463,7 +376,7 @@ instance (Show f, Monad m) => MCA (SIMCT m f) VV where
 -- of them.  Despite the proliferation, much of the implementation is
 -- type-directed, so it's not so bad.
 --
---   * @N@ -- 'NI'
+--   * @N@ -- 'NIX' f
 --
 --   * @I@ -- @'InstF' f ('NI' f)@
 --
@@ -477,13 +390,11 @@ instance (Show f, Monad m) => MCA (SIMCT m f) VV where
 --
 --   * @J@ -- @'Either' ('NI' f) 'KI'@
 --
---   * @U@ -- 'UI'
---
---   * @W@ -- 'UR' (i.e. @'InstF' f ('VR' ('NI' f) 'KI' 'UI')@)
---
 --   * @V@ -- 'VV'
 --
---   * @X@ -- 'VR' 'NI' 'KI' 'UI'
+--   * @X@ -- 'VR' f 'NI' 'KI'
+--
+--   * @Y@ -- @InstF f (VR f 'NI' 'KI')@
 
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}

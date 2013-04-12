@@ -14,31 +14,37 @@
 -- Because I think it will be easier to understand in the long run, I have
 -- opted to avoid that -- the InstF functor contains only those constructors
 -- necessary for building plies of an actual inst.  The other (co)products
--- needed at runtime may be found in 'Dyna.Analysis.Mode.ExecutionTypes'.
+-- needed at runtime may be found in 'Dyna.Analysis.Mode.Execution.Base'.
 
 -- Header material                                                      {{{
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 module Dyna.Analysis.Mode.Inst(
-  InstF(..),
+  InstF(..), inst_uniq, inst_rec,
   iNotReached, iIsNotReached,
   iUniq, iIsFree, iWellFormed_, iEq_, iGround_,
   iLeq_, iLeqGLB_,
   iSub_, iSubGLB_, iSubLUB_,
 ) where
 
+import           Control.Lens
 -- import           Control.Monad
 import qualified Data.Foldable            as F
 import qualified Data.Traversable         as T
 import qualified Data.Map                 as M
+import qualified Data.Maybe               as MA
 -- import qualified Data.Set                 as S
 import           Dyna.XXX.DataUtils       as XDU
 import           Dyna.XXX.MonadUtils
 
 import           Dyna.Analysis.Mode.Uniq
+
+-- import qualified Debug.Trace                       as XT
 
 ------------------------------------------------------------------------}}}
 -- Instantiation States                                                 {{{
@@ -87,7 +93,7 @@ data InstF f i =
   -- Note that we are saying nothing about the possible data
   -- bound by this variable; that would be the job of the type
   -- system.
-  | IAny   !Uniq
+  | IAny   { _inst_uniq :: !Uniq }
 
   -- | A bound inst.  More specifically, a disjunction of
   -- possible binding states: it's guaranteed to be one of these
@@ -99,7 +105,7 @@ data InstF f i =
   --
   -- Note that defition 3.2.11 (p50) requires that the
   -- uniqueness of the inner Insts be below by <=
-  -- (see the 'iWellformed_' predicate below)
+  -- (see the 'iWellFormed_' predicate below)
   --
   -- The Bool field, which is an extension from the thesis,
   -- indicates the possibility that this inst is
@@ -110,26 +116,42 @@ data InstF f i =
   -- field for recording possible actual base-cases, too,
   -- but one thing at a time.
   --
-  -- Definition 3.2.18, p52:
-  -- @not_reached(u) === IBound u M.empty False@.
-  -- @not_reached    === not_reached(UUnique)@.
-  | IBound !Uniq
-           !(M.Map f [i])
-           !Bool
+  -- XXX The thesis uses lists, of course, for each functor's arguments.  We
+  -- are going to want to change that once we have a better understanding of
+  -- our term layer.  (That is, we should make InstF parametric in its
+  -- choice of container of arguments, or we could existentially hide the
+  -- container by converting InstF into a GADT.  I think either option is
+  -- acceptable.)
+  --
+  -- Definition 3.2.18, p52, is now:
+  --
+  --   * @not_reached(u) === IBound u M.empty False@.
+  --
+  --   * @not_reached    === not_reached(UUnique)@.
+  | IBound { _inst_uniq :: !Uniq
+           , _inst_rec  :: !(M.Map f [i])
+           , _inst_base :: !Bool
+           }
 
   -- | This one is not in the thesis exposition but is used during
   -- computation to represent the entire universe of ground
   -- terms.  See prose, p63, \"For efficiency, we treat ground...\".
   --
-  -- Defninition 3.2.17, p52 is thus rewritten:
-  -- @ground(u) === IUniv u@.
-  | IUniv  !Uniq
+  -- Defninition 3.2.17, p52 is thus rewritten: @ground(u) === IUniv u@.
+  | IUniv  { _inst_uniq :: !Uniq }
 
   -- XXX Mercury has a concept of \"higher-order modes\", which we
   -- do not yet support (though there is grumbling about it in
   -- the background).  See 3.2.4 p55 et seq.
 
  deriving (Eq, F.Foldable, Functor, Ord, Show, T.Traversable)
+-- $(makePrisms ''InstF)
+$(makeLensesFor [("_inst_uniq","inst_uniq")
+                ,("_inst_rec","inst_rec")
+                ]
+                ''InstF)
+
+-- XXX class (Pretty f, Pretty i) => Pretty (InstF f i) where
 
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Unary predicates                               {{{
@@ -152,13 +174,15 @@ inIGamma (RA r t) (IBound u ts)  = r == uniqGamma u
 -- | Extract the uniqueness from an inst.
 --
 -- Based on definition 3.2.13, p51 but see prose, p51, \"Note that there is
--- no uniqueness annotation on the free inst\" -- we choose to make that
--- explicit here.
-iUniq :: InstF f i -> Uniq
-iUniq IFree          = UUnique
-iUniq (IAny u)       = u
-iUniq (IBound u _ _) = u
-iUniq (IUniv u)      = u
+-- no uniqueness annotation on the free inst\".
+iUniq :: InstF f i -> Maybe Uniq
+{-
+iUniq IFree          = Nothing
+iUniq (IAny u)       = Just u
+iUniq (IBound u _ _) = Just u
+iUniq (IUniv u)      = Just u
+-}
+iUniq = (^? inst_uniq)
 {-# INLINABLE iUniq #-}
 
 -- | Check that an instantiation state is well-formed as per defintion
@@ -168,11 +192,11 @@ iWellFormed_ :: (Monad m)
              ->  Uniq -> InstF f i
              -> m Bool
 iWellFormed_ _ _  IFree          = return True
-iWellFormed_ _ u' (IAny u)       = return $ u <= u'
-iWellFormed_ q u' (IBound u b _) = if u <= u'
-                                    then mfmamm (q u) b
+iWellFormed_ _ u (IAny u')       = return $ u <= u'
+iWellFormed_ q u (IBound u' b _) = if u <= u'
+                                    then mfmamm (q u') b
                                     else return False
-iWellFormed_ _ u' (IUniv u)      = return $ u <= u'
+iWellFormed_ _ u (IUniv u')      = return $ u <= u'
 {-# INLINABLE iWellFormed_ #-}
 
 -- | Compare with 'IFree' without imposing @Eq i@.
@@ -244,10 +268,10 @@ iLeq_ _ _ (IAny _)     _                  = return $ False
 iLeq_ _ _ (IUniv u)    (IAny u')          = return $ u' <= u
 iLeq_ _ _ (IUniv u)    (IUniv u')         = return $ u' <= u
 iLeq_ _ _ (IUniv _)    _                  = return $ False
-iLeq_ q _ (IBound u b _) r@(IAny u')      = andM1 (u' <= u) $
-    mfmamm (flip q r) b
-iLeq_ q _ (IBound u b _) r@(IUniv u')     = andM1 (u' <= u) $
-    mfmamm (flip q r) b
+iLeq_ q _ (IBound u b _) (IAny u')      = andM1 (u' <= u) $
+    mfmamm (\x -> q x (IAny u')) b
+iLeq_ q _ (IBound u b _) (IUniv u')     = andM1 (u' <= u) $
+    mfmamm (\x -> q x (IUniv u')) b
 iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     flip mapForallM m $
       \f is -> case M.lookup f m' of
@@ -256,9 +280,19 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     -- XXX Ought to assert that length is == length is'
 {-# INLINABLE iLeq_ #-}
 
--- | Compute the GLB under iLeq_ (⋏)
+-- | Compute the GLB under iLeq_ (⋏) at a particular uniqueness.
+--
+-- The uniqueness input is needed for the case when we unify with a free
+-- variable deep within a structure.  It should be UUnique at the root of
+-- a unification.
 --
 -- Since iLeq (≼) is a lattice, this is a total function.
+--
+-- Notice that the \"import\" and \"merge\" callbacks take a 'Uniq'
+-- argument; this 'Uniq' must be ≼ the uniqueness of the returned @i''@
+-- inst in order for the produced inst to be well-formed.  It is impossible,
+-- due to open recursion, for this function to engage in the necessary
+-- rewrites itself.
 --
 -- XXX Unlike the thesis exposition, but like the Mercury implementation, we
 -- might consider an alternative version of this function that returned not
@@ -271,34 +305,42 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
 -- variables).
 
 iLeqGLB_ :: (Monad m, Ord f)
-         => (i  -> m i'')
-         -> (i' -> m i'')
-         -> (i -> i' -> m i'')
-         -> InstF f i
-         -> InstF f i'
+         => (Uniq -> i  -> m i'')               -- ^ Import left
+         -> (Uniq -> i' -> m i'')               -- ^ Import right
+         -> (Uniq -> InstF f i' -> i  -> m i'') -- ^ Lopsided merge left
+         -> (Uniq -> InstF f i  -> i' -> m i'') -- ^ Lopsided merge right
+         -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
+         -> Uniq                                -- ^ Uniq of outer context
+         -> InstF f i                           -- ^ Left
+         -> InstF f i'                          -- ^ Right
          -> m (InstF f i'')
-iLeqGLB_ _ r _ IFree      x            = T.mapM r x
-iLeqGLB_ l _ _ x          IFree        = T.mapM l x
+iLeqGLB_ _ r _ _ _ u IFree      x            = T.mapM (r u) x
+iLeqGLB_ l _ _ _ _ u x          IFree        = T.mapM (l u) x
 
-iLeqGLB_ _ _ _ (IAny u)   (IAny u')    = return $ IAny (max u u')
+iLeqGLB_ _ _ _ _ _ _ (IAny u)   (IAny u')    = return $ IAny (max u u')
 
-iLeqGLB_ _ _ _ (IAny u')  (IUniv u)    = return $ IUniv (max u u')
-iLeqGLB_ _ _ _ (IUniv u)  (IAny u')    = return $ IUniv (max u u')
-iLeqGLB_ _ _ _ (IUniv u)  (IUniv u')   = return $ IUniv (max u u')
+iLeqGLB_ _ _ _ _ _ _ (IAny u')  (IUniv u)    = return $ IUniv (max u u')
+iLeqGLB_ _ _ _ _ _ _ (IUniv u)  (IAny u')    = return $ IUniv (max u u')
+iLeqGLB_ _ _ _ _ _ _ (IUniv u)  (IUniv u')   = return $ IUniv (max u u')
 
-iLeqGLB_ l _ _ (IBound u m b) (IAny u') = (return . flip (IBound (max u u')) b)
-                                           =<< T.mapM (T.mapM l) m
-iLeqGLB_ _ r _ (IAny u') (IBound u m b) = (return . flip (IBound (max u u')) b)
-                                           =<< T.mapM (T.mapM r) m
+iLeqGLB_ _ _ l _ _ _ (IBound u m b) (IAny u') =
+ let v = max u u'
+ in return . flip (IBound v) b =<< T.mapM (T.mapM (l v $ IAny v)) m
+iLeqGLB_ _ _ _ r _ _ (IAny u') (IBound u m b) =
+ let v = max u u'
+ in return . flip (IBound v) b =<< T.mapM (T.mapM (r v $ IAny v)) m
 
-iLeqGLB_ l _ _ (IBound u m b) (IUniv u') = (return . flip (IBound (max u u')) b)
-                                            =<< T.mapM (T.mapM l) m
-iLeqGLB_ _ r _ (IUniv u') (IBound u m b) = (return . flip (IBound (max u u')) b)
-                                            =<< T.mapM (T.mapM r) m
+iLeqGLB_ _ _ l _ _ _ (IBound u m b) (IUniv u') =
+ let v = max u u'
+ in return . flip (IBound v) b =<< T.mapM (T.mapM (l v $ IUniv v)) m
+iLeqGLB_ _ _ _ r _ _ (IUniv u') (IBound u m b) =
+ let v = max u u'
+ in return . flip (IBound v) b =<< T.mapM (T.mapM (r v $ IUniv v)) m
 
-iLeqGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
-    m'' <- mergeBoundLB q m m'
-    return $! IBound (max u u') m'' (b && b')
+iLeqGLB_ _ _ _ _ q _ (IBound u m b) (IBound u' m' b') = do
+    let v = max u u'
+    m'' <- mergeBoundLB (q v) m m'
+    return $! IBound v m'' (b && b')
 {-# INLINABLE iLeqGLB_ #-}
 
 -- | Matches partial order with uniqueness (⊑)
@@ -326,10 +368,10 @@ iSub_ _ _ (IAny _)       _              = return $ False
 iSub_ _ _ (IUniv u)      (IAny u')      = return $ u <= u'
 iSub_ _ _ (IUniv u)      (IUniv u')     = return $ u <= u'
 iSub_ _ _ (IUniv _)      _              = return $ False
-iSub_ q _ (IBound u b _) r@(IAny u')    = andM1 (u <= u') $
-    mfmamm (flip q r) b
-iSub_ q _ (IBound u b _) r@(IUniv u')   = andM1 (u <= u') $
-    mfmamm (flip q r) b
+iSub_ q _ (IBound u b _) (IAny u')    = andM1 (u <= u') $
+    mfmamm (\x -> q x (IAny u')) b
+iSub_ q _ (IBound u b _) (IUniv u')   = andM1 (u <= u') $
+    mfmamm (\x -> q x (IUniv u')) b
 iSub_ _ q (IBound u m b) (IBound u' m' b') = andM1 (u <= u' && b <= b') $
     flip mapForallM m $
       \f is -> case M.lookup f m' of
@@ -339,14 +381,24 @@ iSub_ _ q (IBound u m b) (IBound u' m' b') = andM1 (u <= u' && b <= b') $
 {-# INLINABLE iSub_ #-}
 
 -- | Compute the GLB under iSub_ (⊓)
+--
+-- Unlike 'iLeqGLB_', the \"lopsided merge\" callbacks do not need 'Uniq'
+-- inputs, as the uniqueness merge operation here is 'min' and 'Uniq' is
+-- required to be nondecreasing as we recurse through a term.
+-- Note further the lack of \"import\" callbacks: since the only relations
+-- on 'IFree' are with 'IFree' or 'iNotReached', there is no recursion to be
+-- done.
 iSubGLB_ :: (Ord f, Monad m)
-         => (i  -> m i'')
-         -> (i' -> m i'')
+         => (InstF f i' -> i  -> m i'')
+         -> (InstF f i  -> i' -> m i'')
          -> (i -> i' -> m i'')
          -> InstF f i -> InstF f i' -> m (InstF f i'')
 iSubGLB_ _ _ _ IFree      IFree        = return $ IFree
-iSubGLB_ _ _ _ IFree      b            = return $ iNotReached (iUniq b)
-iSubGLB_ _ _ _ a          IFree        = return $ iNotReached (iUniq a)
+    -- The 'fromJust' calls here are safe since it is guaranteed by the
+    -- above match that iUniq is being called on something that is not
+    -- 'IFree' and is therefore within its domain.
+iSubGLB_ _ _ _ IFree      b            = return $ iNotReached (MA.fromJust $ iUniq b)
+iSubGLB_ _ _ _ a          IFree        = return $ iNotReached (MA.fromJust $ iUniq a)
 
 iSubGLB_ _ _ _ (IAny u)   (IAny u')    = return $ IAny (min u u')
 
@@ -354,15 +406,15 @@ iSubGLB_ _ _ _ (IAny u')  (IUniv u)    = return $ IUniv (min u u')
 iSubGLB_ _ _ _ (IUniv u)  (IAny u')    = return $ IUniv (min u u')
 iSubGLB_ _ _ _ (IUniv u)  (IUniv u')   = return $ IUniv (min u u')
 
-iSubGLB_ l _ _ (IBound u m b) (IAny u') = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM l) m
-iSubGLB_ _ r _ (IAny u') (IBound u m b) = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM r) m
+iSubGLB_ l _ _ (IBound u m b) r@(IAny u') = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (l r)) m
+iSubGLB_ _ r _ l@(IAny u') (IBound u m b) = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (r l)) m
 
-iSubGLB_ l _ _ (IBound u m b) (IUniv u') = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM l) m
-iSubGLB_ _ r _ (IUniv u') (IBound u m b) = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM r) m
+iSubGLB_ l _ _ (IBound u m b) r@(IUniv u') = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (l r)) m
+iSubGLB_ _ r _ l@(IUniv u') (IBound u m b) = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (r l)) m
 
 iSubGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
     let u'' = min u u'
@@ -377,37 +429,59 @@ iSubGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
     return $ IBound u'' m'' (b && b')
 {-# INLINABLE iSubGLB_ #-}
 
+maxuniq :: forall a m t t' .
+           (Monad m, F.Foldable t, F.Foldable t')
+        => (a -> m Uniq) -> Uniq -> t (t' a) -> m Uniq
+
+maxuniq q0 = go (go q0 UUnique)
+ where go q = F.foldrM (\i u -> q i >>= return . max u)
+
 -- | Compute the LUB under iSub_ (⊔)
 --
 -- Since 'iSub_' is not a full lattice, this is a partial function (thus
 -- 'Maybe').  Note, however, that the recursion is defined to be total --
 -- thus it is the responsibility of the outer 'Monad' to bail out if any
 -- call to 'iSubGLB_' yields 'Nothing'.
-iSubLUB_ :: (Ord f, Monad m)
-         => (i  -> m i'')
-         -> (i' -> m i'')
+--
+-- Unlike the other calls, this one needs \"find the maximum 'Uniq' in an
+-- Inst\" callbacks for its lop-sided merge cases.  These callbacks should
+-- abort if they encounter free variables, in keeping with the defintion of
+-- ⊑ .
+iSubLUB_ :: (Ord f, Monad m, Show i, Show i', Show i'', Show f)
+         => (i  -> m Uniq)
+         -> (i' -> m Uniq)
+         -> (Uniq -> i  -> m i'')
+         -> (Uniq -> i' -> m i'')
          -> (i -> i' -> m i'')
          -> InstF f i -> InstF f i' -> m (Maybe (InstF f i''))
-iSubLUB_ _ _ _ IFree      IFree        = return $ Just IFree
-iSubLUB_ _ _ _ IFree      b     | iIsNotReached b = return $ Just IFree
-iSubLUB_ _ _ _ a          IFree | iIsNotReached a = return $ Just IFree
-iSubLUB_ _ _ _ IFree      _            = return $ Nothing
-iSubLUB_ _ _ _ _          IFree        = return $ Nothing
+iSubLUB_ _ _ _ _ _ IFree      IFree        = return $ Just IFree
+iSubLUB_ _ _ _ _ _ IFree      b     | iIsNotReached b = return $ Just IFree
+iSubLUB_ _ _ _ _ _ a          IFree | iIsNotReached a = return $ Just IFree
+iSubLUB_ _ _ _ _ _ IFree      _            = return $ Nothing
+iSubLUB_ _ _ _ _ _ _          IFree        = return $ Nothing
+                   
+iSubLUB_ _ _ _ _ _ (IAny u)   (IAny u')    = return $ Just $ IAny  (max u u')
+iSubLUB_ _ _ _ _ _ (IAny u')  (IUniv u)    = return $ Just $ IAny  (max u u')
+iSubLUB_ _ _ _ _ _ (IUniv u)  (IAny u')    = return $ Just $ IAny  (max u u')
+iSubLUB_ _ _ _ _ _ (IUniv u)  (IUniv u')   = return $ Just $ IUniv (max u u')
+                   
+iSubLUB_ l _ _ _ _ (IBound u m _) (IAny u') = do
+  lu <- maxuniq l u m
+  return (Just $ IAny (max lu u'))
+iSubLUB_ _ r _ _ _ (IAny u') (IBound u m _) = do
+  ru <- maxuniq r u m
+  return (Just $ IAny (max ru u'))
+iSubLUB_ l _ _ _ _ (IBound u m _) (IUniv u') = do
+  lu <- maxuniq l u m
+  return (Just $ IUniv (max lu u'))
+iSubLUB_ _ r _ _ _ (IUniv u') (IBound u m _) = do
+  ru <- maxuniq r u m
+  return (Just $ IUniv (max ru u'))
 
-iSubLUB_ _ _ _ (IAny u)   (IAny u')    = return $ Just $ IAny  (max u u')
-iSubLUB_ _ _ _ (IAny u')  (IUniv u)    = return $ Just $ IAny  (max u u')
-iSubLUB_ _ _ _ (IUniv u)  (IAny u')    = return $ Just $ IAny  (max u u')
-iSubLUB_ _ _ _ (IUniv u)  (IUniv u')   = return $ Just $ IUniv (max u u')
-
-iSubLUB_ _ _ _ (IBound u _ _) (IAny u') = return $ Just $ IAny (max u u')
-iSubLUB_ _ _ _ (IAny u') (IBound u _ _) = return $ Just $ IAny (max u u')
-
-iSubLUB_ _ _ _ (IBound u _ _) (IUniv u') = return $ Just $ IUniv (max u u')
-iSubLUB_ _ _ _ (IUniv u') (IBound u _ _) = return $ Just $ IUniv (max u u')
-
-iSubLUB_ l r q (IBound u m b) (IBound u' m' b') = do
-    m'' <- mergeBoundUB q l r m m'
-    return $! Just $! IBound (max u u') m'' (b || b')
+iSubLUB_ _ _ l r q (IBound u m b) (IBound u' m' b') = do
+     let v = max u u'
+     m'' <- mergeBoundUB q (l v) (r v) m m'
+     return $! Just $! IBound v m'' (b || b')
 {-# INLINABLE iSubLUB_ #-}
 
 ------------------------------------------------------------------------}}}
