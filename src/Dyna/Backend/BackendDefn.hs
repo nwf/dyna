@@ -3,15 +3,19 @@
 
 -- Header material                                                      {{{
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE Rank2Types #-}
 
-module Dyna.Main.BackendDefn where
+module Dyna.Backend.BackendDefn where
 
 import qualified Data.Set as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
-import           Dyna.Analysis.RuleMode (Action, BackendPossible, Cost,
-                                         UpdateEvalMap, QueryEvalMap)
-import           Dyna.Term.TTerm (DFunctAr)
+import           Dyna.Analysis.DOpAMine (BackendRenderDopIter, ModedVar)
+import           Dyna.Analysis.Mode.Det
+import           Dyna.Analysis.RuleMode (
+                    Actions, BackendPossible, Cost,
+                    UpdateEvalMap {-, QueryEvalMap -})
+import           Dyna.Term.TTerm (DFunct, DFunctAr)
 import           System.IO (Handle)
 
 -- XXX The notion of be_constants is not quite right, I think?  It is used
@@ -21,26 +25,23 @@ import           System.IO (Handle)
 
 type BackendDriver bs = AggMap                   -- ^ Aggregation
                       -> UpdateEvalMap bs        -- ^ Rule update
-                      -> QueryEvalMap bs         -- ^ Rule query
-                      -> [(Rule,Cost,Action bs)] -- ^ Initializers
+                      -- -> QueryEvalMap bs         -- ^ Rule query
+                      -> [(Rule,Cost,Actions bs)] -- ^ Initializers
                       -> Handle                  -- ^ Output
                       -> IO ()
 
 data Backend = forall bs . Backend
-             { -- | Builtin support hook for mode planning.  Options are
-               --   to return
-               -- 
-               --   * @Left False@  -- This functor is not built in
-               --
-               --   * @Left True@   -- There is no plan for this mode
-               --
-               --   * @Right (d,b)@ -- There is a plan here with determinism
-               --                      @d@ and backend-specific data @b@.
+             { -- | Hook for planner to get builtin information
                be_builtin :: BackendPossible bs
 
                -- | Any constants made available by this backend.
+               -- 
+               -- XXX
              , be_constants :: S.Set DFunctAr
-              
+
+               -- | Debugging hook to render bits of DOpAMine which
+               -- are "backend-specific"
+             , be_debug_dop_iter :: forall e . BackendRenderDopIter bs e
                -- | Backend driver
              , be_driver  :: BackendDriver bs
              }

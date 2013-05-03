@@ -33,7 +33,20 @@ ghcbuild:
 		-o         dist/build/dyna-selftests/dyna-selftests     \
 		-outputdir dist/build/dyna-selftests/dyna-selftests-tmp \
 		-main-is Dyna.Main.TestsDriver Dyna.Main.TestsDriver
-	
+
+# Every now and again we need to make a profiling build of some component
+# of the tree.  Se MAINMOD and MAINFILE and make this target.
+profbuild:
+	mkdir -p dist/pb
+	ghc --make -isrc \
+	     -o         dist/pb/a.out \
+		 -outputdir dist/pb \
+		 -main-is $(MAINMOD) $(MAINFILE)
+	ghc --make -isrc -osuf p.o -prof -fprof-auto \
+	     -o         dist/pb/a.out \
+		 -outputdir dist/pb \
+		 -main-is $(MAINMOD) $(MAINFILE)
+
 tests:
 	dist/build/dyna-selftests/dyna-selftests
 
@@ -45,5 +58,9 @@ clean:
 	rm -rf examples/*.dyna.plan  \
            examples/*.dyna.*.out \
            examples/*.dyna.d
+	rm -f tags TAGS
 veryclean: clean
 	rm -rf dist
+
+tags TAGS:
+	hasktags -b src

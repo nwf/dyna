@@ -19,20 +19,21 @@ data UnifFail =
     UFSemiClob -- ^ see 'semidet_clobbered_unify'
   | UFNotReach -- ^ Some nested unification satisfies 'iNotReached'
   | UFExDomain -- ^ A partial function was applied outside its domain
+ deriving (Eq,Ord,Show)
 
 ------------------------------------------------------------------------}}}
 -- Unification                                                          {{{
 
 -- | This predicate is used to ensure that we reject any attempt at
 -- unification which could fail (i.e. is semidet, or, possibly better
--- phrased, must traverse the structure of its argument) and may reference
--- clobbered state.
+-- phrased, must traverse the structure of its argument) and may attempt
+-- to read clobbered state.
 --
 -- In words, a unification can enter its arguments whenever
 --     1. both inputs are not free variables (a free variable turns
 --        unification into assignment; two makes it aliasing)
 --     2. either input represents more than one possible term
-
+--
 -- The thesis will invoke this function (or rather, its negation) to allow a
 -- /dead/ unification (i.e., one in which one of the two variables is not
 -- live going forward) to succeed.  Live unifications are probably (yes?
@@ -54,6 +55,7 @@ semidet_clobbered_unify i i' = return $
   && (   UMostlyClobbered <= MA.fromJust (iUniq i )
       || UMostlyClobbered <= MA.fromJust (iUniq i'))
     -- The above fromJust calls are safe due to the 'iIsFree' guards.
+{-# INLINABLE semidet_clobbered_unify #-}
 
 iLeqGLBRD_,iLeqGLBRL_
   :: (Monad m, Ord f)
@@ -71,10 +73,12 @@ iLeqGLBRD_ il ir ml mr m u i1 i2 = do
     return $ if iIsNotReached io
               then Left  UFNotReach
               else Right io
+{-# INLINABLE iLeqGLBRD_ #-}
 iLeqGLBRL_ il ir ml mr m u i1 i2 = do
     scu <- semidet_clobbered_unify i1 i2
     if scu
      then return (Left UFSemiClob)
      else iLeqGLBRD_ il ir ml mr m u i1 i2
+{-# INLINABLE iLeqGLBRL_ #-}
 
 ------------------------------------------------------------------------}}}

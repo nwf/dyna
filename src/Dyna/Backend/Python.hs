@@ -4,13 +4,17 @@
 -- See bin/interpreter.py
 
 -- Header material                                                      {{{
+{-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Dyna.Backend.Python (pythonBackend) where
 
 import           Control.Applicative ((<*))
 import qualified Control.Arrow              as A
 import           Control.Exception
+import           Control.Lens ((^.))
 import           Control.Monad
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.UTF8       as BU
@@ -23,10 +27,11 @@ import qualified Data.Ord                   as O
 import qualified Data.Set                   as S
 import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
-import           Dyna.Analysis.Base
 import           Dyna.Analysis.Aggregation
+import           Dyna.Analysis.DOpAMine
+import           Dyna.Analysis.Mode
 import           Dyna.Analysis.RuleMode
-import           Dyna.Main.BackendDefn
+import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 import qualified Dyna.ParserHS.Parser       as P
@@ -40,66 +45,101 @@ import qualified Text.Trifecta              as T
 ------------------------------------------------------------------------}}}
 -- DOpAMine Backend Information                                         {{{
 
--- At the moment, we pass through a @Maybe ()@ to indicate whether or not
--- we're making a call.  See the call to pycall in pdope_ below.
-type PyDopeBS = ()
+-- | We can optionally attach a function to an 'OPIter' call,
+-- which lets us permute arguments and so on when we go to do code
+-- generation without having to re-probe the modes.
+newtype PyDopeBS = PDBS (forall e . ModedVar -> [ModedVar] -> Doc e)
+
+nfree = nHide IFree
+nuniv = nHide (IUniv UShared)
+
+isGround, isFree :: ModedVar -> Bool
+isGround v = nGround (v^.mv_mi)
+isFree v = nSub (v^.mv_mi) nfree
 
 builtins :: BackendPossible PyDopeBS
 builtins (f,is,o) = case () of
-  _ | all isBound is && S.member (f,length is) constants
-    -> case modeOf o of
-         MFree  -> Right [OPIter o is f Det (Just ())]
-         MBound -> let chkv = "_chk"
-                   in Right $ [ OPIter (MF chkv) is f Det (Just ())
-                              , OPCheq chkv (varOfMV o)
-                              ]
+  _ | all isGround is 
+    -> maybe (Left False) gencall $ M.lookup (f,length is) constants
+        where
+         gencall pc = case () of
+                        _ | isFree o ->
+                         Right $ BAct [OPIter o is f Det (Just pc)]
+                                      [(o^.mv_var, nuniv)]
+                        _ | isGround o ->
+                          let chkv = "_chk"
+                              fchk = MV chkv nfree nuniv
+                          in Right $ BAct [ OPIter fchk is f Det (Just pc)
+                                          , OPCheq chkv (o^.mv_var) ]
+                                          []
+                        _ -> Left True
 
-  _ | f == "+"
-    -> case (is,o) of
-         ([x@(MB _),y@(MF _)],MB _) -> Right [OPIter y [o,x] "-" Det $ Just ()]
-         ([x@(MF _),y@(MB _)],MB _) -> Right [OPIter x [o,y] "-" Det $ Just ()]
+  -- XXX These next two branches have nothing specific about Python at all
+  -- and shouldn't be here.  Similarly, the corresponding entries in
+  -- NoBackend also shouldn't be around (possibly).  These should be handled
+  -- much more generically earlier in the pipeline.
+  _ | f == "+" && isGround o
+    -> case is of
+         [x,y] | isGround x && isFree y
+               -> Right $ BAct [OPIter y [o,x] "-" Det (Just$ PDBS$ infixOp "-")]
+                               [(y^.mv_var, nuniv)]
+         [x,y] | isFree x && isGround y
+               -> Right $ BAct [OPIter x [o,y] "-" Det (Just$ PDBS$ infixOp "-")]
+                               [(x^.mv_var, nuniv)]
          _ -> Left True
 
-  _ | f == "-"
-    -> case (is,o) of
-         ([x@(MB _),y@(MF _)],MB _) -> Right [OPIter y [x,o] "-" Det $ Just ()]
-         ([x@(MF _),y@(MB _)],MB _) -> Right [OPIter x [o,y] "+" Det $ Just ()]
+  _ | f == "-" && isGround o
+    -> case is of
+         [x,y] | isGround x && isFree y
+               -> Right $ BAct [OPIter y [x,o] "-" Det (Just$ PDBS$ infixOp "-")]
+                               [(y^.mv_var, nuniv)]
+         [x,y] | isFree x && isGround y
+               -> Right $ BAct [OPIter x [o,y] "+" Det (Just$ PDBS$ infixOp "+")]
+                               [(x^.mv_var, nuniv)]
          _ -> Left True
 
-  _ | S.member (f,length is) constants  -> Left True
+  _ | M.member (f,length is) constants  -> Left True
   _ -> Left False
 
--- XXX This and pycall ought to be merged
-constants :: S.Set (DFunct,Int)
-constants = S.fromList
-    [ ("+",2)
-    , ("-",2)
-    , ("-",1)    -- unary negation
-    , ("*",2)
-    , ("/",2)
-    , ("^",2)
-    , ("&",2)
-    , ("|",2)
-    , ("%",2)
-    , ("**",2)
-    , ("<",2)
-    , ("<=",2)
-    , (">",2)
-    , (">=",2)
-    , ("=",2)
-    , ("!",1)
-    , ("mod",1)
-    , ("abs",1)
-    , ("log",1)
-    , ("exp",1)
-    , ("and",2)
-    , ("or",2)
-    , ("not",1)
-    , ("eval",1)
-    , ("true",0)
-    , ("false",0)
-    , ("null",0)   -- XXX is this right?
+infixOp op _ vis = sepBy op $ mpv vis
+mpv = map (pretty . (^.mv_var))
+
+constants :: M.Map (DFunct,Int) PyDopeBS
+constants = M.fromList
+    [(("+",2)     , PDBS $ infixOp "+"    )
+    ,(("-",2)     , PDBS $ infixOp "-"    )
+    ,(("*",2)     , PDBS $ infixOp "*"    )
+    ,(("/",2)     , PDBS $ infixOp "/"    )
+    ,(("^",2)     , PDBS $ infixOp "^"    )
+    ,(("&",2)     , PDBS $ infixOp "&"    )
+    ,(("|",2)     , PDBS $ infixOp "|"    )
+    ,(("%",2)     , PDBS $ infixOp "%"    )
+    ,(("**",2)    , PDBS $ infixOp "**"   )
+    ,(("<",2)     , PDBS $ infixOp "<"    )
+    ,(("<=",2)    , PDBS $ infixOp "<="   )
+    ,((">",2)     , PDBS $ infixOp ">"    )
+    ,((">=",2)    , PDBS $ infixOp ">="   )
+    ,(("=",2)     , PDBS $ infixOp "="    )
+    ,(("!=",2)    , PDBS $ infixOp "!="   )
+    ,(("and",2)   , PDBS $ infixOp "and"  )
+    ,(("or",2)    , PDBS $ infixOp "or"   )
+
+    ,(("true",0)  , PDBS $ nullary "True" )
+    ,(("false",0) , PDBS $ nullary "False")
+    ,(("null",0)  , PDBS $ nullary "None" )
+
+    ,(("-",1)     , PDBS $ call "-"       )
+    ,(("!",1)     , PDBS $ call "not"     )
+    ,(("not",1)   , PDBS $ call "not"     )
+    ,(("mod",1)   , PDBS $ call "mod"     )
+    ,(("abs",1)   , PDBS $ call "abs"     )
+    ,(("log",1)   , PDBS $ call "log"     )
+    ,(("exp",1)   , PDBS $ call "exp"     )
+    ,(("$eval",1) , PDBS $ call "$eval"   )
     ]
+ where
+  nullary v  _ _   = v
+  call    fn _ vis = fn <> (parens $ sepBy "," $ mpv vis)
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{
@@ -118,48 +158,12 @@ tupledOrUnderscore vs = if length vs > 0
                          then parens ((sepBy "," $ map pretty vs) <> ",")
                          else text "_"
 
-filterBound = map (\(MF v) -> pretty v) . filter (not.isBound)
 
 pslice vs = brackets $
-       sepBy "," (map (\x -> case x of (MF _) -> ":" ; (MB v) -> pretty v) vs)
+       sepBy "," (map (\x -> if nGround (x^.mv_mi) then pretty (x^.mv_var) else ":") vs)
        <> "," -- add a list comma to ensure getitem is always passed a tuple.
 
-pycall f vs = case (f, length vs) of
-  (  "*", 2) -> infixOp " * "
-  (  "+", 2) -> infixOp " + "
-  (  "-", 2) -> infixOp " - "
-  (  "/", 2) -> infixOp " / "
-  (  "^", 2) -> infixOp " ** "
-  (  "&", 2) -> infixOp " and " -- note: python's 'and' and 'or' operate on more than bool
-  (  "|", 2) -> infixOp " or "
-  (  "=", 2) -> infixOp " == "
-  (  "<", 2) -> infixOp " < "
-  ( "<=", 2) -> infixOp " <= "
-  (  ">", 2) -> infixOp " > "
-  ( ">=", 2) -> infixOp " >= "
-  ( "==", 2) -> infixOp " == "
-  ( "!=", 2) -> infixOp " != "
-  ("mod", 2) -> infixOp " % "
-
-  ("eval", 1) -> call "eval"   -- note: security hole.
-
-  ( "abs", 1) -> call "abs"
-  ( "log", 1) -> call "log"
-  ( "exp", 1) -> call "exp"
-  (   "!", 1) -> call "not"
-  (   "-", 1) -> call "-"
-
-  ( "null", 0) -> "None"
-  ( "true", 0) -> "True"
-  ("false", 0) -> "False"
-
-  x            -> dynacPanic $ "Python.hs: Unknown request to pycall: "
-                               <> pretty x
-
- where pretty_vs = map (pretty . varOfMV) vs
-       call name = name <> (parens $ sepBy ", " $ pretty_vs)
-       infixOp op = sepBy op $ pretty_vs
-
+filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
 -- | Render a single dopamine opcode or its surrogate
 pdope_ :: DOpAMine PyDopeBS -> Doc e
@@ -172,8 +176,8 @@ pdope_ (OPCkne v val) = "if" <+> pretty v <+> "=="
 pdope_ (OPPeel vs i f) =
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs
-            <+> equals <> " "
-                <> "peel" <> (parens $ pfas f vs <> comma <> pretty i)
+            <+> equals
+                <+> "peel" <> (parens $ pfas f vs <> comma <> pretty i)
      )
     -- you'll get a "TypeError: 'NoneType' is not iterable."
     `above` "except (TypeError, AssertionError): continue"
@@ -183,17 +187,17 @@ pdope_ (OPWrap v vs f) = pretty v
                            <> (parens $ pfas f vs <> comma
                                 <> (sepBy "," $ map pretty vs))
 
-pdope_ (OPIter v vs f _ (Just ())) = pretty (varOfMV v)
+pdope_ (OPIter v vs f _ (Just (PDBS c))) = pretty (v^.mv_var)
                                      <+> equals
-                                     <+> pycall f vs
+                                     <+> c v vs
 
 pdope_ (OPIter o m f _ Nothing) =
       let mo = m ++ [o] in
-          "for" <+> (tupledOrUnderscore $ filterBound mo)
+          "for" <+> (tupledOrUnderscore $ filterGround mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
 -- | Render a dopamine sequence's checks and loops above a (indended) core.
-pdope :: [DOpAMine PyDopeBS] -> Doc e -> Doc e
+pdope :: Actions PyDopeBS -> Doc e -> Doc e
 pdope _d _e =         (indent 4 $ "for _ in [None]:")
               `above` (indent 8 $ go _d _e)
  where
@@ -223,7 +227,7 @@ findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
     Just (Left _)      -> error "NTVar head?"
     Just (Right (f,a)) -> Just (f, length a)
 
-printInitializer :: Handle -> Rule -> Action PyDopeBS -> IO ()
+printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
 printInitializer fh rule@(Rule _ h _ r _ _) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA rule)
@@ -234,7 +238,7 @@ printInitializer fh rule@(Rule _ h _ r _ _) dope = do
    emit = "emit" <> tupled [pretty h, pretty r]
 
 -- XXX INDIR EVAL
-printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Action PyDopeBS -> IO ()
+printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
 printUpdate fh rule@(Rule _ h _ r _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
@@ -248,7 +252,7 @@ printUpdate fh rule@(Rule _ h _ r _ _) (Just (f,a)) (hv,v) dope = do
 -- Driver                                                               {{{
 
 driver :: BackendDriver PyDopeBS
-driver am um qm is fh = do
+driver am um {-qm-} is fh = do
   -- Aggregation mapping
   hPutStrLn fh $ "agg_decl = {}"
   forM_ (M.toList am) $ \((f,a),v) -> do
@@ -273,6 +277,7 @@ driver am um qm is fh = do
     printPlanHeader  fh r c
     printInitializer fh r a
 
+{-
   hPutStrLn fh $ "# ==Queries=="
 
   forM_ (M.toList qm) $ \(fa, ps) -> do
@@ -283,12 +288,15 @@ driver am um qm is fh = do
       -- XXX
       -- displayIO fh $ renderPretty 1.0 100 $ pdope a "XXX"
       hPutStrLn fh ""
-
+-}
 
 ------------------------------------------------------------------------}}}
 -- Export                                                               {{{
 
 pythonBackend :: Backend
-pythonBackend = Backend builtins constants driver
+pythonBackend = Backend builtins
+                        (M.keysSet constants)
+                        (\o is _ _ (PDBS e) -> e o is)
+                        driver
 
 ------------------------------------------------------------------------}}}

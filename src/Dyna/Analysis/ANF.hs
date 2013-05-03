@@ -87,8 +87,8 @@ import qualified Data.Char                  as C
 import qualified Data.Map                   as M
 -- import qualified Debug.Trace                as XT
 import qualified Dyna.ParserHS.Parser       as P
-import           Dyna.Analysis.Base
 import           Dyna.Term.TTerm
+import           Dyna.Term.Normalized
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils (mapInOrApp)
 import           Dyna.XXX.PPrint (valign)

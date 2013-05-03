@@ -36,36 +36,10 @@ import           Test.QuickCheck.Property
 
 import qualified Debug.Trace as XT
 
+{-
 fromList :: Ord k => [(k,v)] -> M.Map k v
 fromList = M.fromList
-
--- | Generate an Arbitrary 'NIXM' Entry (i.e. either a closed NIX automata
--- or  
-arbNIXME :: forall f i . (f ~ TestFunct)
-         => Gen i -> Gen (Either (NIX f) (InstF f i))
-arbNIXME igen = oneof [Left  <$> sized (\s -> resize (s`div`2) arbitrary)
-                      ,Right <$> arbInstPly igen]
-
-arbNIX = do
-    n <- sized (\s -> choose (1::Int,max 1 s)) -- How many plies?
-    let nl   = [1..n]
-    let igen = choose (1::Int,n)               -- Pick a ply
-    plies <- vectorOf n (arbNIXME igen)        -- Generate plies or recurse
-    let m = M.fromList $ zip nl plies          -- Make the map
-    root <- arbInstPly igen                    -- The root
-    return $ NIX root m
-
-instance Arbitrary (NIX TestFunct) where
-  arbitrary = nPrune <$> arbNIX
-
-  shrink n@(NIX r m) = (MA.maybeToList noRecN) ++ subautomata
-   where
-    -- Replace all calls out to other automata with references to the root
-    noRecN = if null (E.lefts $ M.elems m) then Nothing else Just $ NIX r m'
-     where m' = M.map (either (const $ Right r) Right) m
-
-    -- Pull out all the subautomata
-    subautomata = E.lefts (M.elems m)
+-}
 
 nWFU = nWellFormedUniq UUnique
 
@@ -156,6 +130,15 @@ prop_nSubGLB_is_G i1 i2 i3 = nWFU i1 && nWFU i2 && nWFU i3
 --                                 (\i -> property $ i1 `nSub` i && i2 `nSub` i)
 --                           $ nSubLUB i1 i2
 
+-- | When we enact a call, the rules (figure 3.13, p45; see also 'doCall')
+-- tell us that we first check that the incoming variables are all ⊑ the
+-- input half of the mode, then unify the input variables with the output
+-- half of the mode.  We know that the output half is ≼ the input half.
+prop_call_test_sufficient :: NIX TestFunct -> NIX TestFunct -> Property
+prop_call_test_sufficient i1 i2 =    nWFU i1 && nWFU i2
+                                  && nNotEmpty i1 && nNotEmpty i2
+                                  && nSub i1 i2
+                              ==> nNotEmpty (nLeqGLB i1 i2)
 
 selftest :: TF.Test
 selftest = moreTries 10000 $ moreTests 400 $(testGroupGenerator)

@@ -63,6 +63,17 @@ case_basicFunctor = e @=? (term sfb)
   sfb :: (IsString s) => s
   sfb = "foo(bar)"
 
+case_dollarFunctor :: Assertion
+case_dollarFunctor = e @=? (term sfb)
+ where
+  e =  TFunctor "$foo"
+         [TFunctor "bar" [] :~ Span (Columns 5 5) (Columns 8 8) sfb
+         ]
+        :~ Span (Columns 0 0) (Columns 9 9) sfb
+
+  sfb :: (IsString s) => s
+  sfb = "$foo(bar)"
+
 case_nestedFunctorsWithArgs :: Assertion
 case_nestedFunctorsWithArgs = e @=? (term st)
  where

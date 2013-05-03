@@ -29,9 +29,8 @@ Library
 
 
     Exposed-Modules:    Dyna.Analysis.ANF,
-                        Dyna.Analysis.Base,
                         Dyna.Analysis.Mode,
-                        Dyna.Main.BackendDefn,
+                        Dyna.Backend.BackendDefn,
                         Dyna.Main.Driver,
                         Dyna.Main.Exception,
                         Dyna.ParserHS.Parser,
@@ -42,6 +41,8 @@ Library
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        either >= 3.4,
+                        ghc-prim,
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
@@ -71,6 +72,7 @@ Library
 --                         bytestring >=0.9,
 --                         charset >=0.3,
 --                         containers >=0.4,
+--                         either >= 3.4,
 --                         haskeline >=0.6,
 --                         mtl >=2.1,
 --                         lens >=3.8,
@@ -101,7 +103,9 @@ Executable dyna
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        either >= 3.4,
                         haskeline >=0.6,
+                        ghc-prim,
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
@@ -134,6 +138,8 @@ Test-suite dyna-selftests
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        either >= 3.4,
+                        ghc-prim,
                         HUnit >=1.2,
                         mtl >=2.1,
                         lens >=3.8,
@@ -155,6 +161,7 @@ Test-suite dyna-selftests
                         trifecta >= 1.0,
                         unordered-containers>=0.2,
                         utf8-string >=0.3,
-                        wl-pprint-extras >=3.0
+                        wl-pprint-extras >=3.0,
+                        wl-pprint-terminfo >=3.0
 
     Main-Is: Dyna/Main/TestsDriver.hs

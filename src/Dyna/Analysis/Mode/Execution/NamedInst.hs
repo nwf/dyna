@@ -21,17 +21,19 @@ module Dyna.Analysis.Mode.Execution.NamedInst (
     -- * Well-formedness predicates
     nWellFormedUniq, nWellFormedOC,
     -- * Unary functions
-    nGround, nUpUniq, nPrune, nExpose, nHide,
+    nNotEmpty, nGround, nUpUniq, nPrune, nExpose, nHide,
     -- * Binary comparators
     nCmp, nEq, nLeq, nSub,
     -- * Total binary functions
     nTBin, nLeqGLB, nSubGLB,
     -- * Partial binary functions
     nPBin, nLeqGLBRD, nLeqGLBRL, -- nSubLUB,
+    -- * Mode functions
+    mWellFormed,
 ) where
 
 import           Control.Applicative
--- import qualified Control.Arrow                     as A
+import qualified Control.Arrow                     as A
 import           Control.Lens
 import           Control.Monad.State
 import           Control.Monad.Trans.Either
@@ -40,16 +42,16 @@ import qualified Data.HashSet                      as H
 import qualified Data.Map                          as M
 import qualified Data.Set                          as S
 import qualified Data.Traversable                  as T
+-- import qualified Debug.Trace                       as XT
 import           Dyna.Analysis.Mode.Inst
+import           Dyna.Analysis.Mode.Mode
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Main.Exception
 import           Dyna.XXX.MonadUtils
-
--- import qualified Debug.Trace                       as XT
-
 import           System.IO.Unsafe (unsafePerformIO)
 import           System.Mem.StableName (makeStableName)
+import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Datatype definition                                                  {{{
@@ -83,6 +85,37 @@ data NIX f = forall a . (Ord a,Show a) =>
 -- XXX This is hideously ugly, but we can clean it up later
 instance (Show f) => Show (NIX f) where
  show (NIX r m) = "(NIX ("++ (show r) ++ ") (" ++ (show m) ++ "))"
+
+instance (Pretty f) => Pretty (NIX f) where
+ pretty (NIX r m) = ri r <> if M.null m
+                             then empty
+                             else align $ indent 2
+                                  (    (text "where")
+                                   <+> (vsep $ map rme $ M.toList m))
+  where
+   -- render index
+   rix = angles . text . show
+
+   -- render map entry
+   rme (k,v) = rix k <+> equals <+> either pretty ri v
+
+   -- render uniq (XXX own pretty instance instead?)
+   ru u = text $ case u of
+                   UUnique          -> "un"
+                   UMostlyUnique    -> "mu"
+                   UShared          -> "sh"
+                   UMostlyClobbered -> "mc"
+                   UClobbered       -> "cl"
+
+   -- render inst
+   ri IFree          = text "$f"
+   ri (IAny u)       = text "$a@" <> ru u
+   ri (IUniv u)      = text "$u@" <> ru u
+   ri (IBound u bm b) = ru u
+                     <> (semiBraces $ if b then (text "$b"):rm else rm)
+    where
+     rm = map (\(k,vs) -> pretty k <> tupled (map rix vs)) (M.toList bm)
+                    
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
@@ -169,6 +202,7 @@ nWellFormedOC = go H.empty
     q v a = tsc id a
             (eml n0 (return . go v) (visit (q v)) m a >> return True)
 
+-- | Is a named inst ground?
 nGround :: forall f . NIX f -> Bool
 nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
  where
@@ -178,8 +212,23 @@ nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
   q (Right a) = tsc id a $ ml n0 m a >>= iGround_ q
   -}
 
--- | Prune the internals of a 'NIX'.  This really ought not be needed, but
--- it's handy for test generation.
+-- | Is there some term not ruled out by this inst?
+--
+-- This is mostly useful for the test harness, not actual reasoning, at
+-- the moment, since we are not sufficiently precise (i.e. we will miss some
+-- empty unification results).
+nNotEmpty :: forall f . NIX f -> Bool
+nNotEmpty n0@(NIX i0 m0) = evalState (visit i0) S.empty
+ where
+  visit IFree     = return True
+  visit (IUniv _) = return True
+  visit (IAny _)  = return True
+  visit (IBound _ m b) = b `orM1` (anyM $ M.foldr (\fas a -> allM (map rec fas) : a) [] m)
+
+  rec idx = do
+    already <- gets (S.member idx)
+    already `orM1` eml n0 (return . nNotEmpty)
+                          (\v -> modify (S.insert idx) >> visit v) m0 idx
 
 nCrawl :: forall f . (Ord f)
        => (forall a . Uniq -> InstF f a) -- ^ Replace free variables
@@ -207,30 +256,33 @@ nCrawl fv u0 n0@(NIX i0 m) =
                   F.traverse_ (evac (maybe u (max u) $ iUniq x)) x
                   return ()
 
-
+-- | Prune the internals of a 'NIX'.  This really ought not be needed, but
+-- it's handy for test generation.
 nPrune :: forall f . (Ord f) => NIX f -> NIX f
 nPrune = nCrawl (const IFree) UUnique
 
-nUpUniq :: forall f . (Ord f) => Uniq -> NIX f -> NIX f
-nUpUniq = nCrawl (const IFree)
-{-
 -- | Increase the nonuniqueness of a particular named inst to at least the
 -- given level.
-nUpUniq :: forall f . Uniq -> NIX f -> NIX f
+nUpUniq :: forall f . (Ord f) => Uniq -> NIX f -> NIX f
+
+-- XXX a simplistic, cruft-removing, but inefficient solution.
+-- nUpUniq = nCrawl (const IFree)
+
+{-
+ - XXX The beginnings of a possibly more efficient implementation
+nUpUniq u0 n0@(NIX i0 m) = uncurry NIX $ runState (T.traverse visit i0) m
+ where
+  visit a = eml n0 (return . nUpUniq u0)
+                   (T.traverse visit (over inst_uniq (max u0)))
+-}
 nUpUniq u0 n0@(NIX i0 m0) =
    maybe n0 (\u' -> if u' >= u0 then n0 else NIX i0' m0') (iUniq i0)
  where
   reuniq = over inst_uniq (max u0)
-{-
-  reuniq   (IFree          ) = IFree
-  reuniq i@(IUniv  u'      ) = if u' >= u0 then i else IUniv u0
-  reuniq i@(IAny   u'      ) = if u' >= u0 then i else IAny u0
-  reuniq i@(IBound u' im ib) = if u' >= u0 then i else IBound u0 im ib
--}
 
   m0' = M.map (nUpUniq u0 A.+++ reuniq) m0
   i0' = reuniq i0
--}
+{-# INLINABLE nUpUniq #-}
 
 -- | Expose the root ply of a 'NIX' as an Inst which recurses as additional
 -- 'NIX' elements.
@@ -388,6 +440,7 @@ nTBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (tlq li0 ri0) iNBS
       nbs_ctx %= M.insert k v
       return k
 
+-- | Total lattice functions
 nLeqGLB, nSubGLB :: forall f . (Ord f, Show f) => NIX f -> NIX f -> NIX f
 nLeqGLB = nTBin iLeqGLB_
 nSubGLB = nTBin (\_ _ fl fr fm _ -> iSubGLB_ (fl UUnique) (fr UUnique) (fm UUnique))
@@ -488,6 +541,8 @@ nPBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (runEitherT (tlq li0 ri0)) i
       nbs_ctx %= M.insert k v
       return k
 
+-- | Partial lattice functions.  These raise unification failures if
+-- the runtime would fail.
 nLeqGLBRD, nLeqGLBRL :: forall f . (Ord f, Show f) => NIX f -> NIX f -> Either UnifFail (NIX f)
 nLeqGLBRD = nPBin iLeqGLBRD_
 nLeqGLBRL = nPBin iLeqGLBRL_
@@ -503,5 +558,22 @@ I have other things that can demand attention.
 nSubLUB :: forall f . (Ord f, Show f) => NIX f -> NIX f -> Maybe (NIX f)
 nSubLUB = nPBin (\il ir ll lr m -> iSubLUB_ il ir (ll UClobbered) (lr UClobbered) (m UClobbered))
 -}
+
+------------------------------------------------------------------------}}}
+-- Mode functions                                                       {{{
+
+-- | Check that all names in a mode are indeed well-formed and that all
+-- transitions are according to ≼.
+--
+-- This lives in Execution.NamedInst because it requires that we be using
+-- named insts within the 'QMode'.
+--
+-- See prose, p35.
+mWellFormed :: forall f . (Ord f, Show f) => QMode (NIX f) -> Bool
+mWellFormed (QMode ats vm@(vti,vto) _) =
+  (all (nWellFormedUniq UUnique)
+       $ vti:vto:concatMap (\(i,o) -> [i,o]) ats)
+  &&
+  (all (uncurry (flip nLeq)) $ vm:ats)
 
 ------------------------------------------------------------------------}}}

@@ -2,12 +2,23 @@
 -- | Class definitions for "context" monads.
 
 -- Header material                                                      {{{
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
 module Dyna.XXX.MonadContext(
-  MCVT, MCA(..), MCD(..), MCF(..), MCM(..), MCN(..), MCR(..), MCW(..),
+  MCVT, MCA(..), MCD(..), MCF(..), MCM(..), MCNC, MCN(..), MCR(..), MCW(..),
 ) where
+
+import GHC.Prim (Constraint)
+-- import           Control.Monad.Trans
+-- import           Control.Monad.Trans.Either
+
+------------------------------------------------------------------------}}}
+-- Fine-grained context classes                                         {{{
 
 type family MCVT (m :: * -> *) (k :: *) :: *
 
@@ -20,18 +31,29 @@ class (Monad m) => MCW m k where
   cassign :: k -> MCVT m k -> m ()
 
 -- | The monad @m@ is able to merge the assertion @k = v@ into
--- its context, provided a mechanism to merge values, if necessary.
+-- its context, provided a mechanism to merge values.
 class (Monad m) => MCM m k where
-  cmerge :: (MCVT m k -> MCVT m k -> m (MCVT m k)) -> k -> (MCVT m k) -> m ()
+  cmerge :: (MCVT m k -> b -> m (MCVT m k))
+         -> k -> b -> m ()
 
 -- | It is possible to delete keys of type @k@ from the context @m@.
 class (Monad m) => MCD m k where
   cdelete :: k -> m (MCVT m k)
 
--- | The monad @m@ is able to fabricate new keys given only a value.
--- This is likely especially useful when @m@ is 'MonadFix'.
+{-
 class (Monad m) => MCN m k where
-  cnew :: (MCVT m k) -> m k
+  -- XXX OLD FORM cnew :: (MCVT m k) -> m k
+  cnew :: (k -> m (MCVT m k)) -> m k
+-}
+
+type family MCNC k (m' :: * -> *) :: Constraint
+
+-- | The monad @m@ is able to fabricate new keys given a function
+-- which can produce a value from a key.  Likely, an instance of 'MCN'
+-- will require 'MonadFix', but not always; that's the purpose of 'MCNC'.
+class (Monad m) => MCN m k where
+  cnew :: (Monad m', MCNC k m')
+       => (forall a . m a -> m' a) -> (k -> m' (MCVT m k)) -> m' k
 
 -- | The monad @m@ is able to generate new entities of type @k@.
 class (Monad m) => MCF m k where
@@ -47,3 +69,19 @@ class (Monad m) => MCA m k where
   --   object (which need not be either of the inputs, if they
   --   themselves were aliased, for example).
   calias  :: (MCVT m k -> MCVT m k -> m (MCVT m k)) -> k -> k -> m k
+
+------------------------------------------------------------------------}}}
+-- Context Transformers                                                 {{{
+
+{-
+type instance MCVT (EitherT e m) k = MCVT m k
+
+instance (MCR m k) => MCR (EitherT e m) k where
+  clookup k = lift (clookup k)
+
+instance (MCW m k) => MCW (EitherT e m) k where
+  cassign k v = lift (cassign k v)
+-}
+
+------------------------------------------------------------------------}}}
+

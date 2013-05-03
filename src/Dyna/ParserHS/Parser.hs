@@ -54,6 +54,7 @@ import qualified Data.ByteString                  as B
 import qualified Data.CharSet                     as CS
 import qualified Data.Data                        as D
 import qualified Data.HashSet                     as H
+import qualified Data.Map                         as M
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
 import           Text.Parser.Expression
@@ -90,7 +91,17 @@ data Rule = Rule !RuleIx !(Spanned Term) !B.ByteString !(Spanned Term)
 
 -- | Pragmas that are recognized by the parser
 data Pragma = PDispos !SelfDispos !B.ByteString ![ArgDispos]
+            | POperAdd !PragmaFixity !Integer !B.ByteString
+            | POperDel !B.ByteString
             | PMisc !Term
+ deriving (Eq,Show)
+
+data PragmaFixity = PFIn PAssoc | PFPre | PFPost
+ deriving (Eq,Show)
+
+-- XXX This is only necessary until parsers upstream cuts a release in which
+-- 'Assoc' is 'Eq' and 'Show'.  It's already committed upstream, but...
+data PAssoc = PAssocNone | PAssocLeft | PAssocRight
  deriving (Eq,Show)
 
 data Line = LRule (Spanned Rule)
@@ -153,6 +164,7 @@ newtype EOT = EOT { unEOT :: forall m .
 -- Note that this type is hidden with the exception of some accessors below.
 data PCS =
   PCS { _pcs_opertab   :: EOT
+      , _pcs_operspec  :: M.Map B.ByteString () -- XXX
       , _pcs_dispostab :: DisposTab
       , _pcs_ruleix    :: Int
       }
@@ -186,8 +198,9 @@ rs x = get >>= runReaderT x
 
 defPCS = PCS { _pcs_dispostab = defDisposTab
              , _pcs_ruleix    = 0
+             , _pcs_operspec  = M.empty -- XXX
 			 , _pcs_opertab   = EOT $
-				-- | The basic expression table for limited expressions.
+				-- The basic expression table for limited expressions.
                 --
 				-- Notably, this excludes @,@ (which is important
 				-- syntactically) and @whenever@ and @is@ (which are
@@ -198,11 +211,14 @@ defPCS = PCS { _pcs_dispostab = defDisposTab
 				-- XXX timv suggests that this should be assocnone for
 				-- binops as a quick fix.  Eventually we should still do
 				-- this properly.
+				--
+				-- XXX this ought to be derived from the default
+				-- _pcs_operspec rather than being coded as it is.
                 [ [ Prefix $ uf (spanned $ bsf $ symbol "new") ]
-                , [ Prefix $ uf (spanned $ bsf $ ident dynaPfxOperStyle)        ]
-                , [ Infix  (bf (spanned $ bsf $ ident dynaOperStyle)) AssocLeft ]
-                , [ Infix  (bf (spanned $ bsf $ dotOper)) AssocRight ]
-                , [ Infix  (bf (spanned $ bsf $ commaOper)) AssocRight ]
+                , [ Prefix $ uf (spanned $ prefixOper )             ]
+                , [ Infix  (bf (spanned $ normOper )) AssocLeft  ]
+                , [ Infix  (bf (spanned $ dotOper  )) AssocRight ]
+                , [ Infix  (bf (spanned $ commaOper)) AssocRight ]
                 ]
              }
 
@@ -292,7 +308,7 @@ dynaAtomStyle = IdentifierStyle
   { _styleName = "Atom"
   , _styleStart    = (lower <|> oneOf "$")
   , _styleLetter   = (alphaNum <|> oneOf "_'")
-  , _styleReserved = H.fromList [ "is", "new", "whenever" ]
+  , _styleReserved = H.fromList [ "is", "new", "whenever" ] -- XXX maybe not?
   , _styleHighlight = Constant
   , _styleReservedHighlight = ReservedOperator
   }
@@ -360,15 +376,21 @@ thenAny p =    anyChar                             -- some character
 -- to have not-a-space following (to avoid confusion with the end-of-rule
 -- marker, which is taken to be "dot space" or "dot eof").
 dotOper :: (Monad m, TokenParsing m, LookAheadParsing m)
-        => m [Char]
-dotOper = try (lookAhead (thenAny anyChar) *> identNL dynaDotOperStyle)
+        => m B.ByteString
+dotOper = bsf $ try (lookAhead (thenAny anyChar) *> identNL dynaDotOperStyle)
 
 -- | A "comma operator" is a comma necessarily followed by something that
 -- would continue to be an operator (i.e. punctuation).
 commaOper :: (Monad m, TokenParsing m, LookAheadParsing m)
-          => m [Char]
-commaOper = try (   lookAhead (thenAny $ _styleLetter dynaCommaOperStyle)
-                 *> identNL dynaCommaOperStyle)
+          => m B.ByteString
+commaOper = bsf $ try (   lookAhead (thenAny $ _styleLetter dynaCommaOperStyle)
+                       *> identNL dynaCommaOperStyle)
+
+-- | A normal operator is handled by trifecta's built-in handling
+normOper = bsf $ ident dynaOperStyle
+
+-- | Prefix operators also handled by trifecta's built-in handling
+prefixOper = bsf $ ident dynaPfxOperStyle
 
 uf :: (Monad m, Applicative m)
    => m (Spanned B.ByteString)
@@ -442,8 +464,9 @@ rawDRule = evalStateT (unPCM $ unDL $ spanned parseRule) defPCS
 -- Pragmas                                                              {{{
 
 parsePragma = choice
-  [ symbol "dispos" *> parseDisposition
-  -- , symbol "oper"   *> parseOper
+  [ -- symbol "aggr" *> parseAggr			-- XXX alternate syntax for aggr
+    symbol "dispos" *> parseDisposition     -- in-place dispositions
+  , symbol "oper"   *> parseOper		    -- new {pre,in,post}fix oper
   ]
  where
   parseDisposition = PDispos <$> selfdis
@@ -459,7 +482,35 @@ parsePragma = choice
                      , pure SDInherit
                      ]
 
-  parseOper = undefined
+  parseOper = choice [ try $ symbol "add" *> parseOperAdd
+                     , try $ symbol "del" *> parseOperDel
+                     , parseOperAdd
+                     ]
+
+    where
+      parseOperAdd = do
+               (fx,n) <- fixity
+               prec   <- natural
+               sym    <- n
+               return $ POperAdd fx prec sym
+
+      parseOperDel = POperDel <$> afx
+                         
+      fixity = choice [ symbol "pre"  *> pure (PFPre, pfx)
+                      , symbol "post" *> pure (PFPost, pfx)
+                      , symbol "in" *> ((,) <$> (PFIn <$> assoc) <*> pure ifx)
+                      ]
+
+      pfx = choice [ prefixOper, dotOper, commaOper, justAtom ]
+      ifx = choice [ normOper  , dotOper, commaOper, justAtom ]
+      afx = choice [ prefixOper, normOper, dotOper, commaOper, justAtom]
+
+      justAtom = bsf $ ident dynaAtomStyle
+
+      assoc = choice [ symbol "none"  *> pure PAssocNone
+                     , symbol "left"  *> pure PAssocLeft
+                     , symbol "right" *> pure PAssocRight
+                     ]
 
 dpragma :: (DeltaParsing m, LookAheadParsing m, MonadReader PCS m)
         => m Pragma

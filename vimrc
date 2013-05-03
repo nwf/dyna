@@ -1,0 +1,3 @@
+"Run "vim -S vimrc" to source this file and apply project-specific settings
+
+let g:hdevtools_options = '-g-isrc'

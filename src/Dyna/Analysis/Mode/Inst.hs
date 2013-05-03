@@ -14,7 +14,8 @@
 -- Because I think it will be easier to understand in the long run, I have
 -- opted to avoid that -- the InstF functor contains only those constructors
 -- necessary for building plies of an actual inst.  The other (co)products
--- needed at runtime may be found in 'Dyna.Analysis.Mode.Execution.Base'.
+-- needed at runtime may be found as parts of the
+-- 'Dyna.Analysis.Mode.Execution' modules.
 
 -- Header material                                                      {{{
 {-# LANGUAGE DeriveFoldable #-}
@@ -92,7 +93,7 @@ data InstF f i =
   --
   -- Note that we are saying nothing about the possible data
   -- bound by this variable; that would be the job of the type
-  -- system.
+  -- system. (XXX Maybe we should change that)
   | IAny   { _inst_uniq :: !Uniq }
 
   -- | A bound inst.  More specifically, a disjunction of
@@ -204,6 +205,18 @@ iIsFree :: InstF f i -> Bool
 iIsFree IFree = True
 iIsFree _     = False
 
+-- | The bottom of the 'iLeq' lattice and 'iSub' semi-lattice, representing
+-- the empty set of (non-ground) terms.
+iNotReached :: Uniq -> InstF f i
+iNotReached u = IBound u M.empty False
+{-# INLINABLE iNotReached #-}
+
+-- | Indicator function for 'iNotReached'
+iIsNotReached :: InstF f i -> Bool
+iIsNotReached (IBound _ m False) = M.null m
+iIsNotReached _                  = False
+{-# INLINABLE iIsNotReached #-}
+
 -- | Is an instantiation ground?
 --
 -- Surrogate for definition 3.2.17, p52
@@ -212,6 +225,20 @@ iGround_ q (IBound UUnique b _) = mfmamm q b
 iGround_ _ (IUniv _) = return True
 iGround_ _ _ = return False
 {-# INLINABLE iGround_ #-}
+
+{-
+data IPopEst = IPEEmpty | IPESingleton | IPEMany
+ deriving (Eq,Ord)
+
+-- | An over-estimate of the number of ground terms contained within this
+-- non-ground term.  iNotReached
+iPopEst :: (Monad m) => (i -> m IPopEst) -> InstF f i -> m IPopEst
+iPopEst _ IFree             = return IPEMany
+iPopEst _ (IAny _)          = return IPEMany
+iPopEst _ (IUniv _)         = return IPEMany
+iPopEst _ (IBool _ _ True)  = return IPEMany
+iPopEst q (IBool _ m False) = XXX
+-}
 
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Binary predicates                              {{{
@@ -268,9 +295,9 @@ iLeq_ _ _ (IAny _)     _                  = return $ False
 iLeq_ _ _ (IUniv u)    (IAny u')          = return $ u' <= u
 iLeq_ _ _ (IUniv u)    (IUniv u')         = return $ u' <= u
 iLeq_ _ _ (IUniv _)    _                  = return $ False
-iLeq_ q _ (IBound u b _) (IAny u')      = andM1 (u' <= u) $
+iLeq_ q _ (IBound u b _) (IAny u')        = andM1 (u' <= u) $
     mfmamm (\x -> q x (IAny u')) b
-iLeq_ q _ (IBound u b _) (IUniv u')     = andM1 (u' <= u) $
+iLeq_ q _ (IBound u b _) (IUniv u')       = andM1 (u' <= u) $
     mfmamm (\x -> q x (IUniv u')) b
 iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     flip mapForallM m $
@@ -421,10 +448,10 @@ iSubGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
     -- NOTE: I was briefly concerned that we would have to pass u'' down
     -- through q, but since the well-formedness criteria may be assumed to
     -- hold for both m and m' (that is, for all insts contained in m (resp.
-    -- m'), their uniqueness is <= u (resp. u')), and our recursion is
+    -- m'), their uniqueness is >= u (resp. u')), and our recursion is
     -- defined by minimizing uniqueness, the uniqueness of the return is
-    -- guaranteed to be <= min {u, u'} with no additional effort on our
-    -- part.
+    -- guaranteed to be >= min {u, u'} with no additional effort on our
+    -- part.  Contrast this with 'iLeqGLB_' and 'iSubLUB_'
     m'' <- mergeBoundLB q m m'
     return $ IBound u'' m'' (b && b')
 {-# INLINABLE iSubGLB_ #-}
@@ -487,17 +514,6 @@ iSubLUB_ _ _ l r q (IBound u m b) (IBound u' m' b') = do
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Utility Functions                              {{{
 
--- | The bottom of the 'iLeq' lattice and 'iSub' semi-lattice, representing
--- the empty set of (non-ground) terms.
-iNotReached :: Uniq -> InstF f i
-iNotReached u = IBound u M.empty False
-{-# INLINABLE iNotReached #-}
-
--- | Indicator function for 'iNotReached'
-iIsNotReached :: InstF f i -> Bool
-iIsNotReached (IBound _ m False) = M.null m
-iIsNotReached _                  = False
-{-# INLINABLE iIsNotReached #-}
 
 crf :: (Monad m) => a -> m Bool
 crf = const $ return False

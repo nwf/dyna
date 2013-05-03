@@ -17,6 +17,7 @@ import           Dyna.Analysis.ANF
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 import           Dyna.XXX.DataUtils
+import           Dyna.XXX.Trifecta
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
@@ -27,15 +28,10 @@ type AggMap = M.Map DFunctAr DAgg
 ------------------------------------------------------------------------}}}
 -- Associate each item with an aggregator                               {{{
 
--- XXX These functions should be rewritten to use Dyna.Main.Exception
-
--- XXX These functions really would like to have span information, so they
--- could report which line of the source caused an error.
-
 procANF :: Rule -> (DFunctAr, DAgg)
-procANF r@(Rule _ h a _ _ (AS { as_assgn = as })) =
+procANF r@(Rule _ h a _ sp (AS { as_assgn = as })) =
   case M.lookup h as of
-    Nothing       -> dynacSorry $ "I can't process head-variables" <+> (pretty $ show r)
+    Nothing       -> dynacSorry $ "I can't process head-variables in rule at" <+> (prettySpanLoc sp)
     Just t -> case t of
                 Left _       -> dynacPanic $ "Malformed head" <+> (pretty $ show r)
                 Right (f,xs) -> ((f,length xs),a)
@@ -44,12 +40,12 @@ buildAggMap :: [Rule] -> AggMap
 buildAggMap = go (M.empty)
  where
   go m []      = m
-  go m (ar:xs) =
+  go m (ar@(Rule _ _ a _ sp _):xs) =
     let (d,a) = procANF ar
     in case mapUpsert d a m of
-         Left a' -> dynacUserErr $     "Conflicting aggregators in rule"
-                                   <+> (pretty $ show ar)
-                                   <+> "Expected"
+         Left a' -> dynacUserErr $     "Conflicting aggregators; rule"
+                                   <+> prettySpanLoc sp <+> "uses" <+> (pretty a)
+                                   <+> "but I had been lead to expect"
                                    <+> pretty a'
          Right m' -> go m' xs
 

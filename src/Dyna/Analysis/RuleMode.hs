@@ -7,6 +7,7 @@
 
 -- Header material                                                      {{{
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -14,7 +15,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Dyna.Analysis.RuleMode (
+module Dyna.Analysis.RuleMode {- (
     Mode(..), Moded(..), ModedNT, isBound, isFree,
 
     Crux, EvalCrux(..), UnifCrux(..),
@@ -29,9 +30,15 @@ module Dyna.Analysis.RuleMode (
     QueryEvalMap, combineQueryPlans,
 
     adornedQueries
-) where
+) -} where
 
--- import           Control.Monad
+import           Control.Lens ((^.))
+import           Control.Monad
+import           Control.Monad.Error.Class
+import           Control.Monad.Trans.Either
+import           Control.Monad.Trans.Reader
+import           Control.Monad.Identity
+import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as BC
 -- import qualified Data.List                  as L
 import qualified Data.Map                   as M
@@ -39,22 +46,34 @@ import qualified Data.Maybe                 as MA
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
-import           Dyna.Analysis.Base
+import           Dyna.Analysis.DOpAMine
+import           Dyna.Analysis.Mode
+import           Dyna.Analysis.Mode.Execution.NoAliasContext
+import           Dyna.Analysis.Mode.Execution.NoAliasFunctions
 import           Dyna.Term.TTerm
+import           Dyna.Term.Normalized
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrApp)
+import           Dyna.XXX.MonadContext
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 -- import           Dyna.XXX.TrifectaTest
 import           Text.PrettyPrint.Free
 
+-- XXX Aaaaany second now
+-- import           Dyna.Analysis.Mode.Execution.Base
+-- import           Dyna.Analysis.Mode.Execution.Functions
+
 ------------------------------------------------------------------------}}}
 -- Bindings                                                             {{{
 
--- | What things have thus far been bound under the plan?
-type BindChart = S.Set DVar
+-- | For variables that are bound, what are they, and all that?
+type BindChart = SIMCtx DFunct
 
-varMode :: BindChart -> DVar -> Mode
-varMode c v = if v `S.member` c then MBound else MFree
+type BindM m = EitherT UnifFail (SIMCT m DFunct)
+
+{-
+varMode :: BindChart -> DVar -> DInst
+varMode c v = maybe (error "BindChart miss") id $ M.lookup v c
 
 modedVar :: BindChart -> DVar -> ModedVar
 modedVar b x = case varMode b x of
@@ -64,6 +83,7 @@ modedVar b x = case varMode b x of
 modedNT :: BindChart -> NTV -> ModedNT
 modedNT b (NTVar  v)     = NTVar $ modedVar b v
 modedNT _ (NTBase b)     = NTBase b
+-}
 
 ------------------------------------------------------------------------}}}
 -- Cruxes                                                               {{{
@@ -82,6 +102,7 @@ cruxIsEval :: Crux v n -> Bool
 cruxIsEval (Left _) = True
 cruxIsEval (Right _) = False
 
+{-
 cruxMode :: BindChart -> Crux DVar NTV -> Crux (ModedVar) (ModedNT)
 cruxMode c cr = either (Left . evalMode) (Right . unifMode) cr
  where
@@ -92,6 +113,7 @@ cruxMode c cr = either (Left . evalMode) (Right . unifMode) cr
     CFStruct o is f -> CFStruct (mv o) (map mv is) f
     CFAssign o i    -> CFAssign (mv o) (modedNT c i)
   mv = modedVar c
+-}
 
 cruxVars :: Crux DVar NTV -> S.Set DVar
 cruxVars = either evalVars unifVars
@@ -107,8 +129,24 @@ cruxVars = either evalVars unifVars
 ------------------------------------------------------------------------}}}
 -- Actions                                                              {{{
 
-type Action fbs = [DOpAMine fbs]
+type Actions fbs = [DOpAMine fbs]
 
+data BackendAction fbs = BAct
+                          { bact_dop     :: Actions fbs
+                          , bact_outmode :: [(DVar,NIX DFunct)]
+                          }
+ deriving (Show)
+
+
+-- | Builtin support hook for mode planning.  Options are
+--   to return
+-- 
+--   * @Left False@  -- This functor is not built in
+--
+--   * @Left True@   -- There is no plan for this mode
+--
+--   * @Right act@   -- This operation may run according to the plan given.
+--
 -- XXX Is this really the right type?
 --
 -- Note that there's a big wad of complexity here: we want to announce, for
@@ -120,9 +158,7 @@ type Action fbs = [DOpAMine fbs]
 -- is responsible for dealing with the check insertions.  That might be
 -- wrong.
 type BackendPossible fbs = (DFunct,[ModedVar],ModedVar)
-                           -> Either Bool (Action fbs)
-
-type Possible fbs        = (Crux (ModedVar) (ModedNT)) -> Maybe (Action fbs)
+                           -> Either Bool (BackendAction fbs)
 
 {-
 mapMaybeModeCompat mis mo =
@@ -133,50 +169,94 @@ mapMaybeModeCompat mis mo =
                 return (d,f))
 -}
 
-possible :: BackendPossible fbs -> Possible fbs
-possible fp cr = case cr of
-    -- XXX Indirect evaluation is not yet supported
-  Left (CFEval _ _) -> dynacSorry "Indir eval"
+-- | Free, Universal, or Panic.  A rather simplistic take on unification.
+--
+-- XXX There is nothing good about this.
+fup :: forall a m . (Monad m, MCVT m DVar ~ VR DFunct (NIX DFunct), MCR m DVar)
+    => DVar -> m a -> m a -> m a
+fup v cf cu = do
+  vr <- clookup v
+  let vi = case vr of
+          VRName   vn -> fmap VRName $ nExpose vn
+          VRStruct vx -> vx
+  case vi of
+    IFree   -> cf
+    IUniv _ -> cu
+    _       -> dynacPanic "Unexpected instantiation state while planning"
+
+possible :: (Monad m)
+         => BackendPossible fbs
+         -> Crux DVar NTV
+         -> SIMCT m DFunct (Actions fbs)
+possible fp cr =
+  case cr of
+      -- XXX Indirect evaluation is not yet supported
+    Left (CFEval _ _) -> dynacSorry "Indir eval"
+
+	-- XXX This is going to be such a pile.  We really, really should have
+	-- unification crank out a series of DOpAMine opcodes for us, but for
+	-- the moment, since everything we do is either IFree or IUniv, just use
+	-- iEq everywhere.
 
     -- Assign or check
-  Right (CFAssign o i) ->
-      let ni = ntvOfMNT i in
-      case (evnOfMNT i, o) of
-        (Left _, MF _)   -> Nothing
-        (Right _, MB o') -> let chk = "_chk" in
-                            Just [ OPAsgn chk ni
-                                 , OPCheq chk o']
-        (Left i', MB o') -> Just [OPAsgn i' (NTVar o')]
-        (Right _, MF o') -> Just [OPAsgn o' ni]
+    Right (CFAssign o i) ->
+        case i of
+          NTVar  v -> fup v (fup o (throwError UFExDomain)
+                                   (runReaderT (unifyVV v o) (UnifParams True False) >> return [ OPAsgn v (NTVar o) ]))
+                            (fup o (runReaderT (unifyVV v o) (UnifParams True False) >> return [ OPAsgn o i ])
+                               (return [ OPCheq o v ]))
+          NTBase b -> fup o (runReaderT (unifyVU o) (UnifParams True False) >> return [ OPAsgn o i ])
+                            (let chk = "_chk" in return [ OPAsgn chk i, OPCheq chk o])
 
-    -- Structure building
-  Right (CFStruct o is funct) ->
-      case o of
-        -- If the output is free, the only supported case is when all
-        -- inputs are known.
-        MF o'  -> if all isBound is
-                   then Just [OPWrap o' (map varOfMV is) funct]
-                   else Nothing
-        -- On the other hand, if the output is known, then any subset
-        -- of the inputs may be known and will be checked.
-        MB o' -> Just $   (OPPeel is' o' funct)
-                        : map (\(c,x) -> (OPCheq c x)) cis
-         where
-          mkChks _ (MF i) = (i, Nothing)
-          mkChks n (MB v) = let chk = BC.pack $ "_chk_" ++ (show n)
-                            in (chk, Just (chk, v))
+    -- Structure building or unbuilding
+    Right (CFStruct o is funct) -> fup o (mapM_ isBound is >> bind o >> return [ OPWrap o is funct ])
+                                         (buildPeel)
+      where
+       buildPeel = do
+                    (is', mcis) <- zipWithM maybeCheck is newvars >>= return . unzip
+                    let cis = MA.catMaybes mcis
+                    return ([ OPPeel is' o funct ] ++ map (uncurry OPCheq) cis)
 
-          (is',mcis) = unzip $ zipWith mkChks [0::Int ..] is
-          cis        = MA.catMaybes mcis
+       newvars = map (\n -> BC.pack $ "_chk_" ++ (show n)) [0..]
 
-  Left (CFCall o is funct) ->
-    case fp (funct,is,o) of
-      Left False  -> Just [OPIter o is funct DetNon Nothing ]
-      Left True   -> Nothing
-      Right a     -> Just a
+       maybeCheck v nv = fup v (return (v,Nothing)) (return (nv, Just (nv,v)))
+                            
+    Left (CFCall vo vis funct) -> do
+      is <- mapM mkMV vis 
+      o  <- mkMV vo
+      case fp (funct,is,o) of
+  		-- Not a built-in, so we assume that it can be iterated in full.
+        Left False      -> do mapM_ bind (vo:vis)
+                              return [OPIter o is funct DetNon Nothing]
+        Left True        -> throwError UFExDomain
+        Right (BAct a m) -> do runReaderT
+                                 (mapM_ (uncurry $ flip unifyUnaliasedNV) m)
+                                 (UnifParams True True) -- XXX Live?
+                               return a
+ where
+     mo = nHide (IUniv UShared)
+     unifyVU v = unifyUnaliasedNV mo v
+     mkMV v = do
+       vi <- clookup v
+       return $ MV v (vrToNIX vi) mo
+
+     isBound v = fup v (throwError UFExDomain) (return ())
+     bind x = runReaderT (unifyVU x) (UnifParams False False)
 
 ------------------------------------------------------------------------}}}
 -- ANF to Cruxes                                                        {{{
+
+anfVars :: ANFState -> S.Set DVar
+anfVars (AS { as_evals = evals, as_unifs = unifs, as_assgn = assgns } ) =
+  S.unions [ M.foldWithKey (\k v s -> S.insert k (go1 v s)) S.empty evals
+           , M.foldWithKey (\k v s -> S.insert k (go2 v s)) S.empty assgns
+           , foldr (\(v1,v2) s -> S.insert v1 (S.insert v2 s)) S.empty unifs
+           ]
+  where
+   go s (_,vs) = S.union s (S.fromList vs)
+   go1 e s = either (flip S.insert s) (go s) e
+   go2 e s = either (const s) (go s) e
+
 
 eval_cruxes :: ANFState -> [EvalCrux DVar]
 eval_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_evals
@@ -201,7 +281,7 @@ type Cost = Double
 
 -- XXX I don't understand why this heuristic works, but it seems to exclude
 -- some of the... less intelligent plans.
-simpleCost :: PartialPlan fbs -> Action fbs -> Cost
+simpleCost :: PartialPlan fbs -> Actions fbs -> Cost
 simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
     2 * osc + (1 + loops pfx) * actCost act
  where
@@ -220,9 +300,9 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
     OPIter o is _ d _   -> case d of
                              Det     -> 0
                              DetSemi -> 1
-                             DetNon  -> 2 ** (fromIntegral $ length $
+                             DetNon  -> 2 {- ** (fromIntegral $ length $
                                               filter isFree (o:is))
-                                        - 1
+                                        - 1 -}
     OPIndr _ _          -> 100
 
   loops = fromIntegral . length . filter isLoop
@@ -266,12 +346,24 @@ data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar NTV)
                           , pp_binds          :: BindChart
                           , pp_restrictSearch :: Bool
                           , pp_score          :: Cost
-                          , pp_plan           :: Action fbs
+                          , pp_plan           :: Actions fbs
                           }
 
-stepPartialPlan :: Possible fbs 
+pp_liveVars :: PartialPlan fbs -> S.Set DVar
+pp_liveVars p = S.unions $ map lvs $ S.toList (pp_cruxes p)
+ where
+  lvs (Left  (CFCall   v vs _))       = S.fromList (v:vs)
+  lvs (Left  (CFEval   v v'))         = S.fromList [v,v']
+  lvs (Right (CFStruct v vs _))       = S.fromList (v:vs)
+  lvs (Right (CFAssign v (NTVar v'))) = S.fromList [v,v']
+  lvs (Right (CFAssign v (NTBase _))) = S.singleton v
+
+-- XXX This does not have a way to signal UFNotReached back to its caller.
+-- That is particularly disappointing since any unification producing that
+-- means that there's certainly no plan for the whole rule.
+stepPartialPlan :: (Crux DVar NTV -> SIMCT Identity DFunct (Actions fbs))
                 -- ^ Possible actions
-                -> (PartialPlan fbs -> Action fbs -> Cost)
+                -> (PartialPlan fbs -> Actions fbs -> Cost)
                 -- ^ Plan scoring function
                 -> Maybe (Maybe DFunctAr, DVar, DVar)
                 -- ^ The 'DFunctAr', intern representation, and
@@ -279,8 +371,8 @@ stepPartialPlan :: Possible fbs
                 -- initial /evaluation/ crux, if any.  This is used to
                 -- avoid double-counting during updates.  See $dupcrux
                 -> PartialPlan fbs
-                -> Either (Cost, Action fbs) [PartialPlan fbs]
-stepPartialPlan steps score mic p =
+                -> Either (Cost, Actions fbs) [PartialPlan fbs]
+stepPartialPlan poss score mic p =
   -- XT.traceShow ("SPP", mic, pp_binds p, pp_cruxes p) $
   if S.null (pp_cruxes p)
    then Left $ (pp_score p, pp_plan p)
@@ -305,39 +397,44 @@ stepPartialPlan steps score mic p =
    step = S.fold (\crux ps ->
                   let bc = pp_binds p
                       pl = pp_plan p
-                      plan = steps (cruxMode bc crux)
-                      bc' = bc `S.union` cruxVars crux
+                      plan = runIdentity $ runSIMCT (poss crux) bc
                       rc' = S.delete crux (pp_cruxes p)
                       r'  = (not $ cruxIsEval crux) || (pp_restrictSearch p)
-                  in maybe ps
-                           (\act -> let act' = handleConflictors act
-                                    in PP rc' bc' r' (score p act') (pl ++ act')
-                                       : ps)
-                           plan
+                  in either (const ps)
+                            (\(act,bc') -> let act' = handleConflictors act
+                                           in PP rc' bc' r' (score p act') (pl ++ act')
+                                              : ps)
+                            plan
                 ) []
 
    handleConflictors =
      case mic of
        Nothing -> id
-       Just (mfa,i,ov) -> concatMap $ \dop ->
+       Just (mfa,i,ov) -> \p -> flip concatMap p (\dop ->
          case dop of
            OPIter ov' ivs' f' _ _ |  
                 -- We must insert checks whenever this step involves
                 -- an evaluation.  As an easy optimisation, if we know
                 -- the 'DFunctAr' being updated, we can elide this check
                 -- when we're evaluating a different 'DFunctAr'.
+                --
+                -- XXX This is not the whole answer since it continues to
+                -- assume that everything is bound on the way out of an
+                -- OPIter.  Really we should be transforming the ANF to
+                -- include cruxes for these checks, that way they will get
+                -- handled by mode analysis as with everything else.
                 (maybe True (== (f',length ivs')) mfa)
-             && ov > varOfMV ov'
+             && ov > ov'^.mv_var
              -> let cv = "_chk"
                 in [ dop
-                   , OPWrap cv (map varOfMV ivs') f'
+                   , OPWrap cv (fmap (^.mv_var) ivs') f'
                    , OPCkne i cv
                    ]
-           _ -> [dop]
+           _ -> [dop])
 
-planner_ :: Possible fbs                                
+planner_ :: (Crux DVar NTV -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Available steps
-         -> (PartialPlan fbs -> Action fbs -> Cost)
+         -> (PartialPlan fbs -> Actions fbs -> Cost)
          -- ^ Scoring function
          -> S.Set (Crux DVar NTV)
          -- ^ Cruxes to be planned over
@@ -348,11 +445,15 @@ planner_ :: Possible fbs
          -> S.Set DVar
          -- ^ Any variables bound on the way in, in addition to
          --   the two given for an initial crux
-         -> [(Cost, Action fbs)]
+         -> S.Set DVar
+         -- ^ Unbound variables in the rule
+         -> [(Cost, Actions fbs)]
          -- ^ Plans and their costs
-planner_ st sc cr mic bv = runAgenda
+planner_ st sc cr mic bv fv = runAgenda
    $ PP { pp_cruxes = cr
-        , pp_binds  = S.union bv bi
+        , pp_binds  = SIMCtx $ M.fromSet (const $ VRStruct (IUniv UShared)) (S.unions [bv,bi])
+                               `M.union`
+                               M.fromSet (const $ VRStruct IFree) fv
         , pp_restrictSearch = False
         , pp_score  = 0
         , pp_plan   = ip
@@ -385,7 +486,7 @@ anfPlanner_ st sc anf mic bv = planner_ st sc cruxes mic bv
                        $ maybe id (\(ic,_,_) -> S.delete ic) mic
                        $ S.fromList $ eval_cruxes anf)
 
-bestPlan :: [(Cost, Action fbs)] -> Maybe (Cost, Action fbs)
+bestPlan :: [(Cost, a)] -> Maybe (Cost, a)
 bestPlan []    = Nothing
 bestPlan plans = Just $ argmin fst plans
 
@@ -394,30 +495,32 @@ bestPlan plans = Just $ argmin fst plans
 --
 -- XXX This has no idea what to do about non-range-restricted rules.
 planUpdate_ :: BackendPossible fbs                         -- ^ Available steps
-            -> (PartialPlan fbs -> Action fbs -> Cost)     -- ^ Scoring function
+            -> (PartialPlan fbs -> Actions fbs -> Cost)    -- ^ Scoring function
             -> ANFState                                    -- ^ Normal form
             -> Maybe (EvalCrux DVar, DVar, DVar)           -- ^ Initial eval crux
-            -> [(Cost, Action fbs)]                        -- ^ If there's a plan...
-planUpdate_ bp sc anf mic = anfPlanner_ (possible bp) sc anf mic S.empty
+            -> S.Set DVar
+            -> [(Cost, Actions fbs)]                       -- ^ If there's a plan...
+planUpdate_ bp sc anf mic fv = anfPlanner_ (possible bp) sc anf mic S.empty fv
 
 planUpdate :: BackendPossible fbs
-           -> (PartialPlan fbs -> Action fbs -> Cost)
+           -> (PartialPlan fbs -> Actions fbs -> Cost)
            -> ANFState
            -> Maybe (EvalCrux DVar, DVar, DVar)
-           -> Maybe (Cost, Action fbs)
-planUpdate bp sc anf mi =
-  bestPlan $ planUpdate_ bp sc anf mi
+            -> S.Set DVar
+           -> Maybe (Cost, Actions fbs)
+planUpdate bp sc anf mi fv =
+  bestPlan $ planUpdate_ bp sc anf mi fv
 
-planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Action fbs)
+planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
 planInitializer bp (Rule { r_anf = anf }) =
-  planUpdate bp simpleCost anf Nothing
+  planUpdate bp simpleCost anf Nothing (anfVars anf)
 
 planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
              -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
              -> Rule
-             -> [(Maybe DFunctAr, Maybe (Cost, DVar, DVar, Action fbs))]
-planEachEval bp cs (Rule { r_anf = anf })  =
-  map (\(mfa,cr) -> (mfa, varify $ planUpdate bp simpleCost anf $ Just $ mic cr))
+             -> [(Maybe DFunctAr, Maybe (Cost, DVar, DVar, Actions fbs))]
+planEachEval bp cs r@(Rule { r_anf = anf })  =
+  map (\(mfa,cr) -> (mfa, varify $ planUpdate bp simpleCost anf (Just $ mic cr) (anfVars anf)))
     -- Filter out non-constant evaluations
   $ MA.mapMaybe (\ec -> case ec of
                   CFCall _ is f | not (cs (f,length is))
@@ -437,6 +540,7 @@ planEachEval bp cs (Rule { r_anf = anf })  =
   varHead = "__i"
   varVal  = "__v"
 
+{-
 planGroundBackchain :: BackendPossible fbs
                     -> Rule
                     -> Maybe (Cost, DVar, Action fbs)
@@ -447,7 +551,6 @@ planGroundBackchain bp (Rule { r_anf = anf, r_head = h }) =
  where
   varify = fmap $ \(c,a) -> (c,h,a)
 
-{-
 planBackchains :: BackendPossible fbs
                -> Rule
                -> M.Map [Mode] (Cost, [DVar], Action fbs)
@@ -458,7 +561,7 @@ planBackchains bp (Rule { r_anf = anf, r_head = h })
 -- Update plan combination                                              {{{
 
 type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
-                               [(Rule, Cost, DVar, DVar, Action fbs)]
+                               [(Rule, Cost, DVar, DVar, Actions fbs)]
 
 -- | Return all plans for each functor/arity
 --
@@ -469,7 +572,7 @@ type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
 -- timv: might want to fuse these into one circuit
 --
 combineUpdatePlans :: [(Rule,[( Maybe DFunctAr,
-                                Maybe (Cost, DVar, DVar, Action fbs))])]
+                                Maybe (Cost, DVar, DVar, Actions fbs))])]
                    -> UpdateEvalMap fbs  
 combineUpdatePlans = go (M.empty)
  where
@@ -481,7 +584,7 @@ combineUpdatePlans = go (M.empty)
     case mca of
       Nothing -> dynacUserErr
                        $ "No update plan for "
-                          <+> (pretty fa)
+                          <+> group (pretty fa)
                           <+> "in rule at"
                           <+> (prettySpanLoc $ r_span fr)
       Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrApp fa (fr,c,v1,v2,a) m
@@ -489,6 +592,7 @@ combineUpdatePlans = go (M.empty)
 ------------------------------------------------------------------------}}}
 -- Backward chaining plan combination                                   {{{
 
+{-
 type QueryEvalMap fbs = M.Map (Maybe DFunctAr)
                               [(Rule, Cost, DVar, Action fbs)]
 
@@ -515,12 +619,13 @@ combineQueryPlans = go (M.empty)
       Nothing            -> error "No unification for head variable?"
       Just (Left _)      -> error "NTVar head?"
       Just (Right (f,a)) -> Just (f, length a)
-
+-}
 
 
 ------------------------------------------------------------------------}}}
 -- Adorned Queries                                                      {{{
 
+{-
 -- XXX We really ought to be returning something about math, as well, but
 -- as all that's handled specially up here...
 adornedQueries :: Action fbs -> S.Set (DFunct,[Mode],Mode)
@@ -530,6 +635,7 @@ adornedQueries = go S.empty
   go x ((OPIter o is f _ _):as) =
     go (x `S.union` S.singleton (f, map modeOf is, modeOf o)) as
   go x (_:as)               = go x as
+-}
 
 ------------------------------------------------------------------------}}}
 -- Experimental Detritus                                                {{{

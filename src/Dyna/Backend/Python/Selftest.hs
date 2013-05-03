@@ -15,6 +15,9 @@ import           Test.Golden
 ------------------------------------------------------------------------}}}
 -- Run Backend                                                          {{{
 
+-- XXX There's something wrong here -- if we encounter an ExitFailure and
+-- throw an exception, we fail to fail the test or even time out.  This
+-- might be my fault, or it might be upstream.
 runDynaPy :: String -> String -> IO ()
 runDynaPy f out = do
   devnull <- openFile "/dev/null" ReadWriteMode

@@ -18,6 +18,8 @@ import qualified Text.PrettyPrint.ANSI.Leijen        as PPA
 ------------------------------------------------------------------------}}}
 -- Dyna Compiler Exceptions                                             {{{
 
+-- | When things go badly for us, they go badly in one of these ways,
+-- ideally.
 data DynacException =
     -- | The user program contains an error
     UserProgramError (PP.Doc TP.Effect)
@@ -41,14 +43,22 @@ instance Exception DynacException
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
+-- | Utility function for throwing a document to render
 dynacUserErr, dynacSorry, dynacPanic :: PP.Doc TP.Effect -> a
 dynacUserErr = throw . UserProgramError
 dynacSorry = throw . Sorry
 dynacPanic = throw . Panic
 
+-- | Throw a panic string
+dynacPanicStr :: String -> a
+dynacPanicStr = throw . Panic . PP.text
+
+-- | Throw an ANSI error; this is used inside the parser, primarily, due to
+-- trifecta's movement to the ANSI prettyprinter.
 dynacUserANSIErr :: PPA.Doc -> a
 dynacUserANSIErr = throw . UserProgramANSIError
 
+-- | A type-restricted version of 'throw'
 dynacThrow :: DynacException -> a
 dynacThrow = throw
 

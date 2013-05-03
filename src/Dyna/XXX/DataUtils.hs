@@ -108,7 +108,7 @@ zipWithTails fb fl fr = go
 mergeWithKey :: Ord k => (k -> a -> b -> Maybe c) -> (M.Map k a -> M.Map k c) -> (M.Map k b -> M.Map k c)
              -> M.Map k a -> M.Map k b -> M.Map k c
 mergeWithKey f g1 g2 ml mr =
-    let ol = g1 (M.difference ml mr)
-    in let or = g2 (M.difference mr ml)
+    let xl = g1 (M.difference ml mr)
+    in let xr = g2 (M.difference mr ml)
     in let mb = M.mapMaybe id $ M.intersectionWithKey f ml mr
-    in M.unions [ol,or,mb]
+    in M.unions [xl,xr,mb]
