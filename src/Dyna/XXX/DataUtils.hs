@@ -9,8 +9,8 @@ module Dyna.XXX.DataUtils (
   mapExists, mapForall,
   -- ** Upsertion
   mapUpsert,
-  -- ** Insertion into a map of lists
-  mapInOrApp,
+  -- ** Maps of lists
+  mapInOrApp, mapMinRepView,
   -- ** Unification-style utilities
   mapSemiprune,
   -- ** Backports
@@ -55,7 +55,6 @@ mapUpsert k v m =
      r        = Right m'
  in maybe r (\o -> if o == v then r else Left o) mo
 
-
 -- | Add @v@ to the list of values at @k@, possibly after creating an empty
 -- bucket there.
 
@@ -65,6 +64,18 @@ mapInOrApp k v m = M.alter (\mv -> Just $ v:nel mv) k m
  where
   nel Nothing  = []
   nel (Just x) = x
+
+-- | Remove an element of the minimum key
+--
+-- This lets us use Data.Map as a priority queue,
+-- using 'mapInOrApp' for insertion.
+mapMinRepView :: (Ord k)
+              => M.Map k [v] -> Maybe (v, M.Map k [v])
+mapMinRepView m = do
+  mv <- M.minViewWithKey m
+  case mv of
+    ((_,[]),m')   -> mapMinRepView m'
+    ((k,x:xs),m') -> return (x, M.insert k xs m')
 
 
 -- | For all those times one builds a map which may yield non-productive

@@ -12,7 +12,7 @@ import           Data.Char
 import qualified Data.Map                     as M
 import           Dyna.Backend.BackendDefn
 import           Dyna.Backend.NoBackend
-import           Dyna.Backend.Python
+import           Dyna.Backend.Python.Backend
 import           Dyna.Main.Exception
 import           Text.PrettyPrint.Free        as PP
 

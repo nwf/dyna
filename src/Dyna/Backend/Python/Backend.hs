@@ -9,7 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Dyna.Backend.Python (pythonBackend) where
+module Dyna.Backend.Python.Backend (pythonBackend) where
 
 import           Control.Applicative ((<*))
 import qualified Control.Arrow              as A
@@ -208,29 +208,21 @@ pdope _d _e =         (indent 4 $ "for _ in [None]:")
                  . go xs
 
 
-printPlanHeader :: Handle -> Rule -> Cost -> IO ()
-printPlanHeader h r c = do
+printPlanHeader :: Handle -> Rule -> Cost -> Maybe Int -> IO ()
+printPlanHeader h r c mn = do
   hPutStrLn h $ "# --"
     -- XXX This "prefixSD" thing is the only real reason we're doing this in
     -- IO; it'd be great if wl-pprint-extras understood how to prefix each
     -- line it was laying out.
   displayIO h $ prefixSD "# " $ renderPretty 1.0 100
                 $ (prettySpanLoc $ r_span r) <> line
+  hPutStrLn h $ "# EvalIx: " ++ (show mn)
   hPutStrLn h $ "# Cost: " ++ (show c)
 
--- XXX This is unforunate and wrong, but our ANF is not quite right to
--- let us do this right.  See also Dyna.Analysis.RuleMode's use of this
--- function.
-findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
-  case M.lookup h as of
-    Nothing            -> error "No unification for head variable?"
-    Just (Left _)      -> error "NTVar head?"
-    Just (Right (f,a)) -> Just (f, length a)
-
 printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
-printInitializer fh rule@(Rule _ h _ r _ _) dope = do
+printInitializer fh rule@(Rule _ h _ r _ _ cruxes) dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA rule)
+                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h cruxes)
                    `above` "def" <+> char '_' <> tupled [] <+> colon
                    `above` pdope dope emit
                    <> line
@@ -239,7 +231,7 @@ printInitializer fh rule@(Rule _ h _ r _ _) dope = do
 
 -- XXX INDIR EVAL
 printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
-printUpdate fh rule@(Rule _ h _ r _ _) (Just (f,a)) (hv,v) dope = do
+printUpdate fh rule@(Rule _ h _ r _ _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon
@@ -267,14 +259,14 @@ driver am um {-qm-} is fh = do
   forM_ (M.toList um) $ \(fa, ps) -> do
      hPutStrLn fh ""
      hPutStrLn fh $ "# " ++ show fa
-     forM_ ps $ \(r,c,vi,vo,act) -> do
-       printPlanHeader fh r c
+     forM_ ps $ \(r,n,c,vi,vo,act) -> do
+       printPlanHeader fh r c (Just n)
        printUpdate fh r fa (vi,vo) act
 
   hPutStrLn fh ""
   hPutStrLn fh $ "# ==Initializers=="
   forM_ is $ \(r,c,a) -> do
-    printPlanHeader  fh r c
+    printPlanHeader  fh r c Nothing
     printInitializer fh r a
 
 {-

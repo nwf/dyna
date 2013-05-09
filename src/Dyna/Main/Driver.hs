@@ -15,11 +15,13 @@ module Dyna.Main.Driver where
 import           Control.Applicative ((<*))
 import           Control.Exception
 -- import           Control.Monad
+import qualified Data.ByteString.UTF8         as BU
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
 import qualified Data.Set                     as S
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
+import           Dyna.Analysis.ANFPretty
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
@@ -42,6 +44,7 @@ import qualified Text.Trifecta.Result         as TR
 
 data DumpType = DumpAgg
               | DumpANF
+              | DumpDopIni
               | DumpDopUpd
               | DumpParsed
  deriving (Eq,Ord,Show)
@@ -57,11 +60,11 @@ dump dt doc =
  where
   go h f = hPutDoc f $
     if h
-     then    header `above` doc <> line <> line
-          <> hcat (replicate 4 bar) <> line
+     then    header `above` doc <> line
+          <> hcat (replicate 8 bar) <> line
      else doc
 
-  header = bar <+> fill 18 (text $ show dt) <+> bar
+  header = bar <+> fill 58 (text $ show dt) <+> bar
   bar    = "=========="
 
 anyDumpStderr :: (?dcfg :: DynacConfig) => Bool
@@ -72,7 +75,8 @@ dumpOpts :: Bool -> [OptDescr Opt]
 dumpOpts nos =
      mkDumpOpt "agg"    DumpAgg     "Aggregator summary"
   ++ mkDumpOpt "anf"    DumpANF     "Administrative Normal Form"
-  ++ mkDumpOpt "dopupd" DumpDopUpd  "DOpAMine planning results"
+  ++ mkDumpOpt "dopini" DumpDopIni  "DOpAMine planning results: initializers"
+  ++ mkDumpOpt "dopupd" DumpDopUpd  "DOpAMine planning results: updates"
   ++ mkDumpOpt "parse"  DumpParsed  "Parser output"
  where
   mkDumpOpt arg fl hm =
@@ -191,17 +195,39 @@ procArgs argv = do
 ------------------------------------------------------------------------}}}
 -- Showing DOpAMine                                                     {{{
 
+renderDop :: BackendRenderDopIter bs e -> Actions bs -> Doc e
+renderDop ddi dop = vsep $ map (renderDOpAMine ddi) dop
+
 renderDopUpds :: BackendRenderDopIter bs e -> UpdateEvalMap bs -> Doc e
 renderDopUpds ddi um = vsep $ flip map (M.toList um) $ \(fa,ps) ->
-    pretty fa `above` indent 2 (vsep $ flip map ps $ \(r,c,vi,vo,act) ->
-        planHeader r c (vi,vo) `above` indent 2 (printUpdate act))
+    pretty fa `above` indent 2 (vsep $ flip map ps $ \(r,n,c,vi,vo,act) ->
+        planHeader r n c (vi,vo) `above` indent 2 (renderDop ddi act))
  where
-  planHeader r c (vi,vo) =
-    (prettySpanLoc $ r_span r) <+> text "cost=" <> pretty c <+>
-    text "in=" <> pretty vi <+> text "out=" <> pretty vo
+  planHeader r n c (vi,vo) =
+        (prettySpanLoc $ r_span r)
+    <+> text "evalix=" <> pretty n
+    <+> text "cost="   <> pretty c
+    <+> text "in="     <> pretty vi
+    <+> text "out="    <> pretty vo
 
-  printUpdate dop = vsep $ map (renderDOpAMine ddi) dop
+renderDopInis :: BackendRenderDopIter bs e
+              -> [(Rule,Cost,Actions bs)]
+              -> Doc e
+renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
+  iniHeader r c `above` indent 2 (renderDop ddi ps)
+ where
+  iniHeader r c = 
+       ((prettySpanLoc $ r_span r)
+   <+> text "cost=" <> pretty c
+   <+> text "head=" <> pretty (r_head r)
+   <+> text "res=" <> pretty (r_result r))
 
+------------------------------------------------------------------------}}}
+-- Warnings                                                             {{{
+
+renderSpannedWarn :: BU.ByteString -> [T.Span] -> Doc e
+renderSpannedWarn w s = "WARNING:" <+> text (BU.toString w) <+> "AT"
+                        `above` indent 2 (vcat (map prettySpanLoc s))
 
 ------------------------------------------------------------------------}}}
 -- Pipeline!                                                            {{{
@@ -212,15 +238,20 @@ processFile fileName = bracket openOut hClose go
   openOut = maybe (return stdout) (flip openFile WriteMode)
             $ dcfg_outFile ?dcfg
 
+  maybeWarnANF [] = Nothing
+  maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
+
   go out = do
     rs <- parse
 
     dump DumpParsed (vcat $ map (text.show) rs)
    
     let urs = map (\(P.LRule x T.:~ _) -> x) rs
-        frs = map normRule urs
+        (frs, anfWarns) = unzip $ map normRule urs
 
     dump DumpANF (vcat $ map printANF frs)
+
+    hPutDoc stderr $ vcat $ MA.mapMaybe maybeWarnANF anfWarns
 
     aggm <- return $! buildAggMap frs
 
@@ -247,6 +278,7 @@ processFile fileName = bracket openOut hClose go
 -}
 
         in do
+            dump DumpDopIni (renderDopInis be_ddi initializers)
             dump DumpDopUpd (renderDopUpds be_ddi cPlans)
             be_d aggm cPlans {- qPlans -} initializers out
 
@@ -276,9 +308,11 @@ main = catch (getArgs >>= main_) printerr
   pe (UserProgramError d) = do
     hPutStrLn stderr "FATAL: Encountered error in input program:"
     PP.hPutDoc stderr d
+    hPutStrLn stderr ""
   pe (UserProgramANSIError d) = do
     hPutStrLn stderr "FATAL: Encountered error in input program:"
     PPA.hPutDoc stderr d
+    hPutStrLn stderr ""
   pe (InvocationError d) = do
     hPutStrLn stderr "Invocation error:"
     PP.hPutDoc stderr d
@@ -287,10 +321,12 @@ main = catch (getArgs >>= main_) printerr
     hPutStrLn stderr "Terribly sorry, but you've hit an unsupported feature"
     taMsg
     PP.hPutDoc stderr d
+    hPutStrLn stderr ""
   pe (Panic d) = do
     hPutStrLn stderr "Compiler panic!"
     taMsg
     PP.hPutDoc stderr d
+    hPutStrLn stderr ""
 
   taMsg = do
     hPutStrLn stderr $ "This is almost assuredly not your fault!"

@@ -12,7 +12,9 @@ module Dyna.Analysis.Aggregation (
 ) where
 
 -- import qualified Data.ByteString            as B
+import qualified Data.Either                as E
 import qualified Data.Map                   as M
+import qualified Data.Set                   as S
 import           Dyna.Analysis.ANF
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
@@ -29,18 +31,17 @@ type AggMap = M.Map DFunctAr DAgg
 -- Associate each item with an aggregator                               {{{
 
 procANF :: Rule -> (DFunctAr, DAgg)
-procANF r@(Rule _ h a _ sp (AS { as_assgn = as })) =
-  case M.lookup h as of
-    Nothing       -> dynacSorry $ "I can't process head-variables in rule at" <+> (prettySpanLoc sp)
-    Just t -> case t of
-                Left _       -> dynacPanic $ "Malformed head" <+> (pretty $ show r)
-                Right (f,xs) -> ((f,length xs),a)
+procANF r@(Rule _ h a _ sp _ crs) =
+  case findHeadFA h crs of
+    Nothing -> dynacSorry $ "The rule at" <+> (prettySpanLoc sp)
+                                          <+> "is beyond my abilities."
+    Just t  -> (t,a)
 
 buildAggMap :: [Rule] -> AggMap
 buildAggMap = go (M.empty)
  where
   go m []      = m
-  go m (ar@(Rule _ _ a _ sp _):xs) =
+  go m (ar@(Rule _ _ a _ sp _ _):xs) =
     let (d,a) = procANF ar
     in case mapUpsert d a m of
          Left a' -> dynacUserErr $     "Conflicting aggregators; rule"

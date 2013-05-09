@@ -24,7 +24,11 @@ runDynaPy f out = do
 
   (Nothing,Nothing,Nothing,ph) <- createProcess $ CreateProcess
      { cmdspec = RawCommand "/usr/bin/env"
-                            ["python", "bin/interpreter.py", "-o", out, f]
+                            [ "python"
+                            , "src/Dyna/Backend/Python/interpreter.py"
+                            , "-o", out
+                            , f
+                            ]
      , cwd = Nothing
      , env = Nothing
      , std_in = UseHandle devnull

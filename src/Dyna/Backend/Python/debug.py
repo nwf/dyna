@@ -6,7 +6,7 @@ normalization process.
 
 import re, os
 from collections import defaultdict, namedtuple
-from utils import magenta, red, green, yellow, white, toANF, read_anf
+from utils import magenta, red, green, yellow, white, read_anf
 
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -154,17 +154,14 @@ def isvar(x):
 
 def circuit(anf):
 
-    (agg, head, evals, assigns, unifs, result) = anf
+    (agg, head, evals, unifs, result) = anf
 
     g = Hypergraph()
     for var, op, args in evals:
         g.edge(head=var, label=op, body=args)
 
-    for var, op, args in assigns:
-        g.edge(head=var, label='& %s' % op, body=args)
-
     for var, op, val in unifs:
-        g.edge(head=var, label='& ', body=[op])
+        g.edge(head=var, label='& %s' % op, body=val)
 
     g.head = head
     g.result = result
@@ -270,40 +267,46 @@ function selectline(lineno) {
         print >> html, '<div id="circuit-pane" style=""></div>'
         print >> html, '<div id="update-handler-pane" style=""></div>'
 
-        anf = toANF(code)
+        # XXX We do not yet render the dumped dopamine, but it's there...
+        cmd = """dist/build/dyna/dyna -B python \
+--dump-anf="%s"/anf \
+--dump-dopini="%s"/dopini \
+--dump-dopupd="%s"/dopupd \
+-o "%s"/plan "%s" """ % (d,d,d,d,dynafile)
+        if 0 != os.system(cmd):
+            print 'command failed:\n\t' + cmd
+            os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+            return
 
-        print >> html, '<div style="display:none;">'
+        with file(d + '/anf') as f:
+            anf = f.read()
 
-        print >> html, '<h2>ANF</h2>'
-        print >> html, '<pre>\n%s\n</pre>' % anf.strip()
+            print >> html, '<div style="display:none;">'
 
-        print >> html, '<h2>Hyperedge templates</h2>'
+            print >> html, '<h2>ANF</h2>'
+            print >> html, '<pre>\n%s\n</pre>' % anf.strip()
 
-        linenos = re.findall(';; (.*?):(\d+):\d+-.*?:(\d+):\d+', anf)
+            print >> html, '<h2>Hyperedge templates</h2>'
 
-        rules = [circuit(x) for x in read_anf(anf)]
+            linenos = re.findall(';; (.*?):(\d+):\d+-.*?:(\d+):\d+', anf)
 
-        assert len(rules) == len(linenos), 'missing line number in ANF.'
+            rules = [circuit(x) for x in read_anf(anf)]
 
-        for (i, ((_, lineno, _), g)) in enumerate(zip(linenos, rules)):
-            sty = graph_styles(g)
-            svg = g.render(dynafile + '.d/rule-%s' % i, sty)
-            print >> html, '<div class="circuit-%s">%s</div>' % (lineno, svg)
+            assert len(rules) == len(linenos), 'missing line number in ANF.'
+
+            for (i, ((_, lineno, _), g)) in enumerate(zip(linenos, rules)):
+                sty = graph_styles(g)
+                svg = g.render(dynafile + '.d/rule-%s' % i, sty)
+                print >> html, '<div class="circuit-%s">%s</div>' % (lineno, svg)
 
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
 
         print >> html, '<h2>Update plans</h2>'
 
-        cmd = """dist/build/dyna/dyna -B python -o "%s".plan "%s" """ % (dynafile,dynafile)
-        if 0 != os.system(cmd):
-            print 'command failed:\n\t' + cmd
-            os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
-            return
-
 #        print >> html, '<pre>'
 
-        with file(dynafile + '.plan') as f:
+        with file(d + '/plan') as f:
             code = f.read()
             print >> html, code
 

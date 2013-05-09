@@ -22,16 +22,13 @@ import           Text.PrettyPrint.Free
 import           Dyna.Analysis.ANF
 import qualified Dyna.ParserHS.Parser         as P
 import           Dyna.ParserHS.Selftest
+import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
 
-testNormTerm :: Bool -> B.ByteString -> (NTV, ANFState)
-testNormTerm c = runNormalize . normTerm c . unsafeParse P.dterm
-
-testNormRule :: B.ByteString -> (FRule, ANFState)
-testNormRule = runNormalize . normRule . unsafeParse P.drule
-
+testNormRule :: B.ByteString -> Rule
+testNormRule = normRule . unsafeParse P.rawDRule
 
 {-
 e1 = testNormRule "f(X)."

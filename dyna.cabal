@@ -29,9 +29,9 @@ Library
 
 
     Exposed-Modules:    Dyna.Analysis.ANF,
+                        Dyna.Analysis.ANFPretty,
                         Dyna.Analysis.Mode,
                         Dyna.Backend.BackendDefn,
-                        Dyna.Main.Driver,
                         Dyna.Main.Exception,
                         Dyna.ParserHS.Parser,
                         Dyna.XXX.Trifecta
@@ -150,6 +150,7 @@ Test-suite dyna-selftests
                         recursion-schemes >=3.0,
                         reducers >=3.0,
                         semigroups >=0.8,
+                        smallcheck >= 1.0,
                         tagged >= 0.4.4,
                         template-haskell,
                         test-framework >=0.6,

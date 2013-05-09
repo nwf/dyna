@@ -10,12 +10,11 @@ module Dyna.Backend.BackendDefn where
 import qualified Data.Set as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
-import           Dyna.Analysis.DOpAMine (BackendRenderDopIter, ModedVar)
-import           Dyna.Analysis.Mode.Det
+import           Dyna.Analysis.DOpAMine (BackendRenderDopIter)
 import           Dyna.Analysis.RuleMode (
                     Actions, BackendPossible, Cost,
                     UpdateEvalMap {-, QueryEvalMap -})
-import           Dyna.Term.TTerm (DFunct, DFunctAr)
+import           Dyna.Term.TTerm (DFunctAr)
 import           System.IO (Handle)
 
 -- XXX The notion of be_constants is not quite right, I think?  It is used

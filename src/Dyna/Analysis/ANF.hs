@@ -67,37 +67,44 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.ANF (
-    ANFState(..),  Rule(..),
-    normTerm, normRule, runNormalize, printANF,
+	Crux, EvalCrux(..), UnifCrux(..), cruxIsEval, cruxVars,
+	
+    Rule(..), ANFAnnots, ANFWarns,
+    normTerm, normRule, runNormalize,
 
 	-- * Internals
 	SelfDispos(..), ArgDispos(..), ECSrc(..), EvalCtx,
+
+    -- * Placeholders
+    findHeadFA,
 ) where
 
+import           Control.Lens
 import           Control.Monad.Reader
 import           Control.Monad.State
 -- import           Control.Unification
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
-import qualified Data.Char                  as C
+-- import qualified Data.Char                  as C
+import qualified Data.Either                as E
 import qualified Data.Map                   as M
+import qualified Data.Maybe                 as MA
+-- import qualified Data.IntMap                as IM
+import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils (mapInOrApp)
-import           Dyna.XXX.PPrint (valign)
 -- import           Dyna.Test.Trifecta         -- XXX
-import           Text.PrettyPrint.Free
 import qualified Text.Trifecta              as T
-
-
-import           Dyna.XXX.Trifecta (prettySpanLoc)
 
 ------------------------------------------------------------------------}}}
 -- Preliminaries                                                        {{{
@@ -106,6 +113,9 @@ data ECSrc = ECFunctor
            | ECExplicit
 
 type EvalCtx = (ECSrc,ArgDispos)
+
+type ANFAnnots = M.Map DVar [Annotation (T.Spanned P.Term)]
+type ANFWarns  = [(BU.ByteString, [T.Span])]
 
 newtype ANFDict = AD { ad_dt :: DisposTab }
 {-
@@ -132,27 +142,67 @@ mergeDispositions = md
   md SDQuote   (ECExplicit,ADEval)  = ADEval
   md SDQuote   (_,_)                = ADQuote
 
+------------------------------------------------------------------------}}}
+-- Cruxes                                                               {{{
+
+data EvalCrux v = CCall Int v [v] DFunct
+                | CEval Int v v
+ deriving (Eq,Ord,Show)
+
+data UnifCrux v n = CStruct v [v] DFunct   -- Known structure building
+                  | CAssign v n            -- Constant loading
+                  | CEquals v v            -- Equality constraint
+                  | CNotEqu v v            -- Disequality constraint
+ deriving (Eq,Ord,Show)
+
+type Crux v n = Either (EvalCrux v) (UnifCrux v n)
+
+cruxIsEval :: Crux v n -> Bool
+cruxIsEval (Left _) = True
+cruxIsEval (Right _) = False
+
+cruxVars :: Crux DVar TBase -> S.Set DVar
+cruxVars = either evalVars unifVars
+ where
+  evalVars cr = case cr of
+    CCall _ o is        _ -> S.fromList (o:is)
+    CEval _ o i           -> S.fromList [o,i]
+  unifVars cr = case cr of
+    CStruct o is _ -> S.fromList (o:is)
+    CAssign o _    -> S.singleton o
+    CEquals o i    -> S.fromList [o,i]
+    CNotEqu o i    -> S.fromList [o,i]
+
+
+------------------------------------------------------------------------}}}
+-- ANF State                                                            {{{
+
 data ANFState = AS
-              { as_next  :: !Int
-              , as_evals :: M.Map DVar EVF
-              , as_assgn :: M.Map DVar EBF
-              , as_unifs :: [(DVar,DVar)]
-              , as_annot :: M.Map DVar [Annotation (T.Spanned P.Term)]
-              , as_warns :: [(B.ByteString, [T.Span])]
+              { _as_next_var  :: !Int
+              , _as_next_eval :: !Int
+              , _as_cruxes    :: S.Set (Crux DVar TBase)
+              -- , as_evals :: IM.IntMap (DVar,EVF)
+              -- , as_assgn :: M.Map DVar EBF
+              -- , as_unifs :: [(DVar,DVar)]
+              , _as_annot :: ANFAnnots
+              , _as_warns :: ANFWarns
               }
  deriving (Show)
+$(makeLenses ''ANFState)
+
+addCrux :: (MonadState ANFState m) => Crux DVar TBase -> m ()
+addCrux c = as_cruxes %= (S.insert c)
 
 nextVar :: (MonadState ANFState m) => String -> m DVar
 nextVar pfx = do
-    vn  <- gets as_next
-    modify (\s -> s { as_next = vn + 1 })
+    vn  <- as_next_var <<%= (+1)
     return $ BU.fromString $ pfx ++ show vn
 
 newEval :: (MonadState ANFState m) => String -> EVF -> m DVar
 newEval pfx t = do
     n   <- nextVar pfx
-    evs <- gets as_evals
-    modify (\s -> s { as_evals = M.insert n t evs })
+    ne  <- as_next_eval <<%= (+1)
+    addCrux (Left $ either (CEval ne n) (uncurry (flip (CCall ne n))) t)
     return n
 
 newAssign :: (MonadState ANFState m) => String -> ENF -> m DVar
@@ -164,14 +214,12 @@ newAssign pfx t =
  where
   go u = do
     n   <- nextVar pfx
-    uns <- gets as_assgn
-    modify (\s -> s { as_assgn = M.insert n u uns })
+    addCrux (Right $ either (CAssign n) (uncurry (flip (CStruct n))) u)
     return n
 
 newAnnot :: (MonadState ANFState m)
          => DVar -> Annotation (T.Spanned P.Term) -> m ()
-newAnnot v a = do
-    modify (\s -> s { as_annot = mapInOrApp v a (as_annot s) })
+newAnnot v a = as_annot %= mapInOrApp v a
 
 {-
 newAssignNT :: (MonadState ANFState m) => String -> NTV -> m DVar
@@ -182,10 +230,10 @@ newAssignNT pfx x             = newAssign pfx $ Left x
 doUnif :: (MonadState ANFState m) => DVar -> DVar -> m ()
 doUnif v w = if v == w
               then return ()
-              else modify (\s -> s { as_unifs = (v,w):(as_unifs s) })
+              else addCrux (Right $ CEquals v w)
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
-newWarn msg loc = modify (\s -> s { as_warns = (msg,loc):(as_warns s) })
+newWarn msg loc = as_warns %= ((msg,loc):)
 
 ------------------------------------------------------------------------}}}
 -- Normalize a Term                                                     {{{
@@ -343,16 +391,19 @@ data Rule = Rule { r_index      :: Int
                  , r_aggregator :: DAgg
                  , r_result     :: DVar
                  , r_span       :: T.Span
-                 , r_anf        :: ANFState
+                 , r_annots     :: ANFAnnots
+                 , r_cruxes     :: S.Set (Crux DVar TBase)
                  }
  deriving (Show)
 
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
-         -> Rule
-normRule (P.Rule i h a r dt T.:~ sp) = uncurry ($) $ runNormalize dt $ do
-    nh  <- normTerm False h >>= newAssign "_h" . Left
-    nr  <- normTerm True  r >>= newAssign "_r" . Left
-    return $ Rule i nh a nr sp
+         -> (Rule, ANFWarns)
+normRule (P.Rule i h a r dt T.:~ sp) = 
+  let (ru,s) = runNormalize dt $ do
+               nh  <- normTerm False h >>= newAssign "_h" . Left
+               nr  <- normTerm True  r >>= newAssign "_r" . Left
+               return $ Rule i nh a nr sp
+  in (ru (s^.as_annot) (s^.as_cruxes),s^.as_warns)
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -363,40 +414,20 @@ normRule (P.Rule i h a r dt T.:~ sp) = uncurry ($) $ runNormalize dt $ do
 runNormalize :: DisposTab
              -> ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize dt =
-  flip runState   (AS 0 M.empty M.empty [] M.empty []) .
+  flip runState   (AS 0 0 S.empty M.empty []) .
   flip runReaderT (AD dt)
 
 ------------------------------------------------------------------------}}}
--- Pretty Printer                                                       {{{
+-- Placeholders XXX                                                     {{{
 
-printANF :: Rule -> Doc e
-printANF (Rule i h a result sp
-            (AS {as_evals = evals, as_assgn = assgn, as_unifs = unifs})) =
-          text ";;" <+> prettySpanLoc sp
-  `above`
-          text ";; index" <+> pretty i
-  `above`
-  ( parens $ (pretty a)
-            <+> valign [ (pretty h)
-                       , parens $ text "evals"  <+> pev
-                       , parens $ text "assign" <+> pas
-                       , parens $ text "unifs"  <+> pun
-                       , parens $ text "result" <+> (pretty result)
-                       ]
-  ) <> line
-  where
-    pft :: FDT -> Doc e
-    pft (fn,args)  = parens $ hsep $ (pretty fn : (map pretty args))
-
-    pe :: Pretty a => Either a FDT -> Doc e
-    pe = either pretty pft
-
-    pev = valign $ map (\(y,z)-> parens $ pretty y <+> pe z)
-                 $ M.toList evals
-
-    pas = valign $ map (\(y,z)-> parens $ pretty y <+> pe z)
-                       (M.toList assgn)
-    pun = valign $ map (\(y,z) -> parens $ pretty y <+> pretty z)
-                       unifs
+-- XXX This is terrible and should be replaced with whatever type-checking
+-- work we do.
+findHeadFA :: DVar -> S.Set (Crux DVar TBase) -> Maybe DFunctAr
+findHeadFA h crs = MA.listToMaybe
+                 $ MA.mapMaybe m
+                 $ snd $ E.partitionEithers (S.toList crs)
+ where
+  m (CStruct o is f) | o == h = Just (f,length is)
+  m _                         = Nothing
 
 ------------------------------------------------------------------------}}}
