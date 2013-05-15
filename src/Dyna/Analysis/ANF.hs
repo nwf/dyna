@@ -81,7 +81,7 @@ module Dyna.Analysis.ANF (
 	SelfDispos(..), ArgDispos(..), ECSrc(..), EvalCtx,
 
     -- * Placeholders
-    findHeadFA,
+    evalCruxFA, findHeadFA, r_cruxes,
 ) where
 
 import           Control.Lens
@@ -92,10 +92,9 @@ import qualified Data.ByteString.Char8      as BC
 import qualified Data.ByteString.UTF8       as BU
 import qualified Data.ByteString            as B
 -- import qualified Data.Char                  as C
-import qualified Data.Either                as E
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
--- import qualified Data.IntMap                as IM
+import qualified Data.IntMap                as IM
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import qualified Dyna.ParserHS.Parser       as P
@@ -145,8 +144,8 @@ mergeDispositions = md
 ------------------------------------------------------------------------}}}
 -- Cruxes                                                               {{{
 
-data EvalCrux v = CCall Int v [v] DFunct
-                | CEval Int v v
+data EvalCrux v = CCall v [v] DFunct
+                | CEval v v
  deriving (Eq,Ord,Show)
 
 data UnifCrux v n = CStruct v [v] DFunct   -- Known structure building
@@ -155,7 +154,7 @@ data UnifCrux v n = CStruct v [v] DFunct   -- Known structure building
                   | CNotEqu v v            -- Disequality constraint
  deriving (Eq,Ord,Show)
 
-type Crux v n = Either (EvalCrux v) (UnifCrux v n)
+type Crux v n = Either (Int,EvalCrux v) (UnifCrux v n)
 
 cruxIsEval :: Crux v n -> Bool
 cruxIsEval (Left _) = True
@@ -164,9 +163,9 @@ cruxIsEval (Right _) = False
 cruxVars :: Crux DVar TBase -> S.Set DVar
 cruxVars = either evalVars unifVars
  where
-  evalVars cr = case cr of
-    CCall _ o is        _ -> S.fromList (o:is)
-    CEval _ o i           -> S.fromList [o,i]
+  evalVars (_,cr) = case cr of
+    CCall   o is _ -> S.fromList (o:is)
+    CEval   o i    -> S.fromList [o,i]
   unifVars cr = case cr of
     CStruct o is _ -> S.fromList (o:is)
     CAssign o _    -> S.singleton o
@@ -180,7 +179,8 @@ cruxVars = either evalVars unifVars
 data ANFState = AS
               { _as_next_var  :: !Int
               , _as_next_eval :: !Int
-              , _as_cruxes    :: S.Set (Crux DVar TBase)
+              , _as_ucruxes   :: S.Set (UnifCrux DVar TBase)
+              , _as_ecruxes   :: IM.IntMap (EvalCrux DVar)
               -- , as_evals :: IM.IntMap (DVar,EVF)
               -- , as_assgn :: M.Map DVar EBF
               -- , as_unifs :: [(DVar,DVar)]
@@ -190,8 +190,8 @@ data ANFState = AS
  deriving (Show)
 $(makeLenses ''ANFState)
 
-addCrux :: (MonadState ANFState m) => Crux DVar TBase -> m ()
-addCrux c = as_cruxes %= (S.insert c)
+addUCrux :: (MonadState ANFState m) => UnifCrux DVar TBase -> m ()
+addUCrux c = as_ucruxes %= (S.insert c)
 
 nextVar :: (MonadState ANFState m) => String -> m DVar
 nextVar pfx = do
@@ -202,7 +202,8 @@ newEval :: (MonadState ANFState m) => String -> EVF -> m DVar
 newEval pfx t = do
     n   <- nextVar pfx
     ne  <- as_next_eval <<%= (+1)
-    addCrux (Left $ either (CEval ne n) (uncurry (flip (CCall ne n))) t)
+    as_ecruxes %= IM.insert ne (either (CEval n)
+                                       (uncurry (flip (CCall n))) t)
     return n
 
 newAssign :: (MonadState ANFState m) => String -> ENF -> m DVar
@@ -214,7 +215,7 @@ newAssign pfx t =
  where
   go u = do
     n   <- nextVar pfx
-    addCrux (Right $ either (CAssign n) (uncurry (flip (CStruct n))) u)
+    addUCrux (either (CAssign n) (uncurry (flip (CStruct n))) u)
     return n
 
 newAnnot :: (MonadState ANFState m)
@@ -230,7 +231,7 @@ newAssignNT pfx x             = newAssign pfx $ Left x
 doUnif :: (MonadState ANFState m) => DVar -> DVar -> m ()
 doUnif v w = if v == w
               then return ()
-              else addCrux (Right $ CEquals v w)
+              else addUCrux (CEquals v w)
 
 newWarn :: (MonadState ANFState m) => B.ByteString -> [T.Span] -> m ()
 newWarn msg loc = as_warns %= ((msg,loc):)
@@ -392,9 +393,11 @@ data Rule = Rule { r_index      :: Int
                  , r_result     :: DVar
                  , r_span       :: T.Span
                  , r_annots     :: ANFAnnots
-                 , r_cruxes     :: S.Set (Crux DVar TBase)
+                 , r_ucruxes    :: S.Set (UnifCrux DVar TBase)
+                 , r_ecruxes    :: IM.IntMap (EvalCrux DVar)
                  }
  deriving (Show)
+
 
 normRule :: T.Spanned P.Rule   -- ^ Term to digest
          -> (Rule, ANFWarns)
@@ -403,7 +406,7 @@ normRule (P.Rule i h a r dt T.:~ sp) =
                nh  <- normTerm False h >>= newAssign "_h" . Left
                nr  <- normTerm True  r >>= newAssign "_r" . Left
                return $ Rule i nh a nr sp
-  in (ru (s^.as_annot) (s^.as_cruxes),s^.as_warns)
+  in (ru (s^.as_annot) (s^.as_ucruxes) (s^.as_ecruxes),s^.as_warns)
 
 ------------------------------------------------------------------------}}}
 -- Run the normalizer                                                   {{{
@@ -414,18 +417,26 @@ normRule (P.Rule i h a r dt T.:~ sp) =
 runNormalize :: DisposTab
              -> ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize dt =
-  flip runState   (AS 0 0 S.empty M.empty []) .
+  flip runState   (AS 0 0 S.empty IM.empty M.empty []) .
   flip runReaderT (AD dt)
 
 ------------------------------------------------------------------------}}}
 -- Placeholders XXX                                                     {{{
 
+r_cruxes :: Rule -> S.Set (Crux DVar TBase)
+r_cruxes r = S.union (S.map Right $ r_ucruxes r)
+                     (S.map Left $ S.fromList $ IM.assocs $ r_ecruxes r)
+
+evalCruxFA :: EvalCrux DVar -> Maybe DFunctAr
+evalCruxFA (CEval _ _) = Nothing
+evalCruxFA (CCall _ is f) = Just $ (f, length is)
+
 -- XXX This is terrible and should be replaced with whatever type-checking
 -- work we do.
-findHeadFA :: DVar -> S.Set (Crux DVar TBase) -> Maybe DFunctAr
+findHeadFA :: DVar -> S.Set (UnifCrux DVar TBase) -> Maybe DFunctAr
 findHeadFA h crs = MA.listToMaybe
                  $ MA.mapMaybe m
-                 $ snd $ E.partitionEithers (S.toList crs)
+                 $ S.toList crs
  where
   m (CStruct o is f) | o == h = Just (f,length is)
   m _                         = Nothing

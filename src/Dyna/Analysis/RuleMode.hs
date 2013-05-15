@@ -41,12 +41,14 @@ import           Control.Monad.Identity
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.Either                as E
+import qualified Data.IntMap                as IM
 -- import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
+import           Dyna.Analysis.ANFPretty
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
 import           Dyna.Analysis.Mode.Execution.NoAliasContext
@@ -157,6 +159,10 @@ possible fp cr =
     -- the moment, since everything we do is either IFree or IUniv, just use
     -- iEq everywhere.
 
+    -- XXX Actually, this is all worse than it should be.  The unification
+    -- should be done before any case analysis.  Note that we also don't do
+    -- any liveness analysis correctly!
+
     -- Assign or check
     Right (CAssign o i) ->
         fup o (runReaderT (unifyVU o) (UnifParams True False)
@@ -196,10 +202,10 @@ possible fp cr =
                                          (return [ OPCkne o i ]))
 
     -- XXX Indirect evaluation is not yet supported
-    Left (CEval _ _ _) -> dynacSorry "Indir eval"
+    Left (_, CEval _ _) -> dynacSorry "Indir eval"
 
     -- Evaluation
-    Left (CCall _ vo vis funct) -> do
+    Left (_, CCall vo vis funct) -> do
       is <- mapM mkMV vis 
       o  <- mkMV vo
       case fp (funct,is,o) of
@@ -456,10 +462,10 @@ planner_ st sc cr mic bv fv = runAgenda
   -- XREF:INITPLAN
   (ip,bi) = case mic of
               Nothing -> ([],S.empty)
-              Just (CCall _ o is f, hi, ho) -> ( [ OPPeel is hi f
+              Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f
                                                  , OPAsgn o (NTVar ho)]
                                               , S.fromList $ o:is)
-              Just (CEval _ o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
+              Just (CEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
                                               , OPAsgn o (NTVar ho)]
                                             , S.fromList $ [o,i] )
 
@@ -495,7 +501,8 @@ planUpdate bp sc anf mi fv =
   bestPlan $ planner_ (possible bp) sc anf (Just mi) S.empty fv
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
-planInitializer bp (Rule { r_cruxes = cruxes }) =
+planInitializer bp r =
+  let cruxes = r_cruxes r in
   bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing S.empty (allCruxVars cruxes)
 
 -- | Given a particular crux and the remaining evaluation cruxes in a rule, 
@@ -505,22 +512,22 @@ planInitializer bp (Rule { r_cruxes = cruxes }) =
 -- See $dupcrux.
 handleDoubles :: (Ord a, Ord b)
               => (Int -> a -> a -> a) 
-              -> EvalCrux a
-              -> S.Set (EvalCrux a)
+              -> (Int,EvalCrux a)
+              -> S.Set (Int, EvalCrux a)
               -> S.Set (UnifCrux a b)
 handleDoubles vc e r = S.fold (go e) S.empty r
  where
-  go (CEval en _ ei)      (CEval qn _ qi)      s =
+  go (en, CEval _ ei)      (qn, CEval _ qi)      s =
     if en > qn then s else S.insert (CNotEqu ei qi) s
-  go (CCall en eo eis ef) (CEval qn qo qi)     s =
+  go (en, CCall eo eis ef) (qn, CEval qo qi)     s =
     if en > qn then s else let cv = vc 0 eo qo
                             in S.insert (CStruct cv eis ef)
                              $ S.insert (CNotEqu cv qi) s
-  go (CEval en eo ei)     (CCall qn qo qis qf) s =
+  go (en, CEval eo ei)     (qn, CCall qo qis qf) s =
     if en > qn then s else let cv = vc 0 eo qo
                             in S.insert (CStruct cv qis qf)
                              $ S.insert (CNotEqu cv ei) s
-  go (CCall en eo eis ef) (CCall qn qo qis qf) s =
+  go (en, CCall eo eis ef) (qn, CCall qo qis qf) s =
     if en > qn || ef /= qf || length eis /= length qis
      then s
      else let ecv = vc 0 eo qo
@@ -532,29 +539,31 @@ handleDoubles vc e r = S.fold (go e) S.empty r
 planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
              -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
              -> Rule
-             -> [(Maybe DFunctAr, Int, Maybe (Cost, DVar, DVar, Actions fbs))]
+             -> [(Int, Maybe (Cost, DVar, DVar, Actions fbs))]
 -- planEachEval _ _ _ = []
-planEachEval bp cs (Rule { r_cruxes = cruxes })  =
-  map (\(mfa,n,cr) ->
+planEachEval bp cs r  =
+  map (\(n,cr) ->
          let cruxes' = S.union cruxes
                                (S.map Right $ handleDoubles mkvar cr 
                                                 (S.delete cr $ S.fromList ecs))
-          in (mfa,n, varify $ planUpdate bp simpleCost
+          in (n, varify $ planUpdate bp simpleCost
                                        cruxes'
-                                       (mic cr)
+                                       (mic $ snd cr)
                                        (allCruxVars cruxes')))
     -- Filter out non-constant evaluations
     --
     -- XXX This instead should look at the update modes of each evaluation
   $ MA.mapMaybe (\ec -> case ec of
-                  CCall n _ is f | not (cs (f,length is))
-                                -> Just (Just (f,length is), n, ec)
-                  CCall _ _ _  _ -> Nothing
-                  CEval n _ _    -> Just (Nothing,n,ec))
+                  (n, CCall _ is f) | not (cs (f,length is))
+                                -> Just (n, ec)
+                  (_, CCall _ _  _) -> Nothing
+                  (n, CEval _ _   ) -> Just (n,ec))
 
     -- Grab all evaluations
   $ ecs
  where
+  cruxes = r_cruxes r
+
   mkvar n v1 v2 = B.concat ["chk",v1,"_",v2,"_",BC.pack $ show n]
 
   ecs = fst $ E.partitionEithers $ S.toList cruxes
@@ -599,7 +608,7 @@ type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
 --
 -- timv: might want to fuse these into one circuit
 --
-combineUpdatePlans :: [(Rule,[( Maybe DFunctAr, Int,
+combineUpdatePlans :: [(Rule,[( Int,
                                 Maybe (Cost, DVar, DVar, Actions fbs))])]
                    -> UpdateEvalMap fbs  
 combineUpdatePlans = go (M.empty)
@@ -608,7 +617,7 @@ combineUpdatePlans = go (M.empty)
   go m ((fr,cmca):xs) = go' xs fr cmca m
 
   go' xs _  []           m = go m xs
-  go' xs fr ((fa,n,mca):ys) m =
+  go' xs fr ((n,mca):ys) m =
     case mca of
       Nothing -> dynacUserErr
                        $ "No update plan for "
@@ -616,6 +625,12 @@ combineUpdatePlans = go (M.empty)
                           <+> "in rule at"
                           <+> (prettySpanLoc $ r_span fr)
       Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrApp fa (fr,n,c,v1,v2,a) m
+   where
+    fa = evalCruxFA ev
+    ev = maybe (dynacPanic $ "Eval index without eval crux in rule "
+                             <+> (printANF fr))
+               id
+               (IM.lookup n (r_ecruxes fr))
 
 ------------------------------------------------------------------------}}}
 -- Backward chaining plan combination                                   {{{

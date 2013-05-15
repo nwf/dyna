@@ -220,9 +220,9 @@ printPlanHeader h r c mn = do
   hPutStrLn h $ "# Cost: " ++ (show c)
 
 printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
-printInitializer fh rule@(Rule _ h _ r _ _ cruxes) dope = do
+printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h cruxes)
+                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
                    `above` "def" <+> char '_' <> tupled [] <+> colon
                    `above` pdope dope emit
                    <> line
@@ -231,7 +231,7 @@ printInitializer fh rule@(Rule _ h _ r _ _ cruxes) dope = do
 
 -- XXX INDIR EVAL
 printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
-printUpdate fh rule@(Rule _ h _ r _ _ _) (Just (f,a)) (hv,v) dope = do
+printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon
