@@ -108,11 +108,11 @@ instance (Pretty f) => Pretty (NIX f) where
                    UClobbered       -> "cl"
 
    -- render inst
-   ri IFree          = text "$f"
-   ri (IAny u)       = text "$a@" <> ru u
-   ri (IUniv u)      = text "$u@" <> ru u
-   ri (IBound u bm b) = ru u
-                     <> (semiBraces $ if b then (text "$b"):rm else rm)
+   ri IFree          = text "F"
+   ri (IAny u)       = text "A@" <> ru u
+   ri (IUniv u)      = text "U@" <> ru u
+   ri (IBound u bm b) = (semiBraces $ if b then (text "B"):rm else rm)
+                        <> char '@' <> ru u
     where
      rm = map (\(k,vs) -> pretty k <> tupled (map rix vs)) (M.toList bm)
                     
@@ -290,7 +290,7 @@ nExpose :: NIX f -> InstF f (NIX f)
 nExpose n@(NIX r m) = fmap (\a -> either id (\i -> NIX i m) (ml n m a)) r
 {-# INLINABLE nExpose #-}
 
--- | An inefficient \"inverse\" of nExpose.
+-- | An inefficient \"inverse\" (up to isomorphism) of nExpose.
 nHide :: InstF f (NIX f) -> NIX f
 nHide i = uncurry NIX $ runState (T.mapM next i) M.empty
  where

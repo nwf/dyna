@@ -115,19 +115,23 @@ type BackendRenderDopIter bs e =
 -- | Given a mechanism for rendering backend-specific information,
 -- pretty-print a 'DOpAMine' opcode.
 renderDOpAMine :: BackendRenderDopIter bs e -> DOpAMine bs -> Doc e
-renderDOpAMine _ (OPAsgn v n)    = text "OPAsgn" <+> pretty v  <+> pretty n
-renderDOpAMine _ (OPCheq a b)    = text "OPCheq" <+> pretty a  <+> pretty b
-renderDOpAMine _ (OPCkne a b)    = text "OPCkne" <+> pretty a  <+> pretty b
-renderDOpAMine _ (OPIndr a b)    = text "OPIndr" <+> pretty a  <+> pretty b
-renderDOpAMine _ (OPPeel vs v f) = text "OPPeel" <+> pretty vs
-                                               <+> pretty v  <+> pretty f
-renderDOpAMine _ (OPWrap v vs f) = text "OPWrap" <+> pretty v
-                                               <+> pretty vs <+> pretty f
-renderDOpAMine e (OPIter v vs f d b) =     text "OPIter"
-                                <+> pretty v
-                                <+> list (map pretty vs)
-                                <+> squotes (pretty f)
-                                <+> text (show d)
-                                <> maybe empty ((space <>) . braces . e v vs f d) b
+renderDOpAMine = r
+ where
+  r _ (OPAsgn v n)        = text "OPAsgn" <+> pretty v  <+> pretty n
+  r _ (OPCheq a b)        = text "OPCheq" <+> pretty a  <+> pretty b
+  r _ (OPCkne a b)        = text "OPCkne" <+> pretty a  <+> pretty b
+  r _ (OPIndr a b)        = text "OPIndr" <+> pretty a  <+> pretty b
+  r _ (OPPeel vs v f)     = text "OPPeel" <+> pretty vs
+                                          <+> pretty v  <+> pretty f
+  r _ (OPWrap v vs f)     = text "OPWrap" <+> pretty v
+                                          <+> pretty vs <+> pretty f
+  r e (OPIter v vs f d b) = text "OPIter"
+                            <+> pretty v
+                            <+> list (map pretty vs)
+                            <+> squotes (pretty f)
+                            <+> text (show d)
+                            <> maybe empty
+                                     ((space <>) . braces . e v vs f d)
+                                     b
 
 ------------------------------------------------------------------------}}}

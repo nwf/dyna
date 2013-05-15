@@ -4,7 +4,7 @@ Generates a visual representation of a Dyna program rules after the
 normalization process.
 """
 
-import re, os
+import re, os, shutil
 from collections import defaultdict, namedtuple
 from utils import magenta, red, green, yellow, white, read_anf
 
@@ -12,6 +12,8 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
 
+cssfile="src/Dyna/Backend/Python/debug-pygments.css"
+jsfile="external/prototype-1.6.0.3.js"
 
 Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "tail"
 
@@ -161,7 +163,10 @@ def circuit(anf):
         g.edge(head=var, label=op, body=args)
 
     for var, op, val in unifs:
-        g.edge(head=var, label='& %s' % op, body=val)
+        if op == '&' :
+            op = '%s %s' % (op,val[0])
+            val = val[1:]
+        g.edge(head=var, label='%s' % op, body=val)
 
     g.head = head
     g.result = result
@@ -179,7 +184,9 @@ def graph_styles(g):
 
     # edge styles
     for e in g.edges:
-        if e.label.startswith('&'):  # distiguish unif edges
+        if    e.label.startswith('&') \
+           or e.label.startswith('!') \
+           or e.label.startswith('=') :  # distiguish unif edges
             sty[e].update({'style': 'filled', 'fillcolor': 'grey'})
 
     # node styles
@@ -200,8 +207,15 @@ def graph_styles(g):
 
 def main(dynafile):
 
+    if not os.path.exists(cssfile) or not os.path.exists(jsfile):
+        print("Debug must be run from the root of the Dyna source tree")
+        return
+
     d = dynafile + '.d'
     os.system('mkdir -p %s' % d)
+
+    shutil.copyfile(cssfile,d+"/debug-pygments.css")
+    shutil.copyfile(jsfile,d+"/prototype.js")
 
     with file(d + '/index.html', 'wb') as html:
 
@@ -213,9 +227,10 @@ html, body {margin:0; padding:0;}
 
 #dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%; padding-left: 10px;  }
 #circuit-pane { position:absolute; width: 50%; top: 10px; left: 42%; padding-left: 5%; }
-#update-handler-pane { position: absolute; top: 10px; left: 100%; width: 45%; padding-right: 5%; }
+#dopamine-pane { position: absolute; top: 10px; left: 100%; width: 42%; padding-right: 5%; }
+#update-handler-pane { position: absolute; top: 10px; left: 150%; width: 45%; padding-right: 5%; }
 
-#dyna-source, #circuit-pane {
+#dyna-source, #circuit-pane, #dopamine-pane {
   border-right: 1px solid #666
 }
 
@@ -226,15 +241,18 @@ body { background: black; color: white; }
 
 </style>
 
-<link rel="stylesheet" href="../../bin/style.css">
+<link rel="stylesheet" href="debug-pygments.css">
 
-<script type="text/javascript" language="javascript" src="../../bin/prototype.js"></script>
+<script type="text/javascript" language="javascript" src="prototype.js"></script>
 
 <script type="text/javascript" language="javascript">
 
 function selectline(lineno) {
   $("update-handler-pane").innerHTML = "";
   $$(".handler-" + lineno).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
+
+  $("dopamine-pane").innerHTML = "";
+  $$(".dopamine-" + lineno).each(function (e) { $("dopamine-pane").innerHTML += e.innerHTML; });
 
   $("circuit-pane").innerHTML = "";
   $$(".circuit-" + lineno).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
@@ -265,6 +283,7 @@ function selectline(lineno) {
         print >> html, '</div>'
 
         print >> html, '<div id="circuit-pane" style=""></div>'
+        print >> html, '<div id="dopamine-pane" style=""></div>'
         print >> html, '<div id="update-handler-pane" style=""></div>'
 
         # XXX We do not yet render the dumped dopamine, but it's there...
@@ -278,13 +297,14 @@ function selectline(lineno) {
             os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
             return
 
+        print >> html, '<div style="display:none;">'
+
         with file(d + '/anf') as f:
             anf = f.read()
 
-            print >> html, '<div style="display:none;">'
-
-            print >> html, '<h2>ANF</h2>'
-            print >> html, '<pre>\n%s\n</pre>' % anf.strip()
+            # Suppress this since we display ANF graphically instead.
+            # print >> html, '<h2>ANF</h2>'
+            # print >> html, '<pre>\n%s\n</pre>' % anf.strip()
 
             print >> html, '<h2>Hyperedge templates</h2>'
 
@@ -302,13 +322,50 @@ function selectline(lineno) {
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
 
-        print >> html, '<h2>Update plans</h2>'
+        with file(d + '/dopupd') as f:
+            code = f.read()
 
-#        print >> html, '<pre>'
+            print >> html, '<h2>Update plans</h2>'
+
+            for (f,bline,bcol,eline,ecol,kv,block) in \
+                re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)'
+                          , code) :
+
+                # [fa] = re.findall('fa=([^ ]*)', kv)
+
+                print >> html, """\
+<div class="dopamine-%s">
+<pre>
+Update %s
+%s
+</pre>
+</div>
+""" % (bline, kv, block)
+
+
+        with file(d + '/dopini') as f:
+            code = f.read()
+
+            print >> html, '<h2>Initialization plans</h2>'
+
+            for (f,bline,bcol,eline,ecol,kv,block) in \
+                re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)'
+                          , code) :
+
+                print >> html, """\
+<div class="dopamine-%s">
+<pre>
+Initializer:
+%s
+</pre>
+</div>
+""" % (bline, block)
 
         with file(d + '/plan') as f:
             code = f.read()
-            print >> html, code
+            # print >> html, code
+
+            print >> html, '<h2>Update code</h2>'
 
             for block in re.split('# --\n', code)[1:]:  # drop the begining bit.
                 [(f, bline, bcol, eline, ecol, code)] = \
@@ -333,7 +390,6 @@ function selectline(lineno) {
         print >> html, '</pre>'
 
         print >> html, '</div>'
-
 
     if argv.browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)

@@ -9,6 +9,7 @@
                                 -- rip out.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Dyna.Main.Driver where
 
@@ -28,7 +29,7 @@ import           Dyna.Backend.BackendDefn
 import           Dyna.Backend.Backends
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Parser         as P
--- import           Dyna.Term.TTerm
+import           Dyna.Term.TTerm
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.Console.GetOpt
 import           System.Environment
@@ -200,11 +201,15 @@ renderDop ddi dop = vsep $ map (renderDOpAMine ddi) dop
 
 renderDopUpds :: BackendRenderDopIter bs e -> UpdateEvalMap bs -> Doc e
 renderDopUpds ddi um = vsep $ flip map (M.toList um) $ \(fa,ps) ->
-    pretty fa `above` indent 2 (vsep $ flip map ps $ \(r,n,c,vi,vo,act) ->
-        planHeader r n c (vi,vo) `above` indent 2 (renderDop ddi act))
+    vsep $ flip map ps $ \(r,n,c,vi,vo,act) ->
+        planHeader r fa n c (vi,vo) `above` indent 2 (renderDop ddi act)
  where
-  planHeader r n c (vi,vo) =
-        (prettySpanLoc $ r_span r)
+  planHeader r (fa :: Maybe DFunctAr) n c (vi,vo) =
+        text ";;"
+    <+> (prettySpanLoc $ r_span r)
+    <+> text "fa="     <> maybe empty
+                                (\(f,a) -> pretty f <> text "/" <> pretty a)
+                                fa
     <+> text "evalix=" <> pretty n
     <+> text "cost="   <> pretty c
     <+> text "in="     <> pretty vi
@@ -217,10 +222,11 @@ renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
   iniHeader r c `above` indent 2 (renderDop ddi ps)
  where
   iniHeader r c = 
-       ((prettySpanLoc $ r_span r)
-   <+> text "cost=" <> pretty c
-   <+> text "head=" <> pretty (r_head r)
-   <+> text "res=" <> pretty (r_result r))
+        text ";;"
+    <+> (prettySpanLoc $ r_span r)
+    <+> text "cost=" <> pretty c
+    <+> text "head=" <> pretty (r_head r)
+    <+> text "res=" <> pretty (r_result r)
 
 ------------------------------------------------------------------------}}}
 -- Warnings                                                             {{{

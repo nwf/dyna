@@ -3,3 +3,6 @@
 *.pyc
 
 dist/
+examples/*.d
+examples/*.out
+examples/*.plan

@@ -40,7 +40,7 @@ printANF (Rule rix h a result sp _ cruxes) =
     pev (CEval n o i)    = parens (pretty o <+> pretty i <> char '@' <> pretty n)
     pev (CCall n o is f) = parens (pretty o <+> pnft (n,(f,is)))
 
-    pun (CStruct o is f) = parens (pretty o  <+> parens (pft (f,is)))
+    pun (CStruct o is f) = parens (pretty o  <+> parens (char '&' <+> pft (f,is)))
     pun (CAssign o v   ) = parens (pretty o  <+> parens (equals   <+> pretty v))
     pun (CEquals v1 v2 ) = parens (pretty v1 <+> parens (equals   <+> pretty v2))
     pun (CNotEqu v1 v2 ) = parens (pretty v1 <+> parens (char '!' <+> pretty v2))
