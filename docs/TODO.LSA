@@ -1,0 +1,48 @@
+TODO list for summer 2013.  Here's hoping!
+
+----- Input & Parser
+
+Concatenate multiple files / C-style include.
+    Possibly with filters?
+
+Utilities for encoding plain-text files to .dyna files.
+
+Parse QMode pragmas
+
+s/whenever/for/ in surface language
+
+List notation
+
+----- Frontend
+
+:= syntactic sugar
+
+----- Analysis
+
+Abstract unification really ought not unroll recursion quite so eagerly as
+it does.
+
+Mode declarations -> backward chaining!
+
+----- Backend
+
+Special error value (for = agg vio, div by 0, ...)
+
+Maybe something better for initializers or a real update API?
+
+Could we maybe get a better chart representation?
+
+DOpAMine improvements for non-ground structure (probably no time!)
+
+----- Documentation
+
+Mention ^C in documentation for diverging programs.
+
+----- Whole pipeline
+
+Need some better mechanism for executing queries after the agenda empties.
+
+Can we extract backpointers from the chart?
+
+Can we run anything on e.g. WSJ with L0 grammar?
+  sentence(N) = ...
