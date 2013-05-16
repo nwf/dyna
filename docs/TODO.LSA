@@ -9,8 +9,6 @@ Utilities for encoding plain-text files to .dyna files.
 
 Parse QMode pragmas
 
-s/whenever/for/ in surface language
-
 List notation
 
 ----- Frontend

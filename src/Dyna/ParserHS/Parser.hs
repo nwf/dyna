@@ -13,7 +13,9 @@
 --
 --   * Doesn't handle parenthesized aggregators
 --
---   * Doesn't handle shared subgoals (\"whenever ... { ... }\")
+--   * Doesn't handle shared subgoals (\"for ... { ... }\")
+--     (Fixing that probably means changing our idea of 'Rule';
+--      also revisit XREF:ANFRESERVED if doing so.)
 --
 --   * Doesn't understand nullary star for gensym correctly
 --      (it's a available in term context but not texpr context;
@@ -203,7 +205,7 @@ defPCS = PCS { _pcs_dispostab = defDisposTab
 				-- The basic expression table for limited expressions.
                 --
 				-- Notably, this excludes @,@ (which is important
-				-- syntactically) and @whenever@ and @is@ (which are
+				-- syntactically), @for@, @whenever@, and @is@ (which are
 				-- nonsensical in local context)
 				-- XXX right now all binops are at equal precedence and
 				-- left-associative; that's wrong.
@@ -308,7 +310,7 @@ dynaAtomStyle = IdentifierStyle
   { _styleName = "Atom"
   , _styleStart    = (lower <|> oneOf "$")
   , _styleLetter   = (alphaNum <|> oneOf "_'")
-  , _styleReserved = H.fromList [ "is", "new", "whenever" ] -- XXX maybe not?
+  , _styleReserved = H.fromList [ "for", "is", "new", "whenever" ] -- XXX maybe not?
   , _styleHighlight = Constant
   , _styleReservedHighlight = ReservedOperator
   }
@@ -414,7 +416,8 @@ tlexpr = view pcs_opertab >>= flip buildExpressionParser term . unEOT
 moreETable :: DeltaParsing m => [[Operator m (Spanned Term)]]
 moreETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
              , [ Infix  (bf (spanned $ bsf $ symbol ","       )) AssocRight ]
-             , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone  ]
+             , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone
+               , Infix  (bf (spanned $ bsf $ symbol "for"     )) AssocNone  ]
              ]
 
 -- | Full Expression

@@ -325,12 +325,14 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
         _          -> do
                        NTVar `fmap` newAssign "_i" (Right ("is",[nx,nv]))
 
--- ",/2" and "whenever/2" are also reserved words of the language and get
--- handled here.
+-- ",/2", "whenever/2", and "for/2" are also reserved words of the language
+-- and get handled here.
 --
 -- XXX This is wrong, too, of course; these should really be moved into a
 -- standard prelude.  But there's no facility for that right now and no
 -- reason to make the backend know about them since that's also wrong!
+--
+-- XXX XREF:ANFRESERVED
 normTerm_ (_,ADEval) ss (P.TFunctor ","        [i T.:~ si, r T.:~ sr]) = do
     ni <- normTerm_ (ECFunctor, ADEval) (si:ss) i >>= newAssign "_e" . Left
     nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_e" . Left
@@ -340,6 +342,9 @@ normTerm_ (_,ADEval) ss (P.TFunctor ","        [i T.:~ si, r T.:~ sr]) = do
     return $ NTVar nv
 
 normTerm_ c@(_,ADEval) ss (P.TFunctor "whenever" [sr, si]) =
+    normTerm_ c ss (P.TFunctor "," [si,sr])
+
+normTerm_ c@(_,ADEval) ss (P.TFunctor "for" [sr, si]) =
     normTerm_ c ss (P.TFunctor "," [si,sr])
 
 -- Functors have both top-down and bottom-up dispositions on
