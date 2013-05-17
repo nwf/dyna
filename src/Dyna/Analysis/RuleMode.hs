@@ -33,6 +33,7 @@ module Dyna.Analysis.RuleMode {- (
     adornedQueries
 ) -} where
 
+import           Control.Lens ((^.))
 import           Control.Monad
 import           Control.Monad.Error.Class
 import           Control.Monad.Trans.Either
@@ -286,18 +287,21 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
     OPPeel _ _ _        -> 0
     OPWrap _ _ _        -> 1  -- Upweight building due to side-effects
                               -- in the intern table
-    OPIter _ _ _ d _   -> case d of
+    OPIter o is _ d _   -> case d of
                              DetErroneous -> 0
                              DetFailure   -> 0
                              Det     -> 0
                              DetSemi -> 1
-                             DetNon  -> 2 {- ** (fromIntegral $ length $
+                             DetNon  -> 2 ** (fromIntegral $ length $
                                               filter isFree (o:is))
-                                        - 1 -}
+                                        - 1
                              DetMulti -> 2
     OPIndr _ _          -> 100
 
   loops = fromIntegral . length . filter isLoop
+
+  isFree :: ModedVar -> Bool
+  isFree v = iIsFree $ nExpose (v^.mv_mi)
 
   isLoop :: DOpAMine fbs -> Bool
   isLoop = (== DetNon) . detOfDop
