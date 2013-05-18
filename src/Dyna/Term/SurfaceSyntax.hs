@@ -14,6 +14,21 @@ import qualified Data.Map                   as M
 import           Dyna.Term.TTerm
 
 ------------------------------------------------------------------------}}}
+-- Keywords                                                             {{{
+
+-- These are defined here rather than being implicit in Dyna.Analysis.ANF.
+--
+-- If we ever revisit the structure of rules, cross-ref XREF:ANFRESERVED and
+-- maybe move all of this into the parser proper.
+
+dynaEvalOper  = "*"
+dynaQuoteOper = "&"
+dynaEvalAssignOper = "is"
+dynaConjOper = ","
+dynaRevConjOpers = ["whenever","for"]
+dynaUnitTerm = "true"
+
+------------------------------------------------------------------------}}}
 -- Evaluation Disposition                                               {{{
 -- Definition                                                           {{{
 

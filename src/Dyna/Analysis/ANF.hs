@@ -181,9 +181,6 @@ data ANFState = AS
               , _as_next_eval :: !Int
               , _as_ucruxes   :: S.Set (UnifCrux DVar TBase)
               , _as_ecruxes   :: IM.IntMap (EvalCrux DVar)
-              -- , as_evals :: IM.IntMap (DVar,EVF)
-              -- , as_assgn :: M.Map DVar EBF
-              -- , as_unifs :: [(DVar,DVar)]
               , _as_annot :: ANFAnnots
               , _as_warns :: ANFWarns
               }
@@ -294,19 +291,19 @@ normTerm_ c   ss (P.TAnnot a (t T.:~ st)) = do
     return $ NTVar v
 
 -- Quote makes the context explicitly a quoting one
-normTerm_ _   ss (P.TFunctor "&" [t T.:~ st]) = do
+normTerm_ _   ss (P.TFunctor f [t T.:~ st]) | f == dynaQuoteOper = do
     normTerm_ (ECExplicit,ADQuote) (st:ss) t
 
 -- Evaluation is a little different: in addition to forcing the context to
 -- evaluate, it must also evaluate if the context from on high is one of
 -- evaluation!
-normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
+normTerm_ c   ss (P.TFunctor f [t T.:~ st]) | f == dynaEvalOper =
     normTerm_ (ECExplicit,ADEval) (st:ss) t
     >>= \nt -> case c of
                 (_,ADEval) -> case nt of
                                 NTVar  v -> NTVar `fmap` newEval "_s" (Left v)
                                 NTBase b -> do
-                                             newWarn "Ignoring * of literal" ss
+                                             newWarn "Ignoring deref of literal" ss
                                              return $ NTBase b
                 _          -> return nt
 
@@ -315,15 +312,15 @@ normTerm_ c   ss (P.TFunctor "*" [t T.:~ st]) =
 -- result is quoted, we simply build up some structure.  If it's evaluated,
 -- on the other hand, we reduce it to a unification of these two pieces and
 -- return (XXX what ought to be) a unit.
-normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
+normTerm_ c   ss (P.TFunctor f [x T.:~ sx, v T.:~ sv]) | f == dynaEvalAssignOper = do
     nx <- normTerm_ (ECFunctor, ADQuote) (sx:ss) x >>= newAssign "_i" . Left
     nv <- normTerm_ (ECFunctor, ADEval ) (sv:ss) v >>= newAssign "_i" . Left
     case c of
         (_,ADEval) -> do
                        _ <- doUnif nx nv
-                       NTVar `fmap` newAssign "_i" (Right ("true",[]))
+                       NTVar `fmap` newAssign "_i" (Right (dynaUnitTerm,[]))
         _          -> do
-                       NTVar `fmap` newAssign "_i" (Right ("is",[nx,nv]))
+                       NTVar `fmap` newAssign "_i" (Right (dynaEvalAssignOper,[nx,nv]))
 
 -- ",/2", "whenever/2", and "for/2" are also reserved words of the language
 -- and get handled here.
@@ -333,19 +330,16 @@ normTerm_ c   ss (P.TFunctor "is" [x T.:~ sx, v T.:~ sv]) = do
 -- reason to make the backend know about them since that's also wrong!
 --
 -- XXX XREF:ANFRESERVED
-normTerm_ (_,ADEval) ss (P.TFunctor ","        [i T.:~ si, r T.:~ sr]) = do
+normTerm_ (_,ADEval) ss (P.TFunctor f [i T.:~ si, r T.:~ sr]) | f == dynaConjOper = do
     ni <- normTerm_ (ECFunctor, ADEval) (si:ss) i >>= newAssign "_e" . Left
     nv <- normTerm_ (ECFunctor, ADEval) (sr:ss) r >>= newAssign "_e" . Left
 
-    t' <- newAssign "_e" (Right ("true",[]))
+    t' <- newAssign "_e" (Right (dynaUnitTerm,[]))
     _  <- doUnif ni t'
     return $ NTVar nv
 
-normTerm_ c@(_,ADEval) ss (P.TFunctor "whenever" [sr, si]) =
-    normTerm_ c ss (P.TFunctor "," [si,sr])
-
-normTerm_ c@(_,ADEval) ss (P.TFunctor "for" [sr, si]) =
-    normTerm_ c ss (P.TFunctor "," [si,sr])
+normTerm_ c@(_,ADEval) ss (P.TFunctor f [sr, si]) | f `elem` dynaRevConjOpers =
+    normTerm_ c ss (P.TFunctor dynaConjOper [si,sr])
 
 -- Functors have both top-down and bottom-up dispositions on
 -- their handling.
