@@ -5,6 +5,7 @@ An overview of the source tree
     *  expected/       -- Expected output for self-tests.  Named by program and backend, both.
 * external/
     * damsl-k3         -- The DAMSL K3 tree, tracked as a git submodule.
+* misc/                -- Pretty much what it says on the tin
 * src/Dyna/
     * Analysis         -- The heart of the compiler
         * Mode         -- A re-implementation of the Mercury mode system

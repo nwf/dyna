@@ -42,7 +42,7 @@ haddock:
 	haddock --html -o dist/alldoc \
 	 --ignore-all-exports -w --optghc=-isrc \
 	 -t "Dyna -- GIT `git describe --always`" \
-	 `runghc -isrc Dyna.XXX.HaddockPaths "$(HADDOCK_HTML)"` \
+	 `runghc -imisc HaddockPaths "$(HADDOCK_HTML)"` \
 	 `grep -ie '^\( \|\t\)*main-is:' dyna.cabal | sed -e "s/^.*Is: */src\//"`
 
 # If the cabal file doesn't do the right thing, this tries to work through

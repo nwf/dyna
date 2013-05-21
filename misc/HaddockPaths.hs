@@ -10,7 +10,7 @@
 -- the same license as Cabal.
 
 {-# LANGUAGE ScopedTypeVariables #-}
-module Dyna.XXX.HaddockPaths where
+module HaddockPaths where
 
 import           Control.Monad
 import           Data.Either
