@@ -31,7 +31,7 @@
 import os, sys
 from collections import defaultdict
 from argparse import ArgumentParser
-from utils import ip, red, green, blue, magenta
+from utils import ip, red, green, blue, magenta, dynahome
 from defn import agg_bind
 
 
@@ -325,7 +325,8 @@ def go():
 
 
 def dynac(f):
-    cmd = """dist/build/dyna/dyna -B python -o "%s".plan "%s" """ % (f,f)
+    cmd = """%s/dist/build/dyna/dyna -B python -o "%s".plan "%s" """ \
+          % (dynahome,f,f)
     assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
     return f + '.plan'
 

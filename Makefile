@@ -15,10 +15,10 @@ deps:
 build:
 	cabal configure --user --enable-tests
 	cabal build
-	cabal test
 
 tests:
 	dist/build/dyna-selftests/dyna-selftests
+	# cabal test
 
 .PHONY: clean veryclean
 clean:

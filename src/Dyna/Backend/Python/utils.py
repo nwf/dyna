@@ -6,6 +6,7 @@ ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
 black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
+dynahome = os.getenv('DYNAHOME', '.')
 
 def parse_sexpr(e):
     """
