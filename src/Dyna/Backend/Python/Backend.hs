@@ -11,36 +11,35 @@
 
 module Dyna.Backend.Python.Backend (pythonBackend) where
 
-import           Control.Applicative ((<*))
-import qualified Control.Arrow              as A
-import           Control.Exception
+-- import           Control.Applicative ((<*))
+-- import qualified Control.Arrow              as A
+-- import           Control.Exception
 import           Control.Lens ((^.))
 import           Control.Monad
-import qualified Data.ByteString            as B
-import qualified Data.ByteString.UTF8       as BU
-import           Data.Char
+-- import qualified Data.ByteString            as B
+-- import qualified Data.ByteString.UTF8       as BU
+-- import           Data.Char
 -- import           Data.Either
-import qualified Data.List                  as L
+-- import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
-import qualified Data.Ord                   as O
-import qualified Data.Set                   as S
-import qualified Debug.Trace                as XT
+-- import qualified Data.Ord                   as O
+-- import qualified Data.Set                   as S
+-- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
-import           Dyna.Analysis.Aggregation
+-- import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
-import qualified Dyna.ParserHS.Parser       as P
-import           Dyna.XXX.DataUtils (mapInOrApp)
+-- import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.IO
 import           Text.PrettyPrint.Free
-import qualified Text.Trifecta              as T
+-- import qualified Text.Trifecta              as T
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Backend Information                                         {{{
@@ -50,6 +49,7 @@ import qualified Text.Trifecta              as T
 -- generation without having to re-probe the modes.
 newtype PyDopeBS = PDBS (forall e . ModedVar -> [ModedVar] -> Doc e)
 
+nfree, nuniv :: NIX DFunct
 nfree = nHide IFree
 nuniv = nHide (IUniv UShared)
 

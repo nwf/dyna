@@ -41,7 +41,6 @@ import           Control.Monad.Trans.Reader
 import           Control.Monad.Identity
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as BC
-import qualified Data.Either                as E
 import qualified Data.IntMap                as IM
 -- import qualified Data.List                  as L
 import qualified Data.Map                   as M
@@ -57,7 +56,7 @@ import           Dyna.Analysis.Mode.Execution.NoAliasFunctions
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Main.Exception
-import           Dyna.XXX.DataUtils(argmin,mapInOrApp,mapMinRepView)
+import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
 import           Dyna.XXX.MonadContext
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 -- import           Dyna.XXX.TrifectaTest
@@ -134,20 +133,19 @@ mapMaybeModeCompat mis mo =
                 return (d,f))
 -}
 
--- | Free, Universal, or Panic.  A rather simplistic take on unification.
+-- | Free, Ground, or Neither.  A rather simplistic take on unification.
 --
 -- XXX There is nothing good about this.
-fup :: forall a m . (Monad m, MCVT m DVar ~ VR DFunct (NIX DFunct), MCR m DVar)
-    => DVar -> m a -> m a -> m a
-fup v cf cu = do
-  vr <- clookup v
-  let vi = case vr of
-          VRName   vn -> fmap VRName $ nExpose vn
-          VRStruct vx -> vx
-  case vi of
-    IFree   -> cf
-    IUniv _ -> cu
-    _       -> dynacPanic "Unexpected instantiation state while planning"
+fgn :: forall a m . (Monad m, MCVT m DVar ~ VR DFunct (NIX DFunct), MCR m DVar)
+    => DVar -> m a -> m a -> m a -> m a
+fgn v cf cg cn = do
+  ff <- v `subVN` (nHide IFree)
+  gf <- v `subVN` (nHide $ IUniv UShared)
+  case (ff,gf) of
+    (True ,True ) -> dynacPanicStr "Variable is both free and ground"
+    (True ,False) -> cf
+    (False,True ) -> cg
+    (False,False) -> cn
 
 possible :: (Monad m)
          => BackendPossible fbs
@@ -166,17 +164,21 @@ possible fp cr =
 
     -- Assign or check
     Right (CAssign o i) ->
-        fup o (runReaderT (unifyVU o) (UnifParams True False)
+        fgn o (runReaderT (unifyVU o) (UnifParams True False)
                 >> return [ OPAsgn o (NTBase i) ])
               (let chk = "_chk" in return [ OPAsgn chk (NTBase i), OPCheq chk o])
+              (throwError UFExDomain)
 
     Right (CEquals o i) ->
-       fup o (fup i (throwError UFExDomain)
+       fgn o (fgn i (throwError UFExDomain)
                     (runReaderT (unifyVV i o) (UnifParams True False)
-                       >> return [ OPAsgn o (NTVar i) ]))
-             (fup i (runReaderT (unifyVV i o) (UnifParams True False)
+                       >> return [ OPAsgn o (NTVar i) ])
+                    (throwError UFExDomain))
+             (fgn i (runReaderT (unifyVV i o) (UnifParams True False)
                        >> return [ OPAsgn i (NTVar o) ])
-                    (return [ OPCheq o i ]))
+                    (return [ OPCheq o i ])
+                    (throwError UFExDomain))
+             (throwError UFExDomain)
 
 {-
         case i of
@@ -185,22 +187,28 @@ possible fp cr =
 -}
 
     -- Structure building or unbuilding
-    Right (CStruct o is funct) -> fup o (mapM_ isBound is >> bind o >> return [ OPWrap o is funct ])
-                                         (buildPeel)
-      where
-       buildPeel = do
-                    (is', mcis) <- zipWithM maybeCheck is newvars >>= return . unzip
-                    let cis = MA.catMaybes mcis
-                    return ([ OPPeel is' o funct ] ++ map (uncurry OPCheq) cis)
+    Right (CStruct o is funct) ->
+      fgn o (mapM_ ensureBound is >> bind o >> return [ OPWrap o is funct ])
+            buildPeel
+            (throwError UFExDomain)
+     where
+      buildPeel = do
+                   (is', mcis) <- zipWithM maybeCheck is newvars >>= return . unzip
+                   let cis = MA.catMaybes mcis
+                   return ([ OPPeel is' o funct ] ++ map (uncurry OPCheq) cis)
 
-       newvars = map (\n -> BC.pack $ "_chk_" ++ (show n)) [0::Int ..]
+      newvars = map (\n -> BC.pack $ "_chk_" ++ (show n)) [0::Int ..]
 
-       maybeCheck v nv = fup v (return (v,Nothing)) (return (nv, Just (nv,v)))
+      maybeCheck v nv = fgn v (return (v,Nothing))
+                              (return (nv, Just (nv,v)))
+                              (throwError UFExDomain)
 
     -- Disequality constraints require that both inputs be brought to ground
-    Right (CNotEqu o i) -> fup o (throwError UFExDomain)
-                                  (fup i (throwError UFExDomain)
-                                         (return [ OPCkne o i ]))
+    Right (CNotEqu o i) -> fgn o (throwError UFExDomain)
+                                 (fgn i (throwError UFExDomain)
+                                        (return [ OPCkne o i ])
+                                        (throwError UFExDomain))
+                                 (throwError UFExDomain)
 
     -- XXX Indirect evaluation is not yet supported
     Left (_, CEval _ _) -> dynacSorry "Indir eval"
@@ -225,14 +233,13 @@ possible fp cr =
        vi <- clookup v
        return $ MV v (vrToNIX vi) mo
 
-     isBound v = fup v (throwError UFExDomain) (return ())
+     ensureBound v = fgn v (throwError UFExDomain)
+                           (return ())
+                           (throwError UFExDomain)
      bind x = runReaderT (unifyVU x) (UnifParams False False)
 
 ------------------------------------------------------------------------}}}
 -- ANF to Cruxes                                                        {{{
-
-allCruxVars :: S.Set (Crux DVar TBase) -> S.Set DVar
-allCruxVars = S.unions . map cruxVars . S.toList
 
 {-
 anfVars :: ANFState -> S.Set DVar
@@ -309,34 +316,6 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 ------------------------------------------------------------------------}}}
 -- Planning                                                             {{{
 
--- $dupcrux
---
--- Consider a rule like @a += b(X) * b(Y).@  This desugars into an ANF with
--- two separate evaluations of @b(_)@.  This is problematic, since we will
--- plan each evaluation separately.  (Note that CSE won't help; we really do
--- mean to compute the cross-product in this case, but not double-count the
--- diagonal!)  The workaround here is to /order/ the evaluations (by their
--- ANF temporary variables, for the moment).
---
--- For replacement updates, the correct action is to @continue@ the
--- evaluation loop when an eariler (by the intrinsic ordering) iterator
--- within a update to a later (by the intrinsic ordering) evaluation
--- lands at the same position.
---
--- For delta updates, the ordering is used for the Blatz-Eisner update
--- propagation strategy -- new values are used in earlier evaluations (than
--- the one being updated) and old values are used in later evaluations.
---
--- When backward chaining, we get to ignore all of this, since we only
--- produce one backward chaining plan.
---
--- XXX It's unclear that this is really the right solution.  Maybe we should
--- be planning a single stream of instructions for each dfuctar, rather than
--- each evalution arc, but it's not quite clear that there's a nice
--- graphical story to be told in that case?
---
--- XXX What do we do in the CEval case??  We need to check every evaluation
--- inside a CEval update?
 
 data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
                           , pp_binds          :: BindChart
@@ -346,7 +325,7 @@ data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
                           }
 
 pp_liveVars :: PartialPlan fbs -> S.Set DVar
-pp_liveVars p = S.unions $ map cruxVars $ S.toList (pp_cruxes p)
+pp_liveVars p = allCruxVars (pp_cruxes p)
 
 -- XXX This does not have a way to signal UFNotReached back to its caller.
 -- That is particularly disappointing since any unification producing that
@@ -432,19 +411,13 @@ planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Maybe the updated evaluation crux, the interned
          -- representation of the term being updated, and
          -- result variable.
-         -> S.Set DVar
-         -- ^ Any variables bound on the way in, in addition to
-         --   the two given for an initial crux
-         -> S.Set DVar
+         -> SIMCtx DVar
          -- ^ Unbound variables in the rule
          -> [(Cost, Actions fbs)]
          -- ^ Plans and their costs
-planner_ st sc cr mic bv fv = runAgenda
+planner_ st sc cr mic ictx = runAgenda
    $ PP { pp_cruxes = cr
-        , pp_binds  = SIMCtx $ M.fromSet (const $ VRStruct (IUniv UShared))
-                                         (S.unions [bv,bi])
-                               `M.union`
-                               M.fromSet (const $ VRStruct IFree) fv
+        , pp_binds  = ctx'
         , pp_restrictSearch = False
         , pp_score  = 0
         , pp_plan   = ip
@@ -455,7 +428,7 @@ planner_ st sc cr mic bv fv = runAgenda
     mioaPlan :: PartialPlan fbs
              -> M.Map Cost [PartialPlan fbs]
              -> M.Map Cost [PartialPlan fbs]
-    mioaPlan p@(PP{pp_score=psc}) = mapInOrApp psc p
+    mioaPlan p@(PP{pp_score=psc}) = mapInOrCons psc p
 
     go pq = maybe [] go' $ mapMinRepView pq
      where
@@ -463,15 +436,22 @@ planner_ st sc cr mic bv fv = runAgenda
                        Left df -> df : (go pq')
                        Right ps' -> go (foldr mioaPlan pq' ps')
 
+  ctx' = either (const $ dynacPanicStr "Unable to bind input variable")
+                snd
+              $ runIdentity
+              $ flip runSIMCT ictx
+              $ flip runReaderT (UnifParams True False)
+                (mapM_ (unifyUnaliasedNV (nHide $ IUniv UShared)) bis)
+
   -- XREF:INITPLAN
-  (ip,bi) = case mic of
-              Nothing -> ([],S.empty)
+  (ip,bis) = case mic of
+              Nothing -> ([],[])
               Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f
                                                  , OPAsgn o (NTVar ho)]
-                                              , S.fromList $ o:is)
+                                              , o:is)
               Just (CEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
                                               , OPAsgn o (NTVar ho)]
-                                            , S.fromList $ [o,i] )
+                                            , [o,i] )
 
 -- | Pick the best plan, but stop the planner from going off the rails by
 -- considering at most a constant number of plans.
@@ -499,21 +479,47 @@ planUpdate :: BackendPossible fbs
            -> (PartialPlan fbs -> Actions fbs -> Cost)
            -> S.Set (Crux DVar TBase)                     -- ^ Normal form
            -> (EvalCrux DVar, DVar, DVar)
-           -> S.Set DVar
+           -> SIMCtx DVar
            -> Maybe (Cost, Actions fbs)
-planUpdate bp sc anf mi fv =
-  bestPlan $ planner_ (possible bp) sc anf (Just mi) S.empty fv
+planUpdate bp sc anf mi ictx =
+  bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
 planInitializer bp r =
   let cruxes = r_cruxes r in
-  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing S.empty (allCruxVars cruxes)
+  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
+             (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
 -- | Given a particular crux and the remaining evaluation cruxes in a rule, 
 -- find all the \"later\" evaluations which will need special handling and
 -- generate the cruxes necessary to prevent double-counting.
 --
--- See $dupcrux.
+-- Consider a rule like @a += b(X) * b(Y).@  This desugars into an ANF with
+-- two separate evaluations of @b(_)@.  This is problematic, since we will
+-- plan each evaluation separately.  (Note that CSE won't help; we really do
+-- mean to compute the cross-product in this case, but not double-count the
+-- diagonal!)  The workaround here is to /order/ the evaluations, thus why
+-- ANF gives a numeric identifier to each evaluation.
+--
+-- For replacement updates, the correct action is to @continue@ the
+-- evaluation loop when an eariler (by the intrinsic ordering) iterator
+-- within a update to a later (by the intrinsic ordering) evaluation
+-- lands at the same position.
+--
+-- For delta updates, the ordering is used for the Blatz-Eisner update
+-- propagation strategy -- new values are used in earlier evaluations (than
+-- the one being updated) and old values are used in later evaluations.
+--
+-- When backward chaining, we get to ignore all of this, since we only
+-- produce one backward chaining plan.
+--
+-- XXX It's unclear that this is really the right solution.  Maybe we should
+-- be planning a single stream of instructions for each dfunctar, rather than
+-- each evalution arc, but it's not quite clear that there's a nice
+-- graphical story to be told in that case?
+--
+-- XXX What do we do in the CEval case??  We need to check every evaluation
+-- inside a CEval update?
 handleDoubles :: (Ord a, Ord b)
               => (Int -> a -> a -> a) 
               -> (Int,EvalCrux a)
@@ -540,6 +546,9 @@ handleDoubles vc e r = S.fold (go e) S.empty r
             $ S.insert (CStruct qcv qis qf)
             $ S.insert (CNotEqu ecv qcv) s
 
+-- XXX Split into two functions, one which wraps handleDoubles and one which
+-- feeds that to the planner.  The former will also be useful in dumping
+-- more accurate ANF.
 planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
              -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
              -> Rule
@@ -547,13 +556,15 @@ planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
 -- planEachEval _ _ _ = []
 planEachEval bp cs r  =
   map (\(n,cr) ->
-         let cruxes' = S.union cruxes
+         let cruxes' = S.union (r_cruxes r)
                                (S.map Right $ handleDoubles mkvar cr 
                                                 (S.delete cr $ S.fromList ecs))
           in (n, varify $ planUpdate bp simpleCost
                                        cruxes'
                                        (mic $ snd cr)
-                                       (allCruxVars cruxes')))
+                                       (allFreeSIMCtx
+                                         $ S.toList
+                                         $ allCruxVars cruxes')))
     -- Filter out non-constant evaluations
     --
     -- XXX This instead should look at the update modes of each evaluation
@@ -566,11 +577,9 @@ planEachEval bp cs r  =
     -- Grab all evaluations
   $ ecs
  where
-  cruxes = r_cruxes r
-
   mkvar n v1 v2 = B.concat ["chk",v1,"_",v2,"_",BC.pack $ show n]
 
-  ecs = fst $ E.partitionEithers $ S.toList cruxes
+  ecs = IM.toList $ r_ecruxes r
 
     -- XXX I am not terribly happy about these, but it'll do for the moment.
     --
@@ -628,7 +637,7 @@ combineUpdatePlans = go (M.empty)
                           <+> group (pretty fa)
                           <+> "in rule at"
                           <+> (prettySpanLoc $ r_span fr)
-      Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrApp fa (fr,n,c,v1,v2,a) m
+      Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrCons fa (fr,n,c,v1,v2,a) m
    where
     fa = evalCruxFA ev
     ev = maybe (dynacPanic $ "Eval index without eval crux in rule "
@@ -653,7 +662,7 @@ combineQueryPlans = go (M.empty)
   go' _  fr Nothing        _ = dynacUserErr
                                $ "No query plan for rule at"
                                  <+> (prettySpanLoc $ r_span fr)
-  go' xs fr (Just (c,v,a)) m = go (mapInOrApp (findHeadFA fr)
+  go' xs fr (Just (c,v,a)) m = go (mapInOrCons (findHeadFA fr)
                                               (fr,c,v,a)
                                               m)
                                   xs

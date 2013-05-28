@@ -33,8 +33,8 @@ module Dyna.Analysis.Mode.Execution.NoAliasContext (
     -- ** Monad
     SIMCT(..), runSIMCT,
     -- *** And its context
-    SIMCtx(..), emptySIMCtx,
-)where
+    SIMCtx(..), emptySIMCtx, allFreeSIMCtx,
+) where
 
 -- import           Control.Exception(assert)
 import           Control.Lens
@@ -42,21 +42,22 @@ import           Control.Lens
 import           Control.Monad.Error.Class
 import           Control.Monad.State
 import           Control.Monad.Trans.Either
-import qualified Control.Monad.Trans.State  as CMTS
-import qualified Control.Monad.Trans.Reader as CMTR
+import qualified Control.Monad.Trans.State     as CMTS
+import qualified Control.Monad.Trans.Reader    as CMTR
 -- import           Data.Function
-import qualified Data.Map                 as M
--- import qualified Data.Traversable         as T
+import qualified Data.Map                      as M
+-- import qualified Data.Traversable              as T
 -- import           Data.Unique
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
+import qualified Dyna.Analysis.Mode.InstPretty as IP
 import           Dyna.Analysis.Mode.Unification
 -- import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 -- import           Dyna.XXX.DataUtils
 import           Dyna.XXX.MonadContext
--- import qualified Debug.Trace              as XT
--- import qualified Text.PrettyPrint.Free    as PP
+-- import qualified Debug.Trace                   as XT
+import qualified Text.PrettyPrint.Free         as PP
 
 ------------------------------------------------------------------------}}}
 -- Variables                                                            {{{
@@ -69,8 +70,17 @@ data VR f n =
   | VRStruct (InstF f (VR f n))
  deriving (Eq,Ord,Show)
 
--- XXX Boy this is bad
-vrToNIX :: VR f (NIX f) -> NIX f
+instance (PP.Pretty f, PP.Pretty n) => PP.Pretty (VR f n) where
+  pretty (VRName n)   = PP.pretty n
+  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+
+-- This is used during rule analysis to capture the state of the binding
+-- chart into the generated DOpAMine.
+--
+-- XXX Ick.  We should probably try to generate one NIX, not a cluster of
+-- them, but...  This is going to be replaced with the thesis's more general
+-- 'extract' anyway.
+vrToNIX :: (Show f) => VR f (NIX f) -> NIX f
 vrToNIX (VRName n) = n
 vrToNIX (VRStruct i) = nHide $ fmap vrToNIX i
 
@@ -94,6 +104,13 @@ instance (Monad m) => MonadError UnifFail (SIMCT m f) where
 instance MonadIO m => MonadIO (SIMCT m f) where
   liftIO m = SIMCT $ lift (liftIO m)
 
+instance (PP.Pretty f) => PP.Pretty (SIMCtx f) where
+  pretty (SIMCtx vm) = PP.vcat
+                     $ flip map (M.toAscList vm)
+                     $ \(v,vr) ->        PP.pretty v
+                                  PP.<+> PP.text "=>"
+                                  PP.<+> PP.pretty vr
+
 {-
  - XXX maybe
  
@@ -105,6 +122,9 @@ instance (Monad m) => MonadState (SIMCtx f) (SIMCT m f) where
 
 emptySIMCtx :: SIMCtx f
 emptySIMCtx = SIMCtx M.empty
+
+allFreeSIMCtx :: [DVar] -> SIMCtx f
+allFreeSIMCtx fs = SIMCtx $ M.fromList $ map (\x -> (x, VRStruct IFree)) fs
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
 runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
@@ -178,13 +198,13 @@ instance (MCW (SIMCT m f) k) => MCW (CMTR.ReaderT r (SIMCT m f)) k where
 --
 --   * @N@ -- 'NIX' f
 --
---   * @I@ -- @'InstF' f ('NI' f)@
+--   * @I@ -- @'InstF' f ('NIX' f)@
 --
 --   * @V@ -- 'VV'
 --
---   * @X@ -- 'VR' f 'NI'
+--   * @X@ -- 'VR' f 'NIX'
 --
---   * @Y@ -- @InstF f (VR f 'NI')@
+--   * @Y@ -- @InstF f (VR f 'NIX')@
 
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}

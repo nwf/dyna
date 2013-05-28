@@ -2,11 +2,13 @@
 -- | Wrappers around 'InstF' primitives that are useful during unification.
 
 -- Header material                                                      {{{
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.Mode.Unification {-(
 )-} where
 
+import           Control.Lens.TH
 import qualified Data.Maybe                        as MA
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
@@ -20,6 +22,25 @@ data UnifFail =
   | UFNotReach -- ^ Some nested unification satisfies 'iNotReached'
   | UFExDomain -- ^ A partial function was applied outside its domain
  deriving (Eq,Ord,Show)
+
+------------------------------------------------------------------------}}}
+-- Unification-wide Read-only Parameters                                {{{
+
+data UnifParams = UnifParams
+                { _up_live :: Bool
+                    -- ^ Are we engaged in a live unification?  See §3.2.1,
+                    -- p43 and definition 3.2.19, p53
+
+                , _up_fake :: Bool
+                    -- ^ Absent from the thesis but present in the Mercury
+                    -- implementation is the consideration of "fake"
+                    -- unifications, which are used when refining the
+                    -- outputs of method calls and must be allowed to
+                    -- descend through (Mostly)'Clobbered' material.
+                    --
+                    -- See @compiler/prog_data.m@'s @unify_is_real@ type.
+                }
+$(makeLenses ''UnifParams)
 
 ------------------------------------------------------------------------}}}
 -- Unification                                                          {{{
@@ -41,7 +62,7 @@ data UnifFail =
 -- predicate can run with a clobbered input, and if not, we'll fail at that
 -- point.  A semidet unification, on the other hand, cannot run with a
 -- clobbered input.
-
+--
 -- Definition 3.2.19, p53
 --
 -- XXX In contrast to the thesis, we ignore the size of the sets represented

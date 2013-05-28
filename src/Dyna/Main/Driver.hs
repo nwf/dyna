@@ -307,7 +307,7 @@ main_ argv = do
     _   -> dynacSorry "We can't do more than one file"
 
 main :: IO ()
-main = catch (getArgs >>= main_) printerr
+main = handle someExnPanic $ handle printerr (getArgs >>= main_)
  where
   printerr x = pe x >> exitFailure
 
@@ -328,7 +328,12 @@ main = catch (getArgs >>= main_) printerr
     taMsg
     PP.hPutDoc stderr d
     hPutStrLn stderr ""
-  pe (Panic d) = do
+  pe (Panic d) = panic d
+
+  someExnPanic (e :: SomeException) = panic $ "Uncaught Haskell exception:"
+                                              <+> text (show e)
+
+  panic d = do
     hPutStrLn stderr "Compiler panic!"
     taMsg
     PP.hPutDoc stderr d

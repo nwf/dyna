@@ -72,7 +72,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.ANF (
-	Crux, EvalCrux(..), UnifCrux(..), cruxIsEval, cruxVars,
+	Crux, EvalCrux(..), UnifCrux(..), cruxIsEval, cruxVars, allCruxVars,
 	
     Rule(..), ANFAnnots, ANFWarns,
     normTerm, normRule, runNormalize,
@@ -101,7 +101,7 @@ import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Term.SurfaceSyntax
-import           Dyna.XXX.DataUtils (mapInOrApp)
+import           Dyna.XXX.DataUtils (mapInOrCons)
 -- import           Dyna.Test.Trifecta         -- XXX
 import qualified Text.Trifecta              as T
 
@@ -172,6 +172,9 @@ cruxVars = either evalVars unifVars
     CEquals o i    -> S.fromList [o,i]
     CNotEqu o i    -> S.fromList [o,i]
 
+allCruxVars :: S.Set (Crux DVar TBase) -> S.Set DVar
+allCruxVars = S.unions . map cruxVars . S.toList
+
 
 ------------------------------------------------------------------------}}}
 -- ANF State                                                            {{{
@@ -217,7 +220,7 @@ newAssign pfx t =
 
 newAnnot :: (MonadState ANFState m)
          => DVar -> Annotation (T.Spanned P.Term) -> m ()
-newAnnot v a = as_annot %= mapInOrApp v a
+newAnnot v a = as_annot %= mapInOrCons v a
 
 {-
 newAssignNT :: (MonadState ANFState m) => String -> NTV -> m DVar

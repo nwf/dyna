@@ -37,6 +37,9 @@ import qualified Data.Foldable         as F
 import qualified Data.Traversable      as T
 import qualified Text.PrettyPrint.Free as PP
 
+-- This is needed to work with ghc 7.4 and bytestring 0.9.2.1
+import qualified Data.ByteString.Char8()
+
 ------------------------------------------------------------------------}}}
 -- Term Base Cases                                                      {{{
 

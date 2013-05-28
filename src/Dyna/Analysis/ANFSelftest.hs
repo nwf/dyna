@@ -27,7 +27,7 @@ import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
 
-testNormRule :: B.ByteString -> Rule
+testNormRule :: B.ByteString -> (Rule, ANFWarns)
 testNormRule = normRule . unsafeParse P.rawDRule
 
 {-

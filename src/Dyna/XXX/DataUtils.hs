@@ -10,9 +10,9 @@ module Dyna.XXX.DataUtils (
   -- ** Upsertion
   mapUpsert,
   -- ** Maps of lists
-  mapInOrApp, mapMinRepView,
+  mapInOrCons, mapMinRepView,
   -- ** Unification-style utilities
-  mapSemiprune,
+  mapSemiprune, intmapSemiprune,
   -- ** Backports
   mergeWithKey,
   -- * 'Data.Set' utilities
@@ -21,10 +21,11 @@ module Dyna.XXX.DataUtils (
 
 ) where
 
-import qualified Data.List as L
-import qualified Data.Map  as M
-import qualified Data.Ord  as O
-import qualified Data.Set  as S
+import qualified Data.List   as L
+import qualified Data.Map    as M
+import qualified Data.IntMap as IM
+import qualified Data.Ord    as O
+import qualified Data.Set    as S
 
 argmax :: (Ord b) => (a -> b) -> [a] -> a
 argmax = L.maximumBy . O.comparing
@@ -59,8 +60,8 @@ mapUpsert k v m =
 -- bucket there.
 
 -- XXX maybe consider generalizing this to any collection type?
-mapInOrApp :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
-mapInOrApp k v m = M.alter (\mv -> Just $ v:nel mv) k m
+mapInOrCons :: (Ord k) => k -> v -> M.Map k [v] -> M.Map k [v]
+mapInOrCons k v m = M.alter (\mv -> Just $ v:nel mv) k m
  where
   nel Nothing  = []
   nel (Just x) = x
@@ -83,12 +84,12 @@ mapMinRepView m = do
 -- leave the map with identity mappings, which should be carefully
 -- interpreted by the user (probably as a free variable)
 mapSemiprune :: (Ord k)
-             => (v -> Maybe k)	-- ^ Is this a variable link?
-             -> (k -> v)		-- ^ What should we store to indicate
+             => (v -> Maybe k)    -- ^ Is this a variable link?
+             -> (k -> v)        -- ^ What should we store to indicate
                                 -- a pointer to this variable?
              -> k               -- ^ Initial variable
-             -> M.Map k v		-- ^ In this map
-             -> (k, M.Map k v)	-- ^ (terminus of chain, pruned map)
+             -> M.Map k v        -- ^ In this map
+             -> (k, M.Map k v)    -- ^ (terminus of chain, pruned map)
 mapSemiprune q p k m = case M.lookup k m >>= q of
                          Nothing -> (k, m)
                          Just k' -> go (S.singleton k) k'
@@ -101,6 +102,25 @@ mapSemiprune q p k m = case M.lookup k m >>= q of
 
   setAll m' v k' = M.fromList (map (\x -> (x,p k')) $ S.toList v)
                    `M.union` m'
+
+-- | 'mapSemiprune' for the special case of 'IntMap's.
+intmapSemiprune :: (v -> Maybe Int)
+                -> (Int -> v)
+                -> Int
+                -> IM.IntMap v
+                -> (Int, IM.IntMap v)
+intmapSemiprune q p k m = case IM.lookup k m >>= q of
+                         Nothing -> (k, m)
+                         Just k' -> go (S.singleton k) k'
+ where
+  go v k' =
+    case IM.lookup k' m >>= q of
+      Nothing                     -> (k', setAll m v k')
+      Just k'' | k'' `S.member` v -> (k'', setAll m v k'') -- (M.delete k'' m) (S.delete k'' v) k'')
+      Just k''                    -> go (k' `S.insert` v) k''
+
+  setAll m' v k' = IM.fromList (map (\x -> (x,p k')) $ S.toList v)
+                   `IM.union` m'
 
 
 -- | A generalized version of 'zipWith' that gives access to tail elements

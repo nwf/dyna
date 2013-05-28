@@ -26,13 +26,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 module Dyna.Analysis.Mode.Inst(
-  InstF(..), inst_uniq, inst_rec,
+  InstF(..), inst_uniq, inst_rec, inst_recps,
   iNotReached, iIsNotReached,
   iUniq, iIsFree, iWellFormed_, iEq_, iGround_,
   iLeq_, iLeqGLB_,
   iSub_, iSubGLB_, iSubLUB_,
 ) where
 
+import           Control.Applicative (Applicative)
 import           Control.Lens
 -- import           Control.Monad
 import qualified Data.Foldable            as F
@@ -152,7 +153,11 @@ $(makeLensesFor [("_inst_uniq","inst_uniq")
                 ]
                 ''InstF)
 
--- XXX class (Pretty f, Pretty i) => Pretty (InstF f i) where
+-- | Traverse all of the recursion points @a@, rather than the @M.Map f [a]@
+-- structure itself.  This provides a more robust interface to term
+-- recursion, but of course loses information about disjunctions.
+inst_recps :: (Applicative a) => (i -> a i') -> InstF f i -> a (InstF f i')
+inst_recps = inst_rec . each . each
 
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Unary predicates                               {{{
@@ -514,7 +519,7 @@ iSubLUB_ _ _ l r q (IBound u m b) (IBound u' m' b') = do
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Utility Functions                              {{{
 
-
+-- | const $ return False
 crf :: (Monad m) => a -> m Bool
 crf = const $ return False
 

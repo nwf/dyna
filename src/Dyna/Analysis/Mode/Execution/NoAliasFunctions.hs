@@ -25,7 +25,7 @@
 
 module Dyna.Analysis.Mode.Execution.NoAliasFunctions (
   -- * Unification
-  UnifParams(..), unifyVV, unifyVF, unifyUnaliasedNV,
+  unifyVV, unifyVF, unifyUnaliasedNV,
   -- * Matching,
   subVN,
   -- * Modes
@@ -60,7 +60,7 @@ import           Dyna.Term.TTerm
 import           Dyna.XXX.DataUtils
 import           Dyna.XXX.MonadContext
 -- import           Dyna.XXX.MonadUtils
-import qualified Debug.Trace                       as XT
+-- import qualified Debug.Trace                       as XT
 
 ------------------------------------------------------------------------}}}
 -- Leq                                                                  {{{
@@ -68,6 +68,7 @@ import qualified Debug.Trace                       as XT
 type LeqC m f n = (Ord f, Show f,
                    Monad m,
                    n ~ NIX f)
+
 leqXX :: (LeqC m f n)
       => VR f n -> VR f n -> m Bool
 leqXX (VRStruct yl) (VRStruct yr) = iLeq_ leqXY leqXX yl yr
@@ -87,7 +88,8 @@ leqNX nl (VRStruct yr) = iLeq_ leqNY leqNX (nExpose nl) yr
 
 leqNY :: (LeqC m f n)
       => NIX f -> InstF f (VR f n) -> m Bool
-leqNY nl ir = iLeq_ leqNY leqNX (nExpose nl) ir
+leqNY nl (nShallow -> Just nr) = {- XT.trace "LNYS" $-} return $ nLeq nl nr
+leqNY nl ir = {-XT.traceShow ("LNY",nl,ir) $-} iLeq_ leqNY leqNX (nExpose nl) ir
 
 leqYN :: (LeqC m f n)
       => InstF f (VR f n) -> NIX f -> m Bool
@@ -119,22 +121,6 @@ leqVX vl xr = do
 ------------------------------------------------------------------------}}}
 -- Unification                                                          {{{
 
-data UnifParams = UnifParams
-                { _up_live :: Bool
-                    -- ^ Are we engaged in a live unification?  See §3.2.1,
-                    -- p43 and definition 3.2.19, p53
-                    
-                , _up_fake :: Bool
-                    -- ^ Absent from the thesis but present in the Mercury
-                    -- implementation is the consideration of "fake"
-                    -- unifications, which are used when refining the
-                    -- outputs of method calls and must be allowed to
-                    -- descend through (Mostly)'Clobbered' material.
-                    --
-                    -- See @compiler/prog_data.m@'s @unify_is_real@ type.
-                }
-$(makeLenses ''UnifParams)
-
 -- XXX Ought to have a MonadWriter to produce
 --  the actual opcode sequence for unification!
 --  the determinism information
@@ -159,7 +145,7 @@ type UnifC  m f n = (UnifC' m f n,
 --   applicable.
 unifyNN :: UnifC m f n
         => Uniq -> n -> n -> m n
-unifyNN u a b = do
+unifyNN u a b = {- XT.traceShow ("NN",a,b) $-} do
   live <- view up_live
   fake <- view up_fake
   either throwError (return . nUpUniq u) $
@@ -184,7 +170,7 @@ unifyVV :: forall f m n .
             MCVT m DVar ~ VR f n, MCR m DVar, MCA m DVar)
         => DVar -> DVar -> m DVar
 unifyVV vl vr | vl == vr = return vl
-unifyVV vl vr = do
+unifyVV vl vr = {- XT.traceShow ("VV", vl, vr) $-} do
   live <- view up_live
   calias (go live) vl vr
  where
@@ -194,7 +180,7 @@ unifyVV vl vr = do
 checkAndReunif :: forall f m n .
                   (UnifC m f n)
                => VR f n -> m (VR f n)
-checkAndReunif x = do
+checkAndReunif x = {- XT.trace "CAR" $-} do
                     err <- leqXX x (VRStruct $ IAny UUnique)
                     if err
                      then unifyXX UUnique x (VRStruct $ IAny UShared)
@@ -212,7 +198,7 @@ unifyXX u0 (VRStruct ya) (VRStruct yb) = unifyYY u0 ya yb
 -- to this one (or 'unifyNN').
 unifyYY :: (UnifC m f n)
         => Uniq -> InstF f (VR f n) -> InstF f (VR f n) -> m (VR f n)
-unifyYY u0 ya yb = do
+unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
   live <- view up_live
   fake <- view up_fake
   let f = if (live && not fake) then iLeqGLBRL_ else iLeqGLBRD_
@@ -226,8 +212,9 @@ unifyYY u0 ya yb = do
 
 unifyXY :: (UnifC m f n)
         => Uniq -> VR f n -> InstF f (VR f n) -> m (VR f n)
-unifyXY u0 (VRStruct ya) yb = unifyYY u0 ya yb
-unifyXY u0 (VRName   nl) yr = unifyIY u0 (nExpose nl) yr
+unifyXY u0 (VRStruct ya) yb = {- XT.trace "XY1" $-} unifyYY u0 ya yb
+unifyXY u0 (VRName   nl) (nShallow -> Just nr) = {- XT.trace "XY2" $ -} liftM VRName $ unifyNN u0 nl nr
+unifyXY u0 (VRName   nl) yr = {- XT.trace "XY3" $-} unifyIY u0 (nExpose nl) yr
 
 unifyNX ::  (UnifC m f n)
         => Uniq -> n -> VR f n -> m (VR f n)
@@ -240,8 +227,8 @@ unifyIY u0 ia yb = unifyYY u0 (fmap VRName ia) yb
 
 -- XXX Should stop earlier than it does
 xUpUniq :: (Ord f, n ~ NIX f) => Uniq -> VR f n -> VR f n
-xUpUniq u (VRName   n) = VRName   $ nUpUniq u n
-xUpUniq u (VRStruct y) = VRStruct $ over inst_uniq (max u)
+xUpUniq u (VRName   n) = {- XT.trace "XUU1" $ -} VRName   $ nUpUniq u n
+xUpUniq u (VRStruct y) = {- XT.trace "XUU2" $ -} VRStruct $ over inst_uniq (max u)
                                   $ fmap (xUpUniq u) y
 
 -- | Name-on-Variable unification.  This should not be called on names
@@ -279,32 +266,36 @@ unifyVF :: forall m f n .
         => (DVar -> m Bool) -> DVar -> f -> [DVar] -> m DVar
 unifyVF lf v f vs = do
   vl   <- lf v
-  vi   <- clookup v
-  vis  <- mapM clookup vs
+  vy   <- clookup v
+  vys  <- mapM clookup vs
 
-  let vvis = zip vs vis
+  let vvys = zip vs vys
 
-  i''  <- runReaderT (unifyXY UUnique vi (IBound UUnique (M.singleton f vis) False))
+  -- Perform a fake, dead unification of the variable's old inst and
+  -- bound(unique, f(...)).  This gets us just the join on the lattice.
+  i''  <- runReaderT (unifyXY UUnique vy (IBound UUnique
+                                                 (M.singleton f vys)
+												 False))
                      (UnifParams False True)
 
-  -- Unification was successful; now, rip through the results and do the
-  -- second unification pass.
+  -- If we arrive here, unification was successful;
+  -- now, rip through the results and do the second unification pass.
 
-  (u,vis') <- case i'' of
+  (u,vys') <- case i'' of
     VRName n'' -> case nExpose n'' of
                     IBound u (M.toList -> [(f',ris)]) False | f == f' -> do
-                         x <- go unifyNX vl vvis u ris
+                         x <- go unifyNX vl vvys u ris
                          return (u,x)
                     _ -> dynacPanicStr "unifyVF impossible NIX result"
     VRStruct (IBound u (M.toList -> [(f',ris)]) False) | f == f' -> do
-                         x <- go unifyXX vl vvis u ris 
+                         x <- go unifyXX vl vvys u ris 
                          return (u,x)
     _ -> dynacPanicStr "unifyVF impossible result"
 
   -- Store back into the context
 
-  () <- sequence_ $ zipWith (cassign) vs vis'
-  cassign v (VRStruct $ IBound u (M.singleton f vis') False)
+  () <- sequence_ $ zipWith (cassign) vs vys'
+  cassign v (VRStruct $ IBound u (M.singleton f vys') False)
 
   return v
  where
@@ -312,14 +303,14 @@ unifyVF lf v f vs = do
         (m' ~ ReaderT UnifParams m)
      => (Uniq -> a -> b -> m' (VR f (NIX f)))
      -> Bool -> [(DVar,b)] -> Uniq -> [a] -> m [VR f (NIX f)]
-  go uf vl vvis u ris = sequence $ zipWithTails
+  go uf vl vvys u ris = sequence $ zipWithTails
                            (\ri (v',oi) -> do
                               l <- lf v'
                               runReaderT (uf u ri oi >>= checkAndReunif)
                                          (UnifParams (l && vl) True))
                            (\_ -> dynacPanicStr "unifyVF length mismatch")
                            (\_ -> dynacPanicStr "unifyVF length mismatch")
-                           ris vvis
+                           ris vvys
 ------------------------------------------------------------------------}}}
 -- Matching                                                             {{{
 
@@ -330,7 +321,7 @@ type SubC  m f n = (Ord f, Show f,
 
 subNN :: (SubC m f n)
       => n -> n -> m Bool
-subNN a b = XT.traceShow ("SNN",a,b) $ return $ nSub a b
+subNN a b = {- XT.traceShow ("SNN",a,b) $-} return $ nSub a b
 
 subXI :: (SubC m f n)
       => VR f n -> InstF f (NIX f) -> m Bool
@@ -352,7 +343,7 @@ subVN :: forall f m n .
       => DVar
       -> n
       -> m Bool
-subVN v n = XT.traceShow ("SVN",v,n) $ do
+subVN v n = {- XT.traceShow ("SVN",v,n) $-} do
   vx <- clookup v
   subXN vx n
 
