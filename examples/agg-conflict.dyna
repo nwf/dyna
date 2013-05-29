@@ -1,5 +1,0 @@
-
-
-% example of conflicting aggregators
-a += 3.
-a *= 2.

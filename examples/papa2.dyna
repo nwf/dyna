@@ -1,12 +1,12 @@
 % Parsing a simple sentence.
 
 % CKY-like parsing
-phrase(X,I,K,t(X,TY)) max= phrase(Y,I,K,TY) * rewrite(X,Y).
-phrase(X,I,K,t(X,TY,TZ)) max= phrase(Y,I,J,TY) * phrase(Z,J,K,TZ) * rewrite(X,Y,Z).
+phrase(X,I,K, &t(X,TY)) max= phrase(Y,I,K,TY) * rewrite(X,Y).
+phrase(X,I,K, &t(X,TY,TZ)) max= phrase(Y,I,J,TY) * phrase(Z,J,K,TZ) * rewrite(X,Y,Z).
 
-goal(P) max= phrase("S", 0, *length, P).
+goal(P) max= phrase("S", 0, length, P).
 
-best max= pair(phrase("S", 0, *length, P), P).
+best max= pair(phrase("S", 0, length, P), P).
 
 bestScore max= Score for pair(Score,_) is best.
 bestParse max= P for pair(_,P) is best.

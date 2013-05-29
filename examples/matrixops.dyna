@@ -1,23 +1,20 @@
-
-
-
-
 % A and B are names of matrices
-times(A, B, I, J) += m(A, I, K) * m(B, K, J) whenever product(A,B).  % use "?"
+times(A, B, I, J) += m(A, I, K) * m(B, K, J) whenever _ is product(A,B).
 
-m(P, I, J) += pair(R, C) is shape(A),
-              pair(C, D) is shape(B),
+m(P, I, J) += shape(A,R,C), % pair(R, C) is shape(A),
+              shape(B,C,_), % pair(C, D) is shape(B),
               P is product(A, B),
               times(A, B, I, J).
 
 %shape(P, R, C) :- P is product(A, B), shape(A, R, X), shape(B, X, C).
+%shape(A) += &pair(rows(A), cols(A)).
 
-shape(A) += &pair(*rows(A), *cols(A)).
-
-%shape(X, *rows(X), *cols(X)).
+shape(X, rows(X), cols(X)).
 rows(X) max= m(X, R, _), R.
 cols(X) max= m(X, _, C), C.
 
+% define some matrices
+:-dispos m(&,*,*).
 
 % matrix "a" = [ 1 0 ;
 %                0 1 ]
@@ -36,4 +33,5 @@ m(b, 2, 2) += 2.
 m(b, 2, 3) += 0 .
 
 % matrix "c" is the product of matricies "a" and "b"
-product(a,b) += &c
+:-dispos product(&,&).
+product(a,b) += &c .

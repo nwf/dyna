@@ -20,6 +20,7 @@ import qualified Data.ByteString.UTF8         as BU
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
 import qualified Data.Set                     as S
+import           Data.String
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.ANFPretty
@@ -272,7 +273,7 @@ processFile fileName = bracket openOut hClose go
                            $ map (\x -> (x, planInitializer be_b x)) frs
    
   
-            cPlans = combineUpdatePlans
+            uPlans = combineUpdatePlans
                      $ map (\x -> (x, planEachEval be_b
                                                    (flip S.member be_c) x))
                            frs
@@ -284,9 +285,16 @@ processFile fileName = bracket openOut hClose go
 -}
 
         in do
-            dump DumpDopIni (renderDopInis be_ddi initializers)
-            dump DumpDopUpd (renderDopUpds be_ddi cPlans)
-            be_d aggm cPlans {- qPlans -} initializers out
+            -- Force evaluation of a lot of the work of the compiler,
+            -- even if the backend and dump flags won't do it for us.
+            initializers' <- evaluate $ initializers
+            uPlans'       <- evaluate $ uPlans
+
+            dump DumpDopIni (renderDopInis be_ddi initializers')
+            dump DumpDopUpd (renderDopUpds be_ddi uPlans')
+
+            -- Invoke the backend code generator
+            be_d aggm uPlans' {- qPlans -} initializers' out
 
   parse = do
     pr <- T.parseFromFileEx (P.rawDLines <* T.eof) fileName
@@ -307,26 +315,24 @@ main_ argv = do
     _   -> dynacSorry "We can't do more than one file"
 
 main :: IO ()
-main = handle someExnPanic $ handle printerr (getArgs >>= main_)
+main = catches (getArgs >>= main_)
+               [Handler printerr, Handler someExnPanic]
+
  where
   printerr x = pe x >> exitFailure
 
   pe (UserProgramError d) = do
-    hPutStrLn stderr "FATAL: Encountered error in input program:"
-    PP.hPutDoc stderr d
+    PP.hPutDoc stderr (upeMsg <> line <> PP.indent 1 d)
     hPutStrLn stderr ""
   pe (UserProgramANSIError d) = do
-    hPutStrLn stderr "FATAL: Encountered error in input program:"
-    PPA.hPutDoc stderr d
+    PPA.hPutDoc stderr (upeMsg <> PPA.line <> PPA.indent 1 d)
     hPutStrLn stderr ""
   pe (InvocationError d) = do
-    hPutStrLn stderr "Invocation error:"
-    PP.hPutDoc stderr d
+    PP.hPutDoc stderr ("Invocation error:" <> line <> PP.indent 1 d)
+    hPutStrLn stderr ""
     quickExit QEHelp
   pe (Sorry d) = do
-    hPutStrLn stderr "Terribly sorry, but you've hit an unsupported feature"
-    taMsg
-    PP.hPutDoc stderr d
+    PP.hPutDoc stderr (sorryMsg <> line <> taMsg <> line <> PP.indent 1 d)
     hPutStrLn stderr ""
   pe (Panic d) = panic d
 
@@ -334,12 +340,18 @@ main = handle someExnPanic $ handle printerr (getArgs >>= main_)
                                               <+> text (show e)
 
   panic d = do
-    hPutStrLn stderr "Compiler panic!"
-    taMsg
-    PP.hPutDoc stderr d
+    PP.hPutDoc stderr (panicMsg <> line <> taMsg <> line <> PP.indent 1 d)
     hPutStrLn stderr ""
 
-  taMsg = do
-    hPutStrLn stderr $ "This is almost assuredly not your fault!"
-                    ++ "  Please contact a TA."
+  upeMsg :: (IsString s) => s
+  upeMsg = "FATAL: Encountered error in input program:"
+
+  sorryMsg :: (IsString s) => s
+  sorryMsg = "Terribly sorry, but you've hit an unsupported feature"
+
+  panicMsg :: (IsString s) => s
+  panicMsg = "Compiler panic!"
+
+  taMsg :: (IsString s) => s
+  taMsg = "This is almost assuredly not your fault!  Please contact a TA."
 ------------------------------------------------------------------------}}}

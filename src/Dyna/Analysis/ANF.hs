@@ -348,7 +348,7 @@ normTerm_ c@(_,ADEval) ss (P.TFunctor f [sr, si]) | f `elem` dynaRevConjOpers =
 -- their handling.
 normTerm_ c   ss (P.TFunctor f as) = do
 
-    argdispos <- asks $ flip fArgEvalDispos (f,length as) . ad_dt
+    argdispos <- asks $ flip dt_argEvalDispos (f,length as) . ad_dt
     normas <- mapM (\(a T.:~ s,d) -> normTerm_ (ECFunctor,d) (s:ss) a)
                    (zip as argdispos)
 
@@ -369,7 +369,7 @@ normTerm_ c   ss (P.TFunctor f as) = do
                             return (vs,v':r)
                in (reverse . snd) `fmap` foldM delin ([],[]) normas
 
-    selfdispos <- asks $ flip fSelfEvalDispos (f,length as) . ad_dt
+    selfdispos <- asks $ flip dt_selfEvalDispos (f,length as) . ad_dt
 
     let dispos = mergeDispositions selfdispos c
 
