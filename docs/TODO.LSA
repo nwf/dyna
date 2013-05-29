@@ -17,18 +17,30 @@ List notation
 
 ----- Analysis
 
-Abstract unification really ought not unroll recursion quite so eagerly as
-it does.
-
 Mode declarations -> backward chaining!
+
+Detect non-range-restriction and produce a different error message?
+
+Abstract unification really ought not unroll recursion quite so eagerly as
+it does. (Probably no time to deal with this; low priority anyway as it only
+impacts speed of compilation)
+
+Liveness and fakeness of unification (after LSA?)
+
+Unification alias tracking (after LSA?)
 
 ----- Backend
 
-Special error value (for = agg vio, div by 0, ...)
+Check that we have = aggregation working correctly.
 
-Maybe something better for initializers or a real update API?
+Special error value (for = agg violation, div by 0, ...)
+	Some flavor of "root cause" pointer / string / ... ?
 
 Could we maybe get a better chart representation?
+	And better queries into the chart?  We should be able to extract
+	adorned queries from the planner's output without too much effort...
+
+Maybe something better for initializers or update API? (Low priority)
 
 DOpAMine improvements for non-ground structure (probably no time!)
 
@@ -36,11 +48,24 @@ DOpAMine improvements for non-ground structure (probably no time!)
 
 Mention ^C in documentation for diverging programs.
 
+Be sure to mention, repeatedly, that this is experimental software and is
+likely to break both early and often.  Explain the difference between panic
+messages and errors.
+
 ----- Whole pipeline
 
 Need some better mechanism for executing queries after the agenda empties.
+	Take query, feed back to compiler / planner / ...
+		In general, we'd need to indicate which set of things we are
+		at present maintaining and possibly feed the whole program back
+		through the pipeline... if we stick with everything being
+		materialized, we can just feed the query through.
 
-Can we extract backpointers from the chart?
+Can we extract backpointers from the chart or generate code to do so?
 
 Can we run anything on e.g. WSJ with L0 grammar?
-  sentence(N) = ...
+  sentence(N) = ["The",...]
+
+How about... (other things students might want to do)
+	train a log-linear model (e.g. by using := for weights)
+	find the K most-frequent bigrams (even from the repl?)

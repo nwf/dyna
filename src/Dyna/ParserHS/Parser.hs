@@ -126,14 +126,14 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
                 --   preserved across this operation!
                 --   (XXX is that what we want?)
 
-            | PInst NameWithArgs                        -- ^ inst name
-                    ParsedInst                          -- ^ defn body
-                -- ^ Declare an instantiation state name
+            | PInst NameWithArgs
+                    ParsedInst
+                -- ^ Declare an instantiation state: name and body
 
-            | PMode NameWithArgs                        -- ^ mode name
-                    ParsedModeInst                      -- ^ From
-                    ParsedModeInst                      -- ^ To
-                -- ^ Declare a mode name
+            | PMode NameWithArgs
+                    ParsedModeInst
+                    ParsedModeInst
+                -- ^ Declare a mode: name, input, and output
 
             | POperAdd PragmaFixity Integer B.ByteString
                 -- ^ Add an operator

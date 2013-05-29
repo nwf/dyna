@@ -49,8 +49,9 @@ make things work by dropping the lower bound on the package in dyna.cabal.)
 
 You'll want to have the following programs installed, too:
 
+    * Python 2.7 or compatible
     * IPython
-    * Pygments (for pretty code output in our debugging tools)
+    * Pygments (for pretty code output in our compiler-debugging tools)
 
 Run the test harness:
 

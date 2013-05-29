@@ -6,6 +6,13 @@
 # because it's proven itself useful to bring up a Dyna-capable environment
 # on a few machines.
 
+
+# NOTICE!  YOU MUST UPDATE THIS LINE!
+#
+# This is an absolute path devoid of $HOME so that this file
+# continues to work when sourced by people whose homedirs are not mine!
+HROOT=~nwf/src/haskell
+
 GHCVER=7.6.3
 
 HTMLROOT="../../"
@@ -20,7 +27,6 @@ CABAL_BOOTSTRAP_PKGS="transformers-0.3.0.0 \
          HTTP-4000.2.6 \
          cabal-install-1.16.0.2"
 
-HROOT=$HOME/src/haskell
 HPATH=$HROOT/_inst
 HBIN=$HPATH/bin
 HLIB=$HPATH/lib/ghc-$GHCVER
@@ -48,6 +54,11 @@ case $CMD in
     $HBIN/runghc Setup install
     ;;
 
+    printpaths)
+    echo export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+    echo export PATH=$PATH
+    ;;
+
     run)
     export PREFIX=$HPATH
     $@
@@ -66,15 +77,18 @@ case $CMD in
     (ln -s /usr/lib/libgmp.so.? _inst/lib/ghc-$GHCVER/libgmp.so) &&
         # Bootstrap cabal-install
     (cd pkgs; for i in $CABAL_BOOTSTRAP_PKGS ;
-      do (cd $i; $HBIN/runghc Setup configure $CABALOPTS_BOOTSTRAP;
+      do (cd $i; rm -rf dist/;
+                 $HBIN/runghc Setup configure $CABALOPTS_BOOTSTRAP;
                  $HBIN/runghc Setup build;
-                 $HBIN/runghc Setup install)
+                 $HBIN/runghc Setup install) || exit 1
       done) &&
         # Now, reinstall so that we get documentation
     (cd pkgs; for i in $CABAL_BOOTSTRAP_PKGS;
       do (cd $i; $HBIN/cabal install $CABALOPTS --force-reinstalls); done) &&
         # And last, build everything else we need out of cabal
     $HBIN/cabal update &&
+        # Pull in alex and happy first, since we want them for builds below
+    $HBIN/cabal install $CABALOPTS -j12 alex happy &&
         # Pull in the packages on which Dyna will depend as well as 
     $HBIN/cabal install $CABALOPTS -j12 \
         blaze-builder \
