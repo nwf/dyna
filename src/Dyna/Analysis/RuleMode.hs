@@ -149,9 +149,10 @@ fgn v cf cg cn = do
 
 possible :: (Monad m)
          => BackendPossible fbs
+         -> Rule
          -> Crux DVar TBase
          -> SIMCT m DFunct (Actions fbs)
-possible fp cr =
+possible fp r cr =
   case cr of
     -- XXX This is going to be such a pile.  We really, really should have
     -- unification crank out a series of DOpAMine opcodes for us, but for
@@ -187,6 +188,8 @@ possible fp cr =
 -}
 
     -- Structure building or unbuilding
+    --
+    -- XXX This ought to avail itself of unifyVF but doesn't.
     Right (CStruct o is funct) ->
       fgn o (mapM_ ensureBound is >> bind o >> return [ OPWrap o is funct ])
             buildPeel
@@ -195,6 +198,7 @@ possible fp cr =
       buildPeel = do
                    (is', mcis) <- zipWithM maybeCheck is newvars >>= return . unzip
                    let cis = MA.catMaybes mcis
+                   mapM_ bind is
                    return ([ OPPeel is' o funct ] ++ map (uncurry OPCheq) cis)
 
       newvars = map (\n -> BC.pack $ "_chk_" ++ (show n)) [0::Int ..]
@@ -211,7 +215,10 @@ possible fp cr =
                                  (throwError UFExDomain)
 
     -- XXX Indirect evaluation is not yet supported
-    Left (_, CEval _ _) -> dynacSorry "Indir eval"
+    Left (eix, CEval _ _) -> dynacSorry $ "Indir eval"
+                                      <+> parens ("eix=" <> pretty eix)
+                                      <+> "in rule at"
+                                      </> prettySpanLoc (r_span r)
 
     -- Evaluation
     Left (_, CCall vo vis funct) -> do
@@ -368,38 +375,10 @@ stepPartialPlan poss score p =
                       rc' = S.delete crux (pp_cruxes p)
                       r'  = (not $ cruxIsEval crux) || (pp_restrictSearch p)
                   in either (const ps)
-                            (\(act,bc') -> let act' = {- handleConflictors -} act
-                                           in PP rc' bc' r' (score p act') (pl ++ act')
-                                              : ps)
+                            (\(act,bc') -> PP rc' bc' r' (score p act) (pl ++ act)
+                                           : ps)
                             plan
                 ) []
-
-{-
-   handleConflictors =
-     case mic of
-       Nothing -> id
-       Just (mfa,i,ov) -> concatMap (\dop ->
-         case dop of
-           OPIter ov' ivs' f' _ _ |  
-                -- We must insert checks whenever this step involves
-                -- an evaluation.  As an easy optimisation, if we know
-                -- the 'DFunctAr' being updated, we can elide this check
-                -- when we're evaluating a different 'DFunctAr'.
-                --
-                -- XXX This is not the whole answer since it continues to
-                -- assume that everything is bound on the way out of an
-                -- OPIter.  Really we should be transforming the ANF to
-                -- include cruxes for these checks, that way they will get
-                -- handled by mode analysis as with everything else.
-                (maybe True (== (f',length ivs')) mfa)
-             && ov > ov'^.mv_var
-             -> let cv = "_chk"
-                in [ dop
-                   , OPWrap cv (fmap (^.mv_var) ivs') f'
-                   , OPCkne i cv
-                   ]
-           _ -> [dop])
--}
 
 planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Available steps
@@ -476,18 +455,19 @@ planUpdate_ bp sc anf mic fv = planner_ (possible bp) sc anf (Just mic) S.empty 
 -}
 
 planUpdate :: BackendPossible fbs
+           -> Rule
            -> (PartialPlan fbs -> Actions fbs -> Cost)
            -> S.Set (Crux DVar TBase)                     -- ^ Normal form
            -> (EvalCrux DVar, DVar, DVar)
            -> SIMCtx DVar
            -> Maybe (Cost, Actions fbs)
-planUpdate bp sc anf mi ictx =
-  bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
+planUpdate bp r sc anf mi ictx =
+  bestPlan $ planner_ (possible bp r) sc anf (Just mi) ictx
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
 planInitializer bp r =
   let cruxes = r_cruxes r in
-  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
+  bestPlan $ planner_ (possible bp r) simpleCost cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
 -- | Given a particular crux and the remaining evaluation cruxes in a rule, 
@@ -556,15 +536,28 @@ planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
 -- planEachEval _ _ _ = []
 planEachEval bp cs r  =
   map (\(n,cr) ->
-         let cruxes' = S.union (r_cruxes r)
-                               (S.map Right $ handleDoubles mkvar cr 
-                                                (S.delete cr $ S.fromList ecs))
-          in (n, varify $ planUpdate bp simpleCost
-                                       cruxes'
-                                       (mic $ snd cr)
-                                       (allFreeSIMCtx
-                                         $ S.toList
-                                         $ allCruxVars cruxes')))
+          let
+              -- pending eval cruxes
+              pecs = (S.delete cr $ S.fromList ecs)
+
+              -- Additional unification cruxes introduced to prevent double
+              -- counting
+              antidup = S.map Right $ handleDoubles mkvar cr pecs
+
+              -- cruxes to feed to the planner
+              cruxes' = S.unions [ S.map Right $ r_ucruxes r
+                                 , S.map Left  $ pecs
+                                 , antidup
+                                 ]
+
+              -- Initialize the context to have variables for all the
+              -- variables in cruxes' as well as the crux we're holding out.
+              ictx = allFreeSIMCtx
+                      $ S.toList
+                      $ allCruxVars
+                      $ S.insert (Left cr) cruxes'
+
+          in (n, varify $ planUpdate bp r simpleCost cruxes' (mic $ snd cr) ictx))
     -- Filter out non-constant evaluations
     --
     -- XXX This instead should look at the update modes of each evaluation
@@ -633,10 +626,12 @@ combineUpdatePlans = go (M.empty)
   go' xs fr ((n,mca):ys) m =
     case mca of
       Nothing -> dynacUserErr
-                       $ "No update plan for "
-                          <+> group (pretty fa)
+                       $ "No update plan for"
+                          <+> maybe "indirection"
+                                    (\(f,a) -> pretty f <> char '/' <> pretty a)
+                                    fa
                           <+> "in rule at"
-                          <+> (prettySpanLoc $ r_span fr)
+                          <> line <> indent 2 (prettySpanLoc $ r_span fr)
       Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrCons fa (fr,n,c,v1,v2,a) m
    where
     fa = evalCruxFA ev
