@@ -22,7 +22,7 @@ tests:
 
 .PHONY: clean veryclean
 clean:
-	rm -rf examples/*.dyna.plan  \
+	rm -rf examples/*.dyna.*.plan  \
            examples/*.dyna.*.out \
            examples/*.dyna.d
 	rm -f tags TAGS

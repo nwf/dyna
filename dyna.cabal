@@ -138,6 +138,7 @@ Test-suite dyna-selftests
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
+                        directory >= 1.0,
                         either >= 3.4,
                         ghc-prim,
                         HUnit >=1.2,

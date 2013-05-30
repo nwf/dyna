@@ -325,7 +325,7 @@ def go():
 
 
 def dynac(f):
-    out = "%s.plan.py" % f
+    out = "%s.py.plan" % f
     cmd = '%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f)
     assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
     return out
@@ -378,7 +378,7 @@ if argv.plan:
 else:
     plan = dynac(argv.source)
 
-do(argv.source)
+do(plan)
 
 if argv.interactive:
     ip()
