@@ -325,10 +325,10 @@ def go():
 
 
 def dynac(f):
-    cmd = """%s/dist/build/dyna/dyna -B python -o "%s".plan "%s" """ \
-          % (dynahome,f,f)
+    out = "%s.plan.py" % f
+    cmd = '%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f)
     assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
-    return f + '.plan'
+    return out
 
 
 def load(f, verbose=True):
@@ -355,7 +355,7 @@ def do(filename):
 
     initializer.handlers = []    # XXX: do we really want to clear?
 
-    load(dynac(filename))
+    load(filename)
 
     for init in initializer.handlers:   # assumes we have cleared
         init()
@@ -363,15 +363,20 @@ def do(filename):
     go()
 
 
-parser = ArgumentParser(description=__doc__)
-parser.add_argument('source', help='Path to Dyna source file.')
+parser = ArgumentParser(description="The dyna interpreter!")
+parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).')
+parser.add_argument('--plan', action='store_true', default=False, 
+                    help='`source` specifies output of the compiler instead of dyna source code.')
+
 parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
 parser.add_argument('-o', dest='output', help='Output chart.')
 
 argv = parser.parse_args()
 
-#if argv.output is None:
-#    argv.output = argv.source + '.chart'
+if argv.plan:
+    plan = argv.source
+else:
+    plan = dynac(argv.source)
 
 do(argv.source)
 
