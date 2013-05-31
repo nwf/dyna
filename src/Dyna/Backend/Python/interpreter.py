@@ -18,10 +18,39 @@
  - XXX: we should probably fuse update handlers instead of dispatching to each
    one independently.
 
- - TODO: deletion of a rule should be running the initializer for the rule in
-   deletion mode.
+ - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
+   delete mode (3) remove initializers.
 
  - TODO: hooks from introspection, eval, and prioritization.
+
+
+REPL
+====
+
+ - TODO: aggregator map conflicts
+
+
+INTERPRETER
+===========
+
+ - Error values (with provenance ideally)
+
+   Consider the following program:
+    | c += 0
+    | b += 1
+    | a += b / c
+    | d += a
+    | e += d
+
+   Results in the fixed point:
+    | c = 0
+    | b = 1
+    | a = error("divison by zero in rule 'a += b / c'")
+    | d = error("because a = error in 'rule d += a.'")   # because error annihilate aggregators
+    | e = error("because of d ...")
+
+  Should errors have linear provenance? The error could have come from more than
+  one parent.
 
 """
 
@@ -234,11 +263,11 @@ def peel(fn, item):
     """
 
     if fn == "true/0" :
-      assert (item is True)
-      return
+        assert item is True
+        return
     if fn == "false/0" :
-      assert (item is False)
-      return
+        assert item is False
+        return
 
     assert isinstance(item, tuple)
     (fa, idx) = item
@@ -256,7 +285,7 @@ def build(fn, *args):
     return (fn, idx)
 
 
-def emit(item, val):
+def emit(item, val, ruleix=None, variables=None):
 
     print >> sys.stderr, (red if _delete else green) \
         % 'emit %s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
@@ -324,11 +353,36 @@ def go():
         else: dump_charts()
 
 
-def dynac(f):
-    out = "%s.plan.py" % f
+def dynac(f, out):
     cmd = '%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f)
-    assert 0 == os.system(cmd), 'command failed:\n\t' + cmd
-    return out
+    if os.system(cmd):
+        print 'command failed:\n\t' + cmd
+        return True
+
+
+def dynac_code(code, debug=0):
+    "skip the file."
+
+    dyna = '/tmp/tmp.dyna'
+
+    out = '%s.plan.py' % dyna
+
+    with file(dyna, 'wb') as f:
+        f.write(code)
+
+    if dynac(dyna, out):   # stop if the compiler failed.
+        return
+
+    if debug:
+        import debug
+        debug.main(dyna)
+
+    with file(out) as f:
+        new_code = f.read()
+
+    print new_code
+
+    do(out)
 
 
 def load(f, verbose=True):
@@ -365,7 +419,7 @@ def do(filename):
 
 parser = ArgumentParser(description="The dyna interpreter!")
 parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).')
-parser.add_argument('--plan', action='store_true', default=False, 
+parser.add_argument('--plan', action='store_true', default=False,
                     help='`source` specifies output of the compiler instead of dyna source code.')
 
 parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
@@ -376,7 +430,8 @@ argv = parser.parse_args()
 if argv.plan:
     plan = argv.source
 else:
-    plan = dynac(argv.source)
+    plan = "%s.plan.py" % argv.source
+    dynac(argv.source, plan)
 
 do(plan)
 

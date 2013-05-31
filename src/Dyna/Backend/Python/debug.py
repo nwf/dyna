@@ -205,7 +205,7 @@ def graph_styles(g):
     return sty
 
 
-def main(dynafile):
+def main(dynafile, browser=True):
 
     if not os.path.exists(cssfile) or not os.path.exists(jsfile):
         print("Debug must be run from the root of the Dyna source tree")
@@ -390,7 +390,7 @@ Initializer:
 
         print >> html, '</div>'
 
-    if argv.browser:
+    if browser:
         os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
 
 
@@ -403,4 +403,4 @@ if __name__ == '__main__':
     p.add_argument('-x', dest='browser', action='store_false')
 
     argv = p.parse_args()
-    main(argv.input)
+    main(argv.input, browser=argv.browser)
