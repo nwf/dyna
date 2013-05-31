@@ -378,7 +378,7 @@ if argv.plan:
 else:
     plan = dynac(argv.source)
 
-do(argv.source)
+do(plan)
 
 if argv.interactive:
     ip()
