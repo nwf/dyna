@@ -97,6 +97,7 @@ import qualified Data.Maybe                 as MA
 import qualified Data.IntMap                as IM
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
+import           Dyna.Main.Defns
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
@@ -389,7 +390,7 @@ normTerm c (t T.:~ s) = normTerm_ (ECFunctor,if c then ADEval else ADQuote)
 ------------------------------------------------------------------------}}}
 -- Normalize a Rule                                                     {{{
 
-data Rule = Rule { r_index      :: Int
+data Rule = Rule { r_index      :: RuleIx
                  , r_head       :: DVar
                  , r_aggregator :: DAgg
                  , r_result     :: DVar

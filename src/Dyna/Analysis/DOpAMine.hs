@@ -4,12 +4,14 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE Rank2Types #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.DOpAMine where
 
 import           Control.Lens
 import           Dyna.Analysis.Mode.Det
 import           Dyna.Analysis.Mode.Execution.NamedInst
+import           Dyna.Main.Defns
 import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
 import           Text.PrettyPrint.Free
@@ -64,10 +66,17 @@ data DOpAMine bscg
               -- @OPWrap x ys f ; OPIndr z x@ is indistinguishable from
               -- @OPIter (MF z) (map MB ys) f DetSemi Nothing@.
               | OPIndr     DVar        DVar                      -- -+
+
+              -- | Emit (i.e. yield) an answer.  Parameters are the
+              --   head, value, rule index, and a list of variables
+              --   guaranteed to uniquely (together with the rule index)
+              --   identify this particular answer.
+              | OPEmit                 DVar DVar RuleIx [DVar]
+
  deriving (Show)
 
 {- XXX Move DOpAMine to being more functional, rather than a list of
- - opcodes?
+ - opcodes!
  -
  - OPBlock  [DOpAMine bscg]
  - OPOrElse [DOpAMine bscg] -- choice points!
@@ -100,6 +109,7 @@ detOfDop x = case x of
                OPWrap _ _ _     -> Det
                OPIndr _ _       -> DetSemi
                OPIter _ _ _ d _ -> d
+               OPEmit _ _ _ _   -> Det
 
 ------------------------------------------------------------------------}}}
 -- Rendering                                                            {{{
@@ -133,5 +143,9 @@ renderDOpAMine = r
                             <> maybe empty
                                      ((space <>) . braces . e v vs f d)
                                      b
+  r _ (OPEmit h v i vs)   = text "OPEmit" <+> pretty h
+                                          <+> pretty v
+                                          <+> pretty i
+                                          <+> pretty vs
 
 ------------------------------------------------------------------------}}}

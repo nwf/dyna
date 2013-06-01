@@ -33,6 +33,7 @@ module Dyna.Analysis.RuleMode {- (
     adornedQueries
 ) -} where
 
+import           Control.Arrow (second)
 import           Control.Lens ((^.))
 import           Control.Monad
 import           Control.Monad.Error.Class
@@ -311,6 +312,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
                                         - 1
                              DetMulti -> 2
     OPIndr _ _          -> 100
+    OPEmit _ _ _ _      -> 0
 
   loops = fromIntegral . length . filter isLoop
 
@@ -440,20 +442,19 @@ bestPlan :: [(Cost, a)] -> Maybe (Cost, a)
 bestPlan []    = Nothing
 bestPlan plans = Just $ argmin fst (take 1000 plans)
 
-{-
+-- | Add the last Emit verb to a string of actions from the planner.
+--
+-- XXX This is certainly the wrong answer for a number of reasons, not the
+-- least of which is that it adds all variables to the identification set,
+-- when really we just want the nondeterministic set.
+finalizePlan :: Rule -> Actions fbs -> Actions fbs
+finalizePlan r d = d ++ [OPEmit (r_head r) (r_result r) (r_index r)
+                              $ S.toList $ allCruxVars (r_cruxes r)]
+
 -- | Given a normalized form and, optionally, an initial crux,
 --   saturate the graph and get all the plans for doing so.
 --
 -- XXX This has no idea what to do about non-range-restricted rules.
-planUpdate_ :: BackendPossible fbs                         -- ^ Available steps
-            -> (PartialPlan fbs -> Actions fbs -> Cost)    -- ^ Scoring function
-            -> S.Set (Crux DVar TBase)                     -- ^ Normal form
-            -> (EvalCrux DVar, DVar, DVar)                 -- ^ Initial eval crux
-            -> S.Set DVar
-            -> [(Cost, Actions fbs)]                       -- ^ If there's a plan...
-planUpdate_ bp sc anf mic fv = planner_ (possible bp) sc anf (Just mic) S.empty fv
--}
-
 planUpdate :: BackendPossible fbs
            -> Rule
            -> (PartialPlan fbs -> Actions fbs -> Cost)
@@ -461,11 +462,11 @@ planUpdate :: BackendPossible fbs
            -> (EvalCrux DVar, DVar, DVar)
            -> SIMCtx DVar
            -> Maybe (Cost, Actions fbs)
-planUpdate bp r sc anf mi ictx =
+planUpdate bp r sc anf mi ictx = fmap (second (finalizePlan r)) $
   bestPlan $ planner_ (possible bp r) sc anf (Just mi) ictx
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
-planInitializer bp r =
+planInitializer bp r = fmap (second (finalizePlan r)) $
   let cruxes = r_cruxes r in
   bestPlan $ planner_ (possible bp r) simpleCost cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
