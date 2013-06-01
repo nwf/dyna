@@ -376,6 +376,10 @@ def _go():
         was = item.value
         print >> trace, '(was: %s,' % was,
 
+        # TODO: in the case of set and bag the `now` value is the same as `was`
+        # because the change happens in place. Thus, sadly, `was == now` and the
+        # change will now propagate.
+
         now = aggregator[item].fold()
         print >> trace, 'now:', str(now) + ')'
 
@@ -404,11 +408,11 @@ def go():
 def dynac(f, out):
     cmd = '%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f)
     if os.system(cmd):
-        print 'command failed:\n\t' + cmd
+#        print 'command failed:\n\t' + cmd
         return True
 
 
-def dynac_code(code, debug=0):
+def dynac_code(code, debug=False, run=True):
     "skip the file."
 
     dyna = '/tmp/tmp.dyna'
@@ -428,7 +432,8 @@ def dynac_code(code, debug=0):
     with file(out) as f:
         new_code = f.read()
 
-    do(out)
+    if run:
+        do(out)
 
 
 def load(f):
@@ -463,68 +468,34 @@ def do(filename):
     go()
 
 
-import cmd
+import cmd, readline
 
 class REPL(cmd.Cmd, object):
-    """
-    ## console.py
-    ## Author:   James Thiele
-    ## Date:     27 April 2004
-    ## Version:  1.0
-    ## Location: http://www.eskimo.com/~jet/python/examples/cmd/
-    ## Copyright (c) 2004, James Thiele
-    """
-    def __init__(self):
+
+    def __init__(self, hist):
         cmd.Cmd.__init__(self)
         self.prompt = ":- "
-        #self.intro  = "Welcome to console!"
-
-    ## Command definitions ##
-#    def do_hist(self, args):
-#        """Print a list of commands that have been entered"""
-#        print self._hist
+        self.hist = hist
+        if not os.path.exists(hist):
+            with file(hist, 'wb') as f:
+                f.write('')
+        readline.read_history_file(hist)
 
     def do_exit(self, _):
-        """Exits from the console"""
+        readline.write_history_file(self.hist)
         return -1
 
-    ## Command definitions to support Cmd object functionality ##
     def do_EOF(self, args):
-        """Exit on system end of file character"""
+        "Exit on end of file character ^D."
+        print 'exit'
         return self.do_exit(args)
-
-    def do_help(self, args):
-        """Get help on commands
-           'help' or '?' with no arguments prints a list of commands for which help is available
-           'help <command>' or '? <command>' gives help on <command>
-        """
-        ## The only reason to define this method is for the help text in the doc string
-        cmd.Cmd.do_help(self, args)
-
-    ## Override methods in Cmd object ##
-    def preloop(self):
-        """Initialization before prompting user for commands.
-           Despite the claims in the Cmd documentaion, Cmd.preloop() is not a stub.
-        """
-        cmd.Cmd.preloop(self)   ## sets up command completion
-        self._hist    = []      ## No history yet
-        self._locals  = {}      ## Initialize execution namespace for user
-        self._globals = {}
-
-    def postloop(self):
-        """Take care of any unfinished business.
-           Despite the claims in the Cmd documentaion, Cmd.postloop() is not a stub.
-        """
-        cmd.Cmd.postloop(self)   ## Clean up command completion
-        print "Exiting..."
 
     def precmd(self, line):
         """
         This method is called after the line has been input but before it has
-        been interpreted. If you want to modifdy the input line before execution
+        been interpreted. If you want to modify the input line before execution
         (for example, variable substitution) do it here.
         """
-        self._hist += [ line.strip() ]
         return line
 
     def do_changed(self, _):
@@ -532,7 +503,6 @@ class REPL(cmd.Cmd, object):
             print 'nothing changed.'
             print
             return
-
         print
         print 'Changed'
         print '============='
@@ -554,13 +524,6 @@ class REPL(cmd.Cmd, object):
                 print chart[f]
                 print
 
-    def postcmd(self, stop, line):
-        """
-        If you want to stop the console, return something that evaluates to true.
-        If you want to do some post command processing, do it here.
-        """
-        return stop
-
     def emptyline(self):
         """Do nothing on empty input line"""
         pass
@@ -580,6 +543,9 @@ class REPL(cmd.Cmd, object):
         else:
             print 'Did not understand argument %r please use (on or off).' % args
 
+    def do_debug(self, line):
+        dynac_code(line, debug=True, run=False)
+
     def do_query(self, line):
 
         if line.endswith('.'):
@@ -592,18 +558,15 @@ class REPL(cmd.Cmd, object):
 
         self.default(query)
 
-
     def default(self, line):
-        """Called on an input line when the command prefix is not recognized.
-           In that case we execute the line as Python code.
         """
-
+        Called on an input line when the command prefix is not recognized.  In
+        that case we execute the line as Python code.
+        """
         line = line.strip()
-
-        if not line.strip().endswith('.'):
+        if not line.endswith('.'):
             print "ERROR: Line doesn't end with period."
             return
-
         try:
             if dynac_code(line):  # failure.
                 return
@@ -620,9 +583,8 @@ class REPL(cmd.Cmd, object):
             self.cmdloop()
 
 
-def repl():
-    REPL().cmdloop()
-
+def repl(hist):
+    REPL(hist).cmdloop()
 
 
 def main():
@@ -666,7 +628,7 @@ def main():
         dump_charts()
 
     if argv.interactive:
-        repl()
+        repl(hist = argv.source + '.hist')
 
 
 if __name__ == '__main__':
