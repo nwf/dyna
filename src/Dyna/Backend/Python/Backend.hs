@@ -135,7 +135,7 @@ constants = M.fromList
     ,(("abs",1)   , PDBS $ call "abs"     )
     ,(("log",1)   , PDBS $ call "log"     )
     ,(("exp",1)   , PDBS $ call "exp"     )
-    ,(("$eval",1) , PDBS $ call "$eval"   )
+    ,(("eval",1)  , PDBS $ call "None;exec "   )
     ]
  where
   nullary v  _ _   = v
@@ -246,7 +246,6 @@ printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
 driver :: BackendDriver PyDopeBS
 driver am um {-qm-} is fh = do
   -- Aggregation mapping
-  hPutStrLn fh $ "agg_decl = {}"
   forM_ (M.toList am) $ \((f,a),v) -> do
      hPutStrLn fh $ show $    "agg_decl"
                            <> brackets (dquotes $ pretty f <> "/" <> pretty a)

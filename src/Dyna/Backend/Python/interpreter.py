@@ -1,6 +1,15 @@
 #!/usr/bin/env python
+from __future__ import division
 
 """
+
+
+===
+
+This has an absurd parse:
+  x += f('result = 5').
+
+===
 
  - "initializers" aren't just initializers, they are the fully-naive bottom-up
    inference rules.
@@ -23,11 +32,22 @@
 
  - TODO: hooks from introspection, eval, and prioritization.
 
-
 REPL
 ====
 
- - TODO: aggregator map conflicts
+ - TODO: (Aggregator conflicts)
+
+   The good: we throw and AggregatorConflict exception if newly loaded code
+   tries to overwrite an aggregator in `agg_decl`.
+
+   However, we need to make sure that we don't load subsequent code pertaining
+   to this rule that we should reject altogether.
+
+   timv: At the moment I believe we're safe because agg_decl is set before any
+   of the registers (i.e. it's at the top of the generated code). This obviously
+   isn't the best way to do this, but we're going to have to overhaul this
+   entire infrastructure soon to handle rule-retraction.. So we can fix this
+   later.
 
 
 INTERPRETER
@@ -58,16 +78,28 @@ INTERPRETER
 #from debug import saverr; saverr.enable(editor=True)
 
 import os, sys
+from cStringIO import StringIO
 from collections import defaultdict
 from argparse import ArgumentParser
-from utils import ip, red, green, blue, magenta, dynahome
+from utils import ip, red, green, blue, magenta, yellow, dynahome
 from defn import agg_bind
 
+
+class AggregatorConflict(Exception):
+    pass
+
+
+#def eval(x):
+#    exec x in globals(), locals()
+#    if 'result' in locals():
+#        return locals()['result']
+
+
+trace = None
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
     def __missing__(self, key):
-        print >> sys.stderr, 'creating chart indirect for:', key
         arity = int(key.split('/')[-1])
         c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
         return c
@@ -87,9 +119,20 @@ chart = chart_indirect()
 
 _delete = False
 agenda = set()
-#aggregator = defaultdict(Counter)
 agg = {}
-agg_decl = None # filled in after exec, this only here to satisfy lint checker.
+
+# when a new rule comes along it puts a string in the following dictionary
+class aggregator_declaration(object):
+    def __init__(self):
+        self.map = {}
+    def __setitem__(self, key, value):
+        if key in self.map and self.map[key] != value:
+            raise AggregatorConflict("Aggregator conflict %s was %r trying to set to %r." % (key, self.map[key], value))
+        self.map[key] = value
+    def __getitem__(self, key):
+        return self.map[key]
+
+agg_decl = aggregator_declaration()
 
 
 def dump_charts(out=sys.stdout):
@@ -114,7 +157,7 @@ class Chart(object):
         self._id = 0
 
     def __repr__(self):
-        rows = [(r, pretty((self.name, i)), pretty(r[-1])) for i, r in self.data.items() if r[-1] is not None]
+        rows = [(r, pretty((self.name, i)), prettify(r[-1])) for i, r in self.data.items() if r[-1] is not None]
         x = '\n'.join('%-30s := %s' % (p, v) for _, p, v in sorted(rows))
         return '%s\n=================\n%s' % (self.name, x)
 
@@ -191,12 +234,12 @@ def prettify(x):
     if isinstance(x, tuple):
         return pretty(x)
     elif hasattr(x, '__iter__'):
-        return map(pretty, x)
+        return '%s(%s)' % (type(x).__name__, ', '.join(map(pretty, x)))
     elif isinstance(x, Chart):
         return {pretty((x.name, k)): v for k,v in x.data.iteritems()}
     else:
-        raise ValueError("Don't know what to do with %r" % x)
-
+#        raise ValueError("Don't know what to do with %r" % x)
+        return repr(x)
 
 # Update handler indirection -- a temporary hack. Allow us to have many handlers
 # on the same functor/arity. Eventually, we'll fuse handlers into one handler.
@@ -250,7 +293,6 @@ def update_dispatcher(item, val):
     if val is None:
         return
     (fn, _) = item
-    print >> sys.stderr, 'dispatch', pretty(item), '=', val
     for handler in register.handlers[fn]:
         handler(item, val)
 
@@ -287,8 +329,8 @@ def build(fn, *args):
 
 def emit(item, val, ruleix=None, variables=None):
 
-    print >> sys.stderr, (red if _delete else green) \
-        % 'emit %s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
+    print >> trace, (red % 'delete' if _delete else green % 'update'), \
+        '%s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
 
     if _delete:
         aggregator[item].dec(val)
@@ -313,22 +355,28 @@ def lookup(item):
     return chart[fn].data[idx][-1]
 
 
+
+changed = {}
+
 def _go():
     "the main loop"
+
+    changed.clear()
 
     while agenda:
         (fn, idx) = item = agenda.pop()
 
-        print >> sys.stderr
-        print >> sys.stderr, 'pop', pretty(item),
+        print >> trace
+        print >> trace, magenta % 'pop   ', pretty(item),
 
         was = lookup(item)
-        now = aggregator[item].fold()
+        print >> trace, '(was: %s,' % was,
 
-        print >> sys.stderr, 'was %s, now %s' % (was, now)
+        now = aggregator[item].fold()
+        print >> trace, 'now:', str(now) + ')'
 
         if was == now:
-            print >> sys.stderr, 'unchanged'
+            print >> trace, yellow % 'unchanged'
             continue
 
         if was is not None:
@@ -339,18 +387,14 @@ def _go():
         if now is not None:
             update_dispatcher(item, now)
 
+        changed[item] = now
+
 
 def go():
     try:
         _go()
     except KeyboardInterrupt:
         pass
-    finally:
-        if argv.output is not None:
-            if argv.output == "-": dump_charts(sys.stdout)
-            else:
-                with file(argv.output, 'wb') as f: dump_charts(f)
-        else: dump_charts()
 
 
 def dynac(f, out):
@@ -371,7 +415,7 @@ def dynac_code(code, debug=0):
         f.write(code)
 
     if dynac(dyna, out):   # stop if the compiler failed.
-        return
+        return True
 
     if debug:
         import debug
@@ -380,16 +424,14 @@ def dynac_code(code, debug=0):
     with file(out) as f:
         new_code = f.read()
 
-    print new_code
-
     do(out)
 
 
-def load(f, verbose=True):
+def load(f):
 
-    if verbose:
-        with file(f) as h:
-            print >> sys.stderr, h.read()
+    with file(f) as h:
+        print >> trace, magenta % 'Loading new code'
+        print >> trace, yellow % h.read()
 
     # load generated code.
     execfile(f, globals())
@@ -417,23 +459,201 @@ def do(filename):
     go()
 
 
-parser = ArgumentParser(description="The dyna interpreter!")
-parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).')
-parser.add_argument('--plan', action='store_true', default=False,
-                    help='`source` specifies output of the compiler instead of dyna source code.')
+import cmd
 
-parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
-parser.add_argument('-o', dest='output', help='Output chart.')
+class Console(cmd.Cmd):
+    """
+    ## console.py
+    ## Author:   James Thiele
+    ## Date:     27 April 2004
+    ## Version:  1.0
+    ## Location: http://www.eskimo.com/~jet/python/examples/cmd/
+    ## Copyright (c) 2004, James Thiele
+    """
+    def __init__(self):
+        cmd.Cmd.__init__(self)
+        self.prompt = ":- "
+        #self.intro  = "Welcome to console!"
 
-argv = parser.parse_args()
+    ## Command definitions ##
+#    def do_hist(self, args):
+#        """Print a list of commands that have been entered"""
+#        print self._hist
 
-if argv.plan:
-    plan = argv.source
-else:
-    plan = "%s.plan.py" % argv.source
-    dynac(argv.source, plan)
+    def do_exit(self, _):
+        """Exits from the console"""
+        return -1
 
-do(plan)
+    ## Command definitions to support Cmd object functionality ##
+    def do_EOF(self, args):
+        """Exit on system end of file character"""
+        return self.do_exit(args)
 
-if argv.interactive:
-    ip()
+    def do_help(self, args):
+        """Get help on commands
+           'help' or '?' with no arguments prints a list of commands for which help is available
+           'help <command>' or '? <command>' gives help on <command>
+        """
+        ## The only reason to define this method is for the help text in the doc string
+        cmd.Cmd.do_help(self, args)
+
+    ## Override methods in Cmd object ##
+    def preloop(self):
+        """Initialization before prompting user for commands.
+           Despite the claims in the Cmd documentaion, Cmd.preloop() is not a stub.
+        """
+        cmd.Cmd.preloop(self)   ## sets up command completion
+        self._hist    = []      ## No history yet
+        self._locals  = {}      ## Initialize execution namespace for user
+        self._globals = {}
+
+    def postloop(self):
+        """Take care of any unfinished business.
+           Despite the claims in the Cmd documentaion, Cmd.postloop() is not a stub.
+        """
+        cmd.Cmd.postloop(self)   ## Clean up command completion
+        print "Exiting..."
+
+    def precmd(self, line):
+        """
+        This method is called after the line has been input but before it has
+        been interpreted. If you want to modifdy the input line before execution
+        (for example, variable substitution) do it here.
+        """
+        self._hist += [ line.strip() ]
+        return line
+
+    def do_changed(self, _):
+        if not changed:
+            print 'nothing changed.'
+            return
+
+        print
+        print 'Changed'
+        print '============='
+        for x, v in changed.items():
+            print pretty(x), ':=', prettify(v)
+        print
+
+    def do_chart(self, args):
+        if not args:
+            dump_charts()
+        else:
+            unrecognized = set(args.split()) - set(chart.keys())
+            for f in unrecognized:
+                print 'unrecognized predicate', f
+            if unrecognized:
+                print 'available:\n\t' + '\t'.join(chart.keys())
+                return
+            for f in args.split():
+                print chart[f]
+                print
+
+    def postcmd(self, stop, line):
+        """
+        If you want to stop the console, return something that evaluates to true.
+        If you want to do some post command processing, do it here.
+        """
+        return stop
+
+    def emptyline(self):
+        """Do nothing on empty input line"""
+        pass
+
+    def do_ip(self, args):
+        ip()
+
+    def do_go(self, _):
+        go()
+
+    def do_trace(self, args):
+        global trace
+
+        if args == 'on':
+            trace = sys.stdout
+        elif args == 'off':
+            trace = file(os.devnull, 'w')
+        else:
+            print 'Did not understand argument %r please use (on or off).' % args
+
+    def do_query(self, line):
+
+        if line.endswith('.'):
+            print "Queries don't end with a dot."
+            return
+
+        query = 'zzz set= _VALUE is %s, eval("print 12345"), _VALUE.' % line
+
+        print blue % query
+
+        self.default(query)
+
+
+    def default(self, line):
+        """Called on an input line when the command prefix is not recognized.
+           In that case we execute the line as Python code.
+        """
+
+        line = line.strip()
+
+        if not line.strip().endswith('.'):
+            print "ERROR: Line doesn't end with period."
+            return
+
+        try:
+            if dynac_code(line):  # failure.
+                return
+        except AggregatorConflict as e:
+            print 'AggregatorConflict:', e
+        else:
+            self.do_changed('')
+
+def repl():
+    console = Console()
+    console.cmdloop()
+
+
+
+def main():
+    parser = ArgumentParser(description="The dyna interpreter!")
+    parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).')
+    parser.add_argument('--plan', action='store_true', default=False,
+                        help='`source` specifies output of the compiler instead of dyna source code.')
+    parser.add_argument('--trace', default='/tmp/dyna.log')
+    parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
+    parser.add_argument('-o', dest='output', help='Output chart.')
+
+    argv = parser.parse_args()
+
+    global trace
+    if argv.trace == 'stderr':
+        trace = sys.stderr
+    elif argv.trace == 'stdout':
+        trace = sys.stdout
+    else:
+        trace = file(argv.trace, 'wb')
+
+    if argv.plan:
+        plan = argv.source
+    else:
+        plan = "%s.plan.py" % argv.source
+        dynac(argv.source, plan)
+
+    do(plan)
+
+    if argv.output:
+        if argv.output == "-":
+            dump_charts(sys.stdout)
+        else:
+            with file(argv.output, 'wb') as f:
+                dump_charts(f)
+    else:
+        dump_charts()
+
+    if argv.interactive:
+        repl()
+        #ip()
+
+
+if __name__ == '__main__':
+    main()
