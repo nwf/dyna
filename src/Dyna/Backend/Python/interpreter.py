@@ -352,9 +352,9 @@ def emit(item, val, ruleix=None, variables=None):
         '%s (val %s; curr: %s)' % (pretty(item), val, item.value)
 
     if _delete:
-        aggregator[item].dec(val)
+        aggregator[item].dec(val,ruleix,variables)
     else:
-        aggregator[item].inc(val)
+        aggregator[item].inc(val,ruleix,variables)
 
     agenda.add(item)
 
