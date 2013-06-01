@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-from __future__ import division
 
 """
 
+MISC
+====
 
-===
 
 This has an absurd parse:
   x += f('result = 5').
 
+
 set= is wrong .. needs to keep counts like bag=
 
-===
 
 
 Warnings/lint checking
@@ -84,27 +84,37 @@ INTERPRETER
   Should errors have linear provenance? The error could have come from more than
   one parent.
 
+
+  The reason we have to support error is because the system might need to go
+  through an error state before it can reach it's fixed out. In order to be
+  invariant to execution order (preserve our semantice) we to need to have the
+  ability fo reach pass thru an error state.
+
+  for example:
+   :- a += 1/c.
+   :- b += 0.         % (1)
+   :- b += 1.         % (2)
+
+  If we process (1) before (2) we get an error value for `a` due to the divide
+  by zero but then once (2) is processed the error should go away because `b` is
+  no longer `0`. Whereas, (2) before (1) is ok!
+
+  timv: This isn't sufficiently motivating because we can just leave `a` as
+  `null` until we pass the divide by zero error.
+
 """
 
-#from debug import ultraTB2; ultraTB2.enable()
-#from debug import saverr; saverr.enable(editor=True)
-
+from __future__ import division
 import os, sys
-from cStringIO import StringIO
 from collections import defaultdict
 from argparse import ArgumentParser
+
 from utils import ip, red, green, blue, magenta, yellow, dynahome
 from defn import agg_bind
 
 
 class AggregatorConflict(Exception):
     pass
-
-
-#def eval(x):
-#    exec x in globals(), locals()
-#    if 'result' in locals():
-#        return locals()['result']
 
 
 trace = None
@@ -123,16 +133,6 @@ class aggregator_indirect(dict):
         self[item] = a
         return a
 
-
-aggregator = aggregator_indirect()
-
-
-chart = chart_indirect()
-
-_delete = False
-agenda = set()
-agg = {}
-
 # when a new rule comes along it puts a string in the following dictionary
 class aggregator_declaration(object):
     def __init__(self):
@@ -144,7 +144,13 @@ class aggregator_declaration(object):
     def __getitem__(self, key):
         return self.map[key]
 
+
+
+_delete = False
+agenda = set()
 agg_decl = aggregator_declaration()
+aggregator = aggregator_indirect()
+chart = chart_indirect()
 
 
 def dump_charts(out=sys.stdout):
@@ -305,7 +311,10 @@ def update_dispatcher(item, val):
     if val is None:
         return
     for handler in register.handlers[item.fn]:
-        handler(item, val)
+        try:
+            handler(item, val)
+        except ZeroDivisionError as e:
+            print >> trace, 'ZeroDivisionError: %s on update %s = %s' % (e, item, val)
 
 
 def peel(fn, item):
@@ -406,10 +415,7 @@ def go():
 
 
 def dynac(f, out):
-    cmd = '%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f)
-    if os.system(cmd):
-#        print 'command failed:\n\t' + cmd
-        return True
+    return os.system('%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f))
 
 
 def dynac_code(code, debug=False, run=True):
@@ -428,9 +434,6 @@ def dynac_code(code, debug=False, run=True):
     if debug:
         import debug
         debug.main(dyna)
-
-    with file(out) as f:
-        new_code = f.read()
 
     if run:
         do(out)
@@ -463,128 +466,12 @@ def do(filename):
     load(filename)
 
     for init in initializer.handlers:   # assumes we have cleared
-        init()
+        try:
+            init()
+        except ZeroDivisionError as e:
+            print >> trace, 'ZeroDivisionError:', e, 'in initializer.'
 
     go()
-
-
-import cmd, readline
-
-class REPL(cmd.Cmd, object):
-
-    def __init__(self, hist):
-        cmd.Cmd.__init__(self)
-        self.prompt = ":- "
-        self.hist = hist
-        if not os.path.exists(hist):
-            with file(hist, 'wb') as f:
-                f.write('')
-        readline.read_history_file(hist)
-
-    def do_exit(self, _):
-        readline.write_history_file(self.hist)
-        return -1
-
-    def do_EOF(self, args):
-        "Exit on end of file character ^D."
-        print 'exit'
-        return self.do_exit(args)
-
-    def precmd(self, line):
-        """
-        This method is called after the line has been input but before it has
-        been interpreted. If you want to modify the input line before execution
-        (for example, variable substitution) do it here.
-        """
-        return line
-
-    def do_changed(self, _):
-        if not changed:
-            print 'nothing changed.'
-            print
-            return
-        print
-        print 'Changed'
-        print '============='
-        for x, v in changed.items():
-            print pretty(x), ':=', v
-        print
-
-    def do_chart(self, args):
-        if not args:
-            dump_charts()
-        else:
-            unrecognized = set(args.split()) - set(chart.keys())
-            for f in unrecognized:
-                print 'unrecognized predicate', f
-            if unrecognized:
-                print 'available:\n\t' + '\t'.join(chart.keys())
-                return
-            for f in args.split():
-                print chart[f]
-                print
-
-    def emptyline(self):
-        """Do nothing on empty input line"""
-        pass
-
-    def do_ip(self, _):
-        ip()
-
-    def do_go(self, _):
-        go()
-
-    def do_trace(self, args):
-        global trace
-        if args == 'on':
-            trace = sys.stdout
-        elif args == 'off':
-            trace = file(os.devnull, 'w')
-        else:
-            print 'Did not understand argument %r please use (on or off).' % args
-
-    def do_debug(self, line):
-        dynac_code(line, debug=True, run=False)
-
-    def do_query(self, line):
-
-        if line.endswith('.'):
-            print "Queries don't end with a dot."
-            return
-
-        query = 'zzz set= _VALUE is %s, eval("print 12345"), _VALUE.' % line
-
-        print blue % query
-
-        self.default(query)
-
-    def default(self, line):
-        """
-        Called on an input line when the command prefix is not recognized.  In
-        that case we execute the line as Python code.
-        """
-        line = line.strip()
-        if not line.endswith('.'):
-            print "ERROR: Line doesn't end with period."
-            return
-        try:
-            if dynac_code(line):  # failure.
-                return
-        except AggregatorConflict as e:
-            print 'AggregatorConflict:', e
-        else:
-            self.do_changed('')
-
-    def cmdloop(self, _=None):
-        try:
-            super(REPL, self).cmdloop()
-        except KeyboardInterrupt:
-            print '^C'
-            self.cmdloop()
-
-
-def repl(hist):
-    REPL(hist).cmdloop()
 
 
 def main():
@@ -628,6 +515,7 @@ def main():
         dump_charts()
 
     if argv.interactive:
+        from repl import repl
         repl(hist = argv.source + '.hist')
 
 

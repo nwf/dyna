@@ -1,8 +1,3 @@
-"""
-Misc doctests
--------------
-"""
-
 import math, operator
 from collections import defaultdict, Counter
 from utils import red
