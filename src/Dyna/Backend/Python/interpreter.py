@@ -9,6 +9,18 @@ from __future__ import division
 This has an absurd parse:
   x += f('result = 5').
 
+set= is wrong .. needs to keep counts like bag=
+
+===
+
+
+Warnings/lint checking
+======================
+
+ - Catch typos! Warn the user if they write a predicate that is not defined on
+   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
+
+
 ===
 
  - "initializers" aren't just initializers, they are the fully-naive bottom-up
@@ -148,6 +160,42 @@ def dump_charts(out=sys.stdout):
         print >> out
 
 
+from collections import namedtuple
+class Term(namedtuple('Term', 'fn idx')):
+
+    def __init__(self, fn, idx):
+        self.row = chart[fn].data[idx]           # mutable reference to row in chart
+        super(Term, self).__init__(fn, idx)
+
+    @property
+    def args(self):
+        return self.row[:-1]
+
+    @property
+    def value(self):
+        return self.row[-1]
+
+    @value.setter
+    def value(self, now):
+        self.row[-1] = now
+
+    def __repr__(self):
+        return pretty(self)
+
+
+def pretty(item):
+    "Pretty print a term. Will retrieve the complete (ground) term from the chart."
+    if not isinstance(item, tuple):
+        return repr(item)
+    row = item.row
+    args = row[:-1]
+    fn = ''.join(item.fn.split('/')[:-1])  # drop arity from name.
+    pretty_args = map(pretty, args)
+    if not len(pretty_args):          # zero arity -> no parens.
+        return fn
+    return '%s(%s)' % (fn, ','.join(pretty_args))
+
+
 class Chart(object):
 
     def __init__(self, name, ncols):
@@ -157,7 +205,7 @@ class Chart(object):
         self._id = 0
 
     def __repr__(self):
-        rows = [(r, pretty((self.name, i)), prettify(r[-1])) for i, r in self.data.items() if r[-1] is not None]
+        rows = [(r, Term(self.name, i), r[-1]) for i, r in self.data.items() if r[-1] is not None]
         x = '\n'.join('%-30s := %s' % (p, v) for _, p, v in sorted(rows))
         return '%s\n=================\n%s' % (self.name, x)
 
@@ -173,17 +221,6 @@ class Chart(object):
                 continue
             if all(row[i] == val for i, val in nonslice):
                 yield tuple(row[i] for i in slices)
-
-    def __setitem__(self, item, now):
-        assert isinstance(item, tuple) and len(item) == self.ncols - 1
-        nonslice = [(i, v) for i, v in enumerate(item) if not isinstance(v, slice)]
-        for idx, row in self.data.iteritems():
-            if all(row[i] == val for i, val in nonslice):
-                item = (self.name, idx)
-                was = self.data[idx][-1]
-                delete(item, was)
-                emit(item, now)
-        go()
 
     def lookup(self, args):
         "find index for these args"
@@ -215,31 +252,6 @@ class Chart(object):
         self._id += 1
         return idx
 
-
-def pretty(item):
-    "Pretty print a term. Will retrieve the complete (ground) term from the chart."
-    if not isinstance(item, tuple):
-        return repr(item)
-    (fn, idx) = item
-    row = chart[fn].data[idx]
-    args = row[:-1]
-    fn = ''.join(fn.split('/')[:-1])  # drop arity from name.
-    pretty_args = map(pretty, args)
-    if not len(pretty_args):          # zero arity -> no parens.
-        return fn
-    return '%s(%s)' % (fn, ','.join(pretty_args))
-
-
-def prettify(x):
-    if isinstance(x, tuple):
-        return pretty(x)
-    elif hasattr(x, '__iter__'):
-        return '%s(%s)' % (type(x).__name__, ', '.join(map(pretty, x)))
-    elif isinstance(x, Chart):
-        return {pretty((x.name, k)): v for k,v in x.data.iteritems()}
-    else:
-#        raise ValueError("Don't know what to do with %r" % x)
-        return repr(x)
 
 # Update handler indirection -- a temporary hack. Allow us to have many handlers
 # on the same functor/arity. Eventually, we'll fuse handlers into one handler.
@@ -292,8 +304,7 @@ def update_dispatcher(item, val):
     """
     if val is None:
         return
-    (fn, _) = item
-    for handler in register.handlers[fn]:
+    for handler in register.handlers[item.fn]:
         handler(item, val)
 
 
@@ -310,27 +321,26 @@ def peel(fn, item):
     if fn == "false/0" :
         assert item is False
         return
-
-    assert isinstance(item, tuple)
-    (fa, idx) = item
-    assert fa == fn
-    return chart[fn].data[idx][:-1]  # minus val
+    assert isinstance(item, Term)
+    assert item.fn == fn
+    return item.args
 
 
 def build(fn, *args):
-    if fn == "true/0" : return True
-    if fn == "false/0" : return False
-
+    if fn == "true/0":
+        return True
+    if fn == "false/0":
+        return False
     idx = chart[fn].lookup(args)
     if idx is None:
         idx = chart[fn].insert(args, None)   # don't know val yet.
-    return (fn, idx)
+    return Term(fn, idx)
 
 
 def emit(item, val, ruleix=None, variables=None):
 
     print >> trace, (red % 'delete' if _delete else green % 'update'), \
-        '%s (val %s; curr: %s)' % (pretty(item), val, lookup(item))
+        '%s (val %s; curr: %s)' % (pretty(item), val, item.value)
 
     if _delete:
         aggregator[item].dec(val)
@@ -350,12 +360,6 @@ def delete(item, val):
     _delete = False
 
 
-def lookup(item):
-    (fn, idx) = item
-    return chart[fn].data[idx][-1]
-
-
-
 changed = {}
 
 def _go():
@@ -364,12 +368,12 @@ def _go():
     changed.clear()
 
     while agenda:
-        (fn, idx) = item = agenda.pop()
+        item = agenda.pop()
 
         print >> trace
         print >> trace, magenta % 'pop   ', pretty(item),
 
-        was = lookup(item)
+        was = item.value
         print >> trace, '(was: %s,' % was,
 
         now = aggregator[item].fold()
@@ -382,7 +386,7 @@ def _go():
         if was is not None:
             delete(item, was)
 
-        chart[fn].data[idx][-1] = now
+        item.value = now
 
         if now is not None:
             update_dispatcher(item, now)
@@ -461,7 +465,7 @@ def do(filename):
 
 import cmd
 
-class Console(cmd.Cmd):
+class REPL(cmd.Cmd, object):
     """
     ## console.py
     ## Author:   James Thiele
@@ -526,13 +530,14 @@ class Console(cmd.Cmd):
     def do_changed(self, _):
         if not changed:
             print 'nothing changed.'
+            print
             return
 
         print
         print 'Changed'
         print '============='
         for x, v in changed.items():
-            print pretty(x), ':=', prettify(v)
+            print pretty(x), ':=', v
         print
 
     def do_chart(self, args):
@@ -560,7 +565,7 @@ class Console(cmd.Cmd):
         """Do nothing on empty input line"""
         pass
 
-    def do_ip(self, args):
+    def do_ip(self, _):
         ip()
 
     def do_go(self, _):
@@ -568,7 +573,6 @@ class Console(cmd.Cmd):
 
     def do_trace(self, args):
         global trace
-
         if args == 'on':
             trace = sys.stdout
         elif args == 'off':
@@ -608,9 +612,16 @@ class Console(cmd.Cmd):
         else:
             self.do_changed('')
 
+    def cmdloop(self, _=None):
+        try:
+            super(REPL, self).cmdloop()
+        except KeyboardInterrupt:
+            print '^C'
+            self.cmdloop()
+
+
 def repl():
-    console = Console()
-    console.cmdloop()
+    REPL().cmdloop()
 
 
 
@@ -633,6 +644,10 @@ def main():
     else:
         trace = file(argv.trace, 'wb')
 
+    if not os.path.exists(argv.source):
+        print 'File %r does not exist.' % argv.source
+        return
+
     if argv.plan:
         plan = argv.source
     else:
@@ -652,7 +667,6 @@ def main():
 
     if argv.interactive:
         repl()
-        #ip()
 
 
 if __name__ == '__main__':
