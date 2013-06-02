@@ -115,6 +115,8 @@ constants = M.fromList
     ,(("|",2)     , PDBS $ infixOp "|"    )
     ,(("%",2)     , PDBS $ infixOp "%"    )
     ,(("**",2)    , PDBS $ infixOp "**"   )
+    ,(("==",2)    , PDBS $ infixOp "=="   )
+    ,(("!=",2)    , PDBS $ infixOp "!="   )
     ,(("<",2)     , PDBS $ infixOp "<"    )
     ,(("<=",2)    , PDBS $ infixOp "<="   )
     ,((">",2)     , PDBS $ infixOp ">"    )
@@ -135,7 +137,7 @@ constants = M.fromList
     ,(("abs",1)   , PDBS $ call "abs"     )
     ,(("log",1)   , PDBS $ call "log"     )
     ,(("exp",1)   , PDBS $ call "exp"     )
-    ,(("eval",1)  , PDBS $ call "None;exec "   )
+    ,(("eval",1)  , PDBS $ call "None;exec ")
     -- XXX not quite what we want, but something like this might
     -- be nice to have.
     -- ,(("pair",2)  , PDBS $ call ""        )
