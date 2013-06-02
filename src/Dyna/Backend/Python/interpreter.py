@@ -5,9 +5,29 @@
 MISC
 ====
 
+Terms aren't pushed all the way thru. The old representation ('c/0',0) is stored
+in the chart.
+
+TODO: create an Interpreter object to hold what is now global state.
+
 
 This has an absurd parse:
   x += f('result = 5').
+
+What should `a += null` and `a += null + 1.` do?
+
+
+What is null?
+=============
+
+ Consider the following two similar programs
+
+  1) a += b + c.
+
+  2) a += b.
+     a += c.
+
+ These programs have different meanings! We can demonstrate by adding evidence.
 
 
 set= is wrong .. needs to keep counts like bag=
@@ -126,7 +146,6 @@ class chart_indirect(dict):
         c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
         return c
 
-
 class aggregator_indirect(dict):
     def __missing__(self, item):
         a = agg_bind(item, agg_decl)
@@ -188,6 +207,18 @@ class Term(namedtuple('Term', 'fn idx')):
     def __repr__(self):
         return pretty(self)
 
+# TODO: we don't story Term objects in the chart yet.. so we need to use the
+# namedtuple's __eq__ method.
+#
+#    def __eq__(self, other):
+#        assert isinstance(other, Term), other
+#        if other.fn == self.fn:
+#            if other.idx == self.idx:
+#                return True
+#            else:
+#                return self.args == other.args
+#        else:
+#            return False
 
 def pretty(item):
     "Pretty print a term. Will retrieve the complete (ground) term from the chart."
@@ -212,12 +243,14 @@ class Chart(object):
 
     def __repr__(self):
         rows = [(r, Term(self.name, i), r[-1]) for i, r in self.data.items() if r[-1] is not None]
-        x = '\n'.join('%-30s := %s' % (p, v) for _, p, v in sorted(rows))
+        x = '\n'.join('%-30s := %r' % (p, v) for _, p, v in sorted(rows))
         return '%s\n=================\n%s' % (self.name, x)
 
     def __getitem__(self, item):
+
         assert isinstance(item, tuple) and len(item) == self.ncols, \
             'item width mismatch: ncols %s, item %s' % (self.ncols, len(item))
+
         nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
         slices = [i for i, val in enumerate(item) if isinstance(val, slice)]
 
@@ -236,21 +269,21 @@ class Chart(object):
             if row[:-1] == args:
                 return idx             # stop on first
 
-    def update(self, ix, args):
+    def update(self, ix, args, val):
         "Update chart"
-        assert len(args) == self.ncols and isinstance(args, list)
-        self.data[ix] = args
+        assert len(args) == self.ncols - 1
+
+        # TODO: ix should be a Term object. Actually, if we hash on args we'll
+        # do `self.data[term] = val` the last slot in args is the value.
+        self.data[ix] = list(args) + [val]
 
     def insert(self, args, val):
 
-        args = list(args)
-        args.append(val)
-
         # debugging check: row is not already in chart.
-        assert self.lookup(args[:-1]) is None, '%s already in chart' % (args,)
+        assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
 
         idx = self.next_id()
-        self.update(idx, args)
+        self.update(idx, args, val)
         return idx
 
     def next_id(self):
@@ -313,8 +346,9 @@ def update_dispatcher(item, val):
     for handler in register.handlers[item.fn]:
         try:
             handler(item, val)
-        except ZeroDivisionError as e:
-            print >> trace, 'ZeroDivisionError: %s on update %s = %s' % (e, item, val)
+        except (TypeError, ZeroDivisionError) as e:
+            #print >> trace,
+            print '%s on update %s = %s' % (e, item, val)
 
 
 def peel(fn, item):
@@ -468,15 +502,161 @@ def do(filename):
     for init in initializer.handlers:   # assumes we have cleared
         try:
             init()
-        except ZeroDivisionError as e:
-            print >> trace, 'ZeroDivisionError:', e, 'in initializer.'
+        except (TypeError, ZeroDivisionError) as e:
+            #print >> trace,
+            print e, 'in initializer.'
 
     go()
 
 
+
+import cmd
+import readline
+
+class REPL(cmd.Cmd, object):
+
+    def __init__(self, hist):
+        cmd.Cmd.__init__(self)
+        #self.prompt = ":- "
+        self.hist = hist
+        if not os.path.exists(hist):
+            with file(hist, 'wb') as f:
+                f.write('')
+        readline.read_history_file(hist)
+        self.do_trace('off')
+        self.lineno = 0
+
+    @property
+    def prompt(self):
+        return 'in(%s) :- ' % self.lineno
+
+    def do_exit(self, _):
+        readline.write_history_file(self.hist)
+        return -1
+
+    def do_EOF(self, args):
+        "Exit on end of file character ^D."
+        print 'exit'
+        return self.do_exit(args)
+
+    def precmd(self, line):
+        """
+        This method is called after the line has been input but before it has
+        been interpreted. If you want to modify the input line before execution
+        (for example, variable substitution) do it here.
+        """
+        return line
+
+    def postcmd(self, stop,  line):
+        self.lineno += 1
+        return stop
+
+    def do_changed(self, _):
+        if not changed:
+            #print 'nothing changed.'
+            #print
+            return
+        print '============='
+        for x, v in sorted(changed.items()):
+            print '%s := %r' % (x, v)
+        print
+
+    def do_dump(self, _):
+        print '============='
+        for fn in sorted(chart):
+            c = chart[fn]
+            for i, r in sorted(c.data.items(), key=lambda x: x[1]):  # sort by Term's arguments
+                val = r[-1]
+                if val is not None:
+                    print '%-30s := %r' % (Term(fn, i), val)
+        print
+
+    def do_chart(self, args):
+        if not args:
+            dump_charts()
+        else:
+            unrecognized = set(args.split()) - set(chart.keys())
+            for f in unrecognized:
+                print 'unrecognized predicate', f
+            if unrecognized:
+                print 'available:\n\t' + '\t'.join(chart.keys())
+                return
+            for f in args.split():
+                print chart[f]
+                print
+
+    def emptyline(self):
+        """Do nothing on empty input line"""
+        pass
+
+    def do_ip(self, _):
+        ip()
+
+    def do_go(self, _):
+        go()
+
+    def do_trace(self, args):
+        global trace
+        if args == 'on':
+            trace = sys.stdout
+        elif args == 'off':
+            trace = file(os.devnull, 'w')
+        else:
+            print 'Did not understand argument %r please use (on or off).' % args
+
+    def do_debug(self, line):
+        dynac_code(line, debug=True, run=False)
+
+    def do_query(self, line):
+
+        if line.endswith('.'):
+            print "Queries don't end with a dot."
+            return
+
+        query = 'out(%s) bag= _VALUE is %s, &result(&(%s), _VALUE).' % (self.lineno, line, line)
+
+        print blue % query
+
+        self.default(query)
+
+        for (results,) in chart['out/1'][self.lineno,:]:
+            for result in results:
+                print result
+        print
+
+    def default(self, line):
+        """
+        Called on an input line when the command prefix is not recognized.  In
+        that case we execute the line as Python code.
+        """
+        line = line.strip()
+        if not line.endswith('.'):
+            print "ERROR: Line doesn't end with period."
+            return
+        try:
+            if dynac_code(line):  # failure.
+                return
+        except AggregatorConflict as e:
+            print 'AggregatorConflict:', e
+        else:
+            self.do_changed('')
+
+    def cmdloop(self, _=None):
+        try:
+            super(REPL, self).cmdloop()
+        except KeyboardInterrupt:
+            print '^C'
+            self.cmdloop()
+
+
+def repl(hist):
+    REPL(hist).cmdloop()
+
 def main():
+#    from repl import repl
+
     parser = ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).')
+    parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).', nargs='?')
     parser.add_argument('--plan', action='store_true', default=False,
                         help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('--trace', default='/tmp/dyna.log')
@@ -493,30 +673,34 @@ def main():
     else:
         trace = file(argv.trace, 'wb')
 
-    if not os.path.exists(argv.source):
-        print 'File %r does not exist.' % argv.source
-        return
+    if argv.source:
 
-    if argv.plan:
-        plan = argv.source
-    else:
-        plan = "%s.plan.py" % argv.source
-        dynac(argv.source, plan)
+        if not os.path.exists(argv.source):
+            print 'File %r does not exist.' % argv.source
+            return
 
-    do(plan)
-
-    if argv.output:
-        if argv.output == "-":
-            dump_charts(sys.stdout)
+        if argv.plan:
+            plan = argv.source
         else:
-            with file(argv.output, 'wb') as f:
-                dump_charts(f)
-    else:
-        dump_charts()
+            plan = "%s.plan.py" % argv.source
+            dynac(argv.source, plan)
 
-    if argv.interactive:
-        from repl import repl
-        repl(hist = argv.source + '.hist')
+        do(plan)
+
+        if argv.output:
+            if argv.output == "-":
+                dump_charts(sys.stdout)
+            else:
+                with file(argv.output, 'wb') as f:
+                    dump_charts(f)
+        else:
+            dump_charts()
+
+        if argv.interactive:
+            repl(hist = argv.source + '.hist')
+
+    else:
+        repl(hist = '/tmp/dyna.hist')
 
 
 if __name__ == '__main__':
