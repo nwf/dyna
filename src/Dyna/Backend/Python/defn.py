@@ -9,9 +9,9 @@ class Aggregator(object):
         self.name = name
     def fold(self):
         raise NotImplementedError
-    def inc(self, val):
+    def inc(self, val, ruleix, variables):
         raise NotImplementedError
-    def dec(self, val):
+    def dec(self, val, ruleix, variables):
         raise NotImplementedError
     def clear(self):
         raise NotImplementedError
@@ -23,9 +23,9 @@ class BAggregator(Counter, Aggregator):
     def __init__(self, item, name):
         Aggregator.__init__(self, item, name)
         Counter.__init__(self)
-    def inc(self, val):
+    def inc(self, val, ruleix, variables):
         self[val] += 1
-    def dec(self, val):
+    def dec(self, val, ruleix, variables):
         self[val] -= 1
     def fold(self):
         return self
@@ -43,23 +43,31 @@ class MultisetAggregator(BAggregator):
 
 class LastEquals(Aggregator):
     def __init__(self, item, name):
-        self.list = []
+        self.values = {}
         Aggregator.__init__(self, item, name)
-    def inc(self, val):
-        self.list.append(val)
-    def dec(self, val):
-        raise NotImplementedError('dec on last equal not defined.')
+    def inc(self, val, ruleix, variables):
+        if ruleix not in self.values:
+            self.values[ruleix] = []
+        self.values[ruleix].append(val)
+    def dec(self, val, ruleix, variables):
+        self.values[ruleix].delete(val)
+    def clear(self):
+        self.values = {}
     def fold(self):
-        return self.list[-1]
+        maxrix = max(self.values.keys(), key=int)
+        if len(self.values[maxrix]) == 1:
+            return self.values[maxrix][0]
+        else:
+            return None
 
 
 class SetEquals(Aggregator):
     def __init__(self, item, name):
         self.set = set([])
         Aggregator.__init__(self, item, name)
-    def inc(self, val):
+    def inc(self, val, ruleix, variables):
         self.set.add(val)
-    def dec(self, val):
+    def dec(self, val, ruleix, variables):
         self.set.remove(val)
     def fold(self):
         return self.set

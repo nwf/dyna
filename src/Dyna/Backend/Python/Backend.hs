@@ -136,6 +136,9 @@ constants = M.fromList
     ,(("log",1)   , PDBS $ call "log"     )
     ,(("exp",1)   , PDBS $ call "exp"     )
     ,(("eval",1)  , PDBS $ call "None;exec "   )
+    -- XXX not quite what we want, but something like this might
+    -- be nice to have.
+    -- ,(("pair",2)  , PDBS $ call ""        )
     ]
  where
   nullary v  _ _   = v
@@ -196,16 +199,30 @@ pdope_ (OPIter o m f _ Nothing) =
           "for" <+> (tupledOrUnderscore $ filterGround mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
--- | Render a dopamine sequence's checks and loops above a (indended) core.
-pdope :: Actions PyDopeBS -> Doc e -> Doc e
-pdope _d _e =         (indent 4 $ "for _ in [None]:")
-              `above` (indent 8 $ go _d _e)
+    -- XXX Ought to make i and vs conditional on... doing debugging or the
+    -- aggregator for this head caring.  The latter is a good bit more
+    -- advanced than we are right now.
+pdope_ (OPEmit h r i vs) =
+  "emit" <> tupled [ pretty h
+                   , pretty r
+                   , pretty i
+                   , varmap
+                   ]
  where
-  go []  = id
+  -- A python map of variable name to value
+  varmap = encloseSep lbrace rbrace comma
+         $ map (\v -> let v' = pretty v in dquotes v' <+> colon <+> v') vs
+
+-- | Render a dopamine sequence's checks and loops above a (indended) core.
+pdope :: Actions PyDopeBS -> Doc e
+pdope _d =         (indent 4 $ "for _ in [None]:")
+           `above` (indent 8 $ go _d)
+ where
+  go []  = empty
   go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
               in above (pdope_ x)
                  . (if indents then indent 4 else id)
-                 . go xs
+                 $ go xs
 
 
 printPlanHeader :: Handle -> Rule -> Cost -> Maybe Int -> IO ()
@@ -224,10 +241,8 @@ printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
                    `above` "def" <+> char '_' <> tupled [] <+> colon
-                   `above` pdope dope emit
+                   `above` pdope dope
                    <> line
- where
-   emit = "emit" <> tupled [pretty h, pretty r]
 
 -- XXX INDIR EVAL
 printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
@@ -235,10 +250,8 @@ printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon
-                   `above` pdope dope emit
+                   `above` pdope dope
                    <> line
- where
-   emit = "emit" <> tupled [pretty h, pretty r]
 
 ------------------------------------------------------------------------}}}
 -- Driver                                                               {{{

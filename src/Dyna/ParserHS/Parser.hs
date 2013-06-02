@@ -61,6 +61,7 @@ import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.Main.Defns
 import           Dyna.Main.Exception
 import           Dyna.Term.TTerm (Annotation(..), TBase(..),
                                   DFunct, DFunctAr, DVar)
@@ -85,8 +86,6 @@ data Term = TFunctor B.ByteString
           | TVar     B.ByteString
           | TBase    TBase
  deriving (D.Data,D.Typeable,Eq,Ord,Show)
-
-type RuleIx = Int
 
 -- | Rules are not just terms because we want to make it very syntactically
 --   explicit about the head being a term (though that's not an expressivity
@@ -200,7 +199,7 @@ data PCS =
         -- XXX add arity to key?
       , _pcs_opertab   :: EOT
       , _pcs_operspec  :: M.Map B.ByteString () -- XXX
-      , _pcs_ruleix    :: Int
+      , _pcs_ruleix    :: RuleIx
       }
 $(makeLenses ''PCS)
 

@@ -10,6 +10,8 @@ upstream:
 	cabal install --user external/ekmett-parsers external/ekmett-trifecta 
 
 deps:
+	alex --version || cabal install alex
+	happy --version || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
 build:
