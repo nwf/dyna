@@ -602,7 +602,7 @@ class REPL(cmd.Cmd, object):
 
         self.default(query)
 
-        for (results,) in chart['out/1'][self.lineno,:]:
+        for (_, results) in chart['out/1'][self.lineno,:]:
             for result in results:
                 print result
         print
