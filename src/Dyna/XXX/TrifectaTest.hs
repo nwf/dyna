@@ -7,7 +7,6 @@ import           Data.ByteString (ByteString)
 import           Data.Monoid (mempty)
 import           Test.HUnit
 import           Text.Trifecta
-import           Text.Trifecta.Result
 import qualified Text.PrettyPrint.ANSI.Leijen as PPA
 
 unsafeFS :: Result t -> t
@@ -26,7 +25,7 @@ unsafeFF e (Failure td) = e @=? flip PPA.displayS ""
   filterSD (PPA.SLine i x) = PPA.SLine i (filterSD x)
   filterSD (PPA.SSGR _ x) = filterSD x
 
-unsafeParse :: (Show a) => (Parser a) -> ByteString -> a
+unsafeParse :: (Parser a) -> ByteString -> a
 unsafeParse p = unsafeFS . parseByteString (p <* eof) mempty
 
 -- XXX this fails to properly check the last argument of the "Diagnostic"s

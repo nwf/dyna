@@ -12,6 +12,7 @@ import qualified Data.ByteString.UTF8       as BU
 import qualified Data.Char                  as C
 import qualified Data.Map                   as M
 import           Dyna.Term.TTerm
+import           Text.Parser.Expression (Assoc(..))
 
 ------------------------------------------------------------------------}}}
 -- Keywords                                                             {{{
@@ -27,6 +28,48 @@ dynaEvalAssignOper = "is"
 dynaConjOper = ","
 dynaRevConjOpers = ["whenever","for"]
 dynaUnitTerm = "true"
+
+------------------------------------------------------------------------}}}
+-- Operators                                                            {{{
+
+data Fixity = PFIn Assoc | PFPre | PFPost
+ deriving (Eq,Show)
+
+-- | For each possible operator symbol, specify its precedence and fixity.
+--
+-- For the precedence, a higher number means tighter binding.
+type OperSpec = M.Map String [(Int, Fixity)]
+
+-- | The basic expression table for limited expressions.
+--
+-- Notably, this excludes @,@ (which is important
+-- syntactically), @for@, @whenever@, and @is@ (which are
+-- nonsensical in local context)
+--
+-- The precedence and fixity here are mostly as per Haskell 98.
+defOperSpec :: OperSpec
+defOperSpec = M.fromList
+  [ ("-"  ,[(6,PFIn AssocLeft ), (9, PFPre)])
+  , ("^"  ,[(8,PFIn AssocLeft )            ])
+  , ("|"  ,[(2,PFIn AssocRight)            ])
+  , ("/"  ,[(7,PFIn AssocLeft )            ])
+  , ("*"  ,[(7,PFIn AssocLeft )            ])
+  , ("**" ,[(8,PFIn AssocRight)            ])
+  , ("&"  ,[(3,PFIn AssocRight)            ])
+  , ("%"  ,[(7,PFIn AssocLeft )            ])
+  , ("+"  ,[(6,PFIn AssocLeft )            ])
+
+  , ("<=" ,[(4,PFIn AssocNone )            ])
+  , ("<"  ,[(4,PFIn AssocNone )            ])
+  , ("="  ,[(4,PFIn AssocNone )            ])
+  , (">=" ,[(4,PFIn AssocNone )            ])
+  , (">"  ,[(4,PFIn AssocNone )            ])
+  , ("!=" ,[(4,PFIn AssocNone )            ])
+
+  , ("!"  ,[(9,PFPre)                      ])
+
+  , ("new",[(0,PFPre)])
+  ]
 
 ------------------------------------------------------------------------}}}
 -- Evaluation Disposition                                               {{{

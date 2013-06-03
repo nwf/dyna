@@ -4,11 +4,12 @@ module Dyna.XXX.MonadUtils(
   -- * Logic utilities
   andM, andM1, orM, orM1, allM, anyM,
   -- * MonadState utilities
-  bracketState, incState,
+  bracketState, incState, readState,
 ) where
 
 -- import           Control.Applicative
 import           Control.Lens
+import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Map  as M
 import qualified Data.Set  as S
@@ -55,3 +56,7 @@ bracketState bs m = do
 
 incState :: (Num a, MonadState a m) => m a
 incState = id <<%= (+1)
+
+readState :: (MonadState a m) => ReaderT a m b -> m b
+readState x = get >>= runReaderT x
+

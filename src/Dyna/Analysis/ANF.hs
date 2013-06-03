@@ -402,9 +402,9 @@ data Rule = Rule { r_index      :: RuleIx
  deriving (Show)
 
 
-normRule :: T.Spanned P.Rule   -- ^ Term to digest
+normRule :: (RuleIx, DisposTab, T.Spanned P.Rule)   -- ^ Rule to digest
          -> (Rule, ANFWarns)
-normRule (P.Rule i h a r dt T.:~ sp) = 
+normRule (i, dt, P.Rule h a r T.:~ sp) =
   let (ru,s) = runNormalize dt $ do
                nh  <- normTerm False h >>= newAssign "_h" . Left
                nr  <- normTerm True  r >>= newAssign "_r" . Left

@@ -19,7 +19,7 @@ import           Control.Exception
 import qualified Data.ByteString.UTF8         as BU
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
-import qualified Data.Set                     as S
+-- import qualified Data.Set                     as S
 import           Data.String
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
@@ -29,7 +29,7 @@ import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
 import           Dyna.Backend.Backends
 import           Dyna.Main.Exception
-import qualified Dyna.ParserHS.Parser         as P
+import qualified Dyna.ParserHS.OneshotDriver  as P
 import           Dyna.Term.TTerm
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.Console.GetOpt
@@ -249,12 +249,11 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    rs <- parse
+    P.PDP rs <- parse
 
-    dump DumpParsed (vcat $ map (text.show) rs)
+    dump DumpParsed (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
    
-    let urs = map (\(P.LRule x T.:~ _) -> x) rs
-        (frs, anfWarns) = unzip $ map normRule urs
+    let (frs, anfWarns) = unzip $ map normRule rs
 
     dump DumpANF (vcat $ map printANF frs)
 
@@ -296,7 +295,7 @@ processFile fileName = bracket openOut hClose go
             be_d aggm uPlans' {- qPlans -} initializers' out
 
   parse = do
-    pr <- T.parseFromFileEx (P.rawDLines <* T.eof) fileName
+    pr <- T.parseFromFileEx (P.oneshotDynaParser <* T.eof) fileName
     case pr of
       TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
       TR.Success rs -> return rs
