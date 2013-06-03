@@ -41,24 +41,13 @@ class MultisetAggregator(BAggregator):
         return self.folder(self)
 
 
-class LastEquals(Aggregator):
-    def __init__(self, item, name):
-        self.values = {}
-        Aggregator.__init__(self, item, name)
+class LastEquals(BAggregator):
     def inc(self, val, ruleix, variables):
-        if ruleix not in self.values:
-            self.values[ruleix] = []
-        self.values[ruleix].append(val)
+        self[ruleix, val] += 1
     def dec(self, val, ruleix, variables):
-        self.values[ruleix].delete(val)
-    def clear(self):
-        self.values = {}
+        self[ruleix, val] -= 1
     def fold(self):
-        maxrix = max(self.values.keys(), key=int)
-        if len(self.values[maxrix]) == 1:
-            return self.values[maxrix][0]
-        else:
-            return None
+        return max(x for x, cnt in self.items() if cnt > 0)[1]
 
 
 class SetEquals(Aggregator):
@@ -139,16 +128,15 @@ def agg_bind(item, agg_decl):
         'majority=': majority_equals,
     }
 
-    (fn, _) = item
 
-    if agg_decl[fn] == ':=':
-        return LastEquals(item, agg_decl[fn])
+    if agg_decl[item.fn] == ':=':
+        return LastEquals(item, agg_decl[item.fn])
 
-    elif agg_decl[fn] == 'bag=':
-        return BAggregator(item, agg_decl[fn])
+    elif agg_decl[item.fn] == 'bag=':
+        return BAggregator(item, agg_decl[item.fn])
 
-    elif agg_decl[fn] == 'set=':
-        return SetEquals(item, agg_decl[fn])
+    elif agg_decl[item.fn] == 'set=':
+        return SetEquals(item, agg_decl[item.fn])
 
     else:
-        return MultisetAggregator(item, agg_decl[fn], defs[agg_decl[fn]])
+        return MultisetAggregator(item, agg_decl[item.fn], defs[agg_decl[item.fn]])
