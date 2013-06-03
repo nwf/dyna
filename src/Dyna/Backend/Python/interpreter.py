@@ -123,12 +123,13 @@ import os, sys
 from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 
-from utils import ip, red, green, blue, magenta, yellow, dynahome
+from utils import ip, red, green, blue, magenta, yellow, dynahome, notimplemented
 from defn import aggregator
 
 
 class AggregatorConflict(Exception):
     pass
+
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
@@ -172,10 +173,6 @@ def dump_charts(out=sys.stdout):
     for x in fns:
         print >> out, chart[x]
         print >> out
-
-
-def notimplemented(*_,**__):
-    raise NotImplementedError
 
 
 # TODO: codegen should output a derive Term instance for each functor
@@ -261,31 +258,16 @@ class Chart(object):
                 if term.value == val:
                     yield term.args + (term.value,)
 
-
     def lookup(self, args):
         "find index for these args"
-        assert len(args) == self.ncols - 1                    # XXX: lookup doesn't want val?
-
-        assert isinstance(args, tuple) and not isinstance(args, Term)
+        assert len(args) == self.ncols - 1
 
         try:
             return self.intern[args]
         except KeyError:
             return None
 
-    def update(self, ix, args, val):
-        "Update chart"
-
-        assert len(args) == self.ncols - 1
-        assert isinstance(args, tuple) and not isinstance(args, Term)
-
-        term = self.intern[args]
-        term.value = val
-        return term
-
     def insert(self, args, val):
-
-        assert isinstance(args, tuple) and not isinstance(args, Term)
 
         # debugging check: row is not already in chart.
         assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
@@ -294,11 +276,11 @@ class Chart(object):
         term.value = val
         term.aggregator = aggregator(agg_decl[self.name])
 
+        # indexes new term
         for i, x in enumerate(args):
             self.ix[i][x].add(term)
 
         return term
-
 
 
 def build(fn, *args):
