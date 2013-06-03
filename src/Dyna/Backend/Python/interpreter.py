@@ -5,9 +5,6 @@
 MISC
 ====
 
-Terms aren't pushed all the way thru. The old representation ('c/0',0) is stored
-in the chart.
-
 TODO: create an Interpreter object to hold what is now global state.
 
 FIXME: set= is wrong .. needs to keep counts like bag=
@@ -175,7 +172,7 @@ def dump_charts(out=sys.stdout):
         print >> out
 
 
-# TODO: codegen should output a derive Term instance for each functor
+# TODO: codegen should output a derived Term instance for each functor
 class Term(namedtuple('Term', 'fn args'), object):
 
     def __init__(self, fn, args):
@@ -184,7 +181,11 @@ class Term(namedtuple('Term', 'fn args'), object):
         super(Term, self).__init__(fn, args)
 
     def __repr__(self):
-        return pretty(self)
+        "Pretty print a term. Will retrieve the complete (ground) term."
+        fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
+        if not self.args:
+            return fn
+        return '%s(%s)' % (fn, ','.join(map(repr, self.args)))
 
     __add__ \
         = __sub__ \
@@ -199,17 +200,6 @@ class Term(namedtuple('Term', 'fn args'), object):
 #    def value(self, val):
 #        assert not isinstance(val, tuple) or isinstance(val, Term)
 #        self._value = val
-
-
-def pretty(item):
-    "Pretty print a term. Will retrieve the complete (ground) term from the chart."
-    if not isinstance(item, Term):
-        return repr(item)
-    fn = ''.join(item.fn.split('/')[:-1])  # drop arity from name.
-    pretty_args = map(pretty, item.args)
-    if not len(pretty_args):               # zero arity -> no parens.
-        return fn
-    return '%s(%s)' % (fn, ','.join(pretty_args))
 
 
 class Chart(object):
