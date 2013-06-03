@@ -19,25 +19,18 @@ class Aggregator(object):
 
 
 class BAggregator(Counter, Aggregator):
-    def __init__(self, name):
+    def __init__(self, name, folder):
+        self.folder = folder
         Aggregator.__init__(self, name)
         Counter.__init__(self)
+    def fold(self):
+        return self.folder(self)
     def inc(self, val, ruleix, variables):
         self[val] += 1
     def dec(self, val, ruleix, variables):
         self[val] -= 1
-    def fold(self):
-        return self
     def fromkeys(self, *_):
-        assert False, 'bah.'
-
-
-class MultisetAggregator(BAggregator):
-    def __init__(self, name, folder):
-        self.folder = folder
-        BAggregator.__init__(self, name)
-    def fold(self):
-        return self.folder(self)
+        assert False, "This method should never be called."
 
 
 class LastEquals(BAggregator):
@@ -46,23 +39,32 @@ class LastEquals(BAggregator):
     def dec(self, val, ruleix, variables):
         self[ruleix, val] -= 1
     def fold(self):
-        return max(x for x, cnt in self.items() if cnt > 0)[1]
+        return max(ruleix for ruleix, cnt in self.iteritems() if cnt > 0)[1]
 
 
-class SetEquals(Aggregator):
-    def __init__(self, name):
-        self.set = set([])
-        Aggregator.__init__(self, name)
+def user_vars(variables):
+    "Post process the variables past to emit (which passes them to aggregator)."
+    # remove the 'u' prefix on user variables 'uX'
+
+    # Note: We also ignore user variables with an underscore prefix
+    
+    return tuple((name[1:], val) for name, val in variables.items() if name.startswith('u') and not name.startswith('u_'))
+
+
+class DictEquals(BAggregator):
+
     def inc(self, val, ruleix, variables):
-        self.set.add(val)
+        # I think we only want user variables -- XXX: are we guaranteed to have
+        # all of the user variables?
+        vs = user_vars(variables)
+        self[val, vs] += 1
+
     def dec(self, val, ruleix, variables):
-        self.set.remove(val)
+        vs = user_vars(variables)
+        self[val, vs] -= 1
+
     def fold(self):
-        return self.set
-    def clear(self):
-        self.set.clear()
-
-
+        return list((x[0], dict(x[1])) for x, cnt in self.iteritems() if cnt > 0)
 
 
 def majority_equals(a):
@@ -109,6 +111,15 @@ def b_or_equals(a):
     if len(s):
         return reduce(operator.or_, s)
 
+def set_equals(a):
+    s = {x for x, m in a.iteritems() if m > 0}
+    if len(s):
+        return s
+
+def bag_equals(a):
+    return Counter(a)
+
+
 # map names to functions
 defs = {
     'max=': max_equals,
@@ -121,6 +132,8 @@ defs = {
     '|=': b_or_equals,
     ':-': or_equals,
     'majority=': majority_equals,
+    'set=': set_equals,
+    'bag=': bag_equals,
 }
 
 
@@ -131,13 +144,10 @@ def aggregator(name):
         return None
 
     if name == ':=':
-        return LastEquals(name)
+        return LastEquals(name, folder=None)
 
-    elif name == 'bag=':
-        return BAggregator(name)
-
-    elif name == 'set=':
-        return SetEquals(name)
+    elif name == 'dict=':
+        return DictEquals(name, folder=None)
 
     else:
-        return MultisetAggregator(name, defs[name])
+        return BAggregator(name, defs[name])

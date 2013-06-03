@@ -5,15 +5,48 @@
 MISC
 ====
 
-TODO: create an Interpreter object to hold what is now global state.
+ - TODO: create an Interpreter object to hold what is now global state.
 
-FIXME: set= is wrong .. needs to keep counts like bag=
+ - FIXME: timv: I think that set= is wrong .. needs to keep counts like bag=
+
+ - TODO: sorted order of Chart seems to have changed. Check that this changed order
+   makes sense
+
+ - "initializers" aren't just initializers, they are the fully-naive bottom-up
+   inference rules.
+
+ - XXX: we should probably fuse update handlers instead of dispatching to each
+   one independently.
+
+ - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
+   delete mode (3) remove initializers.
+
+ - TODO: hooks from introspection, eval, and prioritization.
+
+ - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
+   disallow ``a += &b.``
+
+ - TODO: doc tests for Dyna code!
 
 
-This has an absurd parse:
 
-  x += f('result = 5').
+PARSER
+======
 
+  - Singled quoted strings:
+
+    x += f('result = 5').
+
+
+  - Nested expressions:
+
+    out(0) dict= _VALUE is (rewrite(X,Y) + rewrite(X,Y,Z)), _VALUE.
+
+    FATAL: Encountered error in input program:
+     Parser error
+     /tmp/tmp.dyna:1:14: error: expected: "."
+     rewrite(X,Y) + rewrite(X,Y,Z)<EOF>
+                  ^
 
 
 What is null?
@@ -36,23 +69,6 @@ Warnings/lint checking
 
  - Catch typos! Warn the user if they write a predicate that is not defined on
    the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
-
-
-===
-
- - "initializers" aren't just initializers, they are the fully-naive bottom-up
-   inference rules.
-
- - XXX: we should probably fuse update handlers instead of dispatching to each
-   one independently.
-
- - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
-   delete mode (3) remove initializers.
-
- - TODO: hooks from introspection, eval, and prioritization.
-
- - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
-   disallow ``a += &b.``
 
 
 REPL
@@ -511,7 +527,7 @@ class REPL(cmd.Cmd, object):
 
     @property
     def prompt(self):
-        return 'in(%s) :- ' % self.lineno
+        return ':- ' #% self.lineno
 
     def do_exit(self, _):
         readline.write_history_file(self.hist)
@@ -596,7 +612,7 @@ class REPL(cmd.Cmd, object):
             print "Queries don't end with a dot."
             return
 
-        query = 'out(%s) bag= _VALUE is %s, &result(&(%s), _VALUE).' % (self.lineno, line, line)
+        query = 'out(%s) dict= _VALUE is %s, _VALUE.' % (self.lineno, line)
 
         print blue % query
 
