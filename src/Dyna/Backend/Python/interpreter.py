@@ -5,9 +5,6 @@
 MISC
 ====
 
-Terms aren't pushed all the way thru. The old representation ('c/0',0) is stored
-in the chart.
-
 TODO: create an Interpreter object to hold what is now global state.
 
 FIXME: set= is wrong .. needs to keep counts like bag=
@@ -123,12 +120,13 @@ import os, sys
 from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 
-from utils import ip, red, green, blue, magenta, yellow, dynahome
+from utils import ip, red, green, blue, magenta, yellow, dynahome, notimplemented
 from defn import aggregator
 
 
 class AggregatorConflict(Exception):
     pass
+
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
@@ -174,11 +172,7 @@ def dump_charts(out=sys.stdout):
         print >> out
 
 
-def notimplemented(*_,**__):
-    raise NotImplementedError
-
-
-# TODO: codegen should output a derive Term instance for each functor
+# TODO: codegen should output a derived Term instance for each functor
 class Term(namedtuple('Term', 'fn args'), object):
 
     def __init__(self, fn, args):
@@ -187,7 +181,11 @@ class Term(namedtuple('Term', 'fn args'), object):
         super(Term, self).__init__(fn, args)
 
     def __repr__(self):
-        return pretty(self)
+        "Pretty print a term. Will retrieve the complete (ground) term."
+        fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
+        if not self.args:
+            return fn
+        return '%s(%s)' % (fn, ','.join(map(repr, self.args)))
 
     __add__ \
         = __sub__ \
@@ -202,17 +200,6 @@ class Term(namedtuple('Term', 'fn args'), object):
 #    def value(self, val):
 #        assert not isinstance(val, tuple) or isinstance(val, Term)
 #        self._value = val
-
-
-def pretty(item):
-    "Pretty print a term. Will retrieve the complete (ground) term from the chart."
-    if not isinstance(item, Term):
-        return repr(item)
-    fn = ''.join(item.fn.split('/')[:-1])  # drop arity from name.
-    pretty_args = map(pretty, item.args)
-    if not len(pretty_args):               # zero arity -> no parens.
-        return fn
-    return '%s(%s)' % (fn, ','.join(pretty_args))
 
 
 class Chart(object):
@@ -261,31 +248,16 @@ class Chart(object):
                 if term.value == val:
                     yield term.args + (term.value,)
 
-
     def lookup(self, args):
         "find index for these args"
-        assert len(args) == self.ncols - 1                    # XXX: lookup doesn't want val?
-
-        assert isinstance(args, tuple) and not isinstance(args, Term)
+        assert len(args) == self.ncols - 1
 
         try:
             return self.intern[args]
         except KeyError:
             return None
 
-    def update(self, ix, args, val):
-        "Update chart"
-
-        assert len(args) == self.ncols - 1
-        assert isinstance(args, tuple) and not isinstance(args, Term)
-
-        term = self.intern[args]
-        term.value = val
-        return term
-
     def insert(self, args, val):
-
-        assert isinstance(args, tuple) and not isinstance(args, Term)
 
         # debugging check: row is not already in chart.
         assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
@@ -294,11 +266,11 @@ class Chart(object):
         term.value = val
         term.aggregator = aggregator(agg_decl[self.name])
 
+        # indexes new term
         for i, x in enumerate(args):
             self.ix[i][x].add(term)
 
         return term
-
 
 
 def build(fn, *args):
