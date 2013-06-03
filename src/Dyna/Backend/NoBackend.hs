@@ -12,6 +12,7 @@ module Dyna.Backend.NoBackend (noBackend) where
 
 import           Control.Lens
 import           Control.Monad
+import qualified Data.Maybe                   as MA
 import qualified Data.Map                     as M
 import qualified Data.Set                     as S
 import           Dyna.Analysis.ANF
@@ -35,7 +36,7 @@ import qualified Debug.Trace                as XT
 noBackend :: Backend
 noBackend = Backend
           { be_builtin        = primPossible
-          , be_constants      = M.keysSet primOps -- XXX
+          , be_constants      = MA.isJust . primOps -- XXX
           , be_debug_dop_iter = \_ _ _ _ _ -> empty
           , be_driver         = driver
           }
@@ -50,41 +51,46 @@ data PrimOp = PO
             , po_bs :: forall e . Doc e
             }
 
-primOps :: M.Map DFunctAr [QMode (NIX DFunct)] -- XXX ,UMode
-primOps = M.fromList
-	[ let ar = 2 in ( ("+"     ,ar)      , [miaod ar Det     ]
-                                           ++ opinvd ar Det )
-    , let ar = 2 in ( ("-"     ,ar)      , [miaod ar Det     ]
-                                           ++ opinvd ar Det )
-    , let ar = 2 in ( ("*"     ,ar)      , [miaod ar Det     ]
-                                           ++ opinvd ar DetSemi )
-    , let ar = 2 in ( ("/"     ,ar)      , [miaod ar DetSemi ]
-                                           ++ opinvd ar DetSemi )
-    , let ar = 2 in ( ("^"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("&"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("|"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("%"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("**"    ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("<"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("<="    ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( (">"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( (">="    ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("="     ,ar)      , [miaod ar Det     ] )
-	  -- Unary boolean negation
-    , let ar = 1 in ( ("!"     ,ar)      , [miaod ar Det     ] )
-	  -- Unary numeric negation
-    , let ar = 1 in ( ("-"     ,ar)      , [miaod ar Det     ] )
-    , let ar = 1 in ( ("mod"   ,ar)      , [miaod ar Det     ] )
-    , let ar = 1 in ( ("abs"   ,ar)      , [miaod ar Det     ] )
-    , let ar = 1 in ( ("log"   ,ar)      , [miaod ar Det     ] )
-    , let ar = 1 in ( ("exp"   ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("and"   ,ar)      , [miaod ar Det     ] )
-    , let ar = 2 in ( ("or"    ,ar)      , [miaod ar Det     ] )
-    , let ar = 1 in ( ("not"   ,ar)      , [miaod ar Det     ] )
-    ]
+primOps :: DFunctAr -> Maybe [QMode (NIX DFunct)] -- XXX ,UMode
+primOps = go
+ where
+  go ("-"    ,1) = Just   [miaod 1 Det     ]
+  go ("^"    ,2) = Just   [miaod 2 Det     ]
+  go ("|"    ,2) = Just   [miaod 2 Det     ]
+  go ("-"    ,2) = Just $ [miaod 2 Det     ] ++ opinvd 2 Det
+  go ("/"    ,2) = Just   [miaod 2 Det     ]
+  go ("*"    ,2) = Just   [miaod 2 Det     ]
+  go ("**"   ,2) = Just   [miaod 2 Det     ]
+  go ("&"    ,2) = Just   [miaod 2 Det     ]
+  go ("%"    ,2) = Just   [miaod 2 Det     ]
+  go ("+"    ,2) = Just $ [miaod 2 Det     ] ++ opinvd 2 Det
+
+  go ("mod"  ,1) = Just   [miaod 1 Det     ]
+  go ("abs"  ,1) = Just   [miaod 1 Det     ]
+  go ("log"  ,1) = Just   [miaod 1 Det     ]
+  go ("exp"  ,1) = Just   [miaod 1 Det     ]
+
+  go ("<="   ,2) = Just   [miaod 2 Det     ]
+  go ("<"    ,2) = Just   [miaod 2 Det     ]
+  go ("="    ,2) = Just   [miaod 2 Det     ]
+  go (">="   ,2) = Just   [miaod 2 Det     ]
+  go (">"    ,2) = Just   [miaod 2 Det     ]
+  go ("!="   ,2) = Just   [miaod 2 Det     ]
+
+  go ("and"  ,2) = Just   [miaod 2 Det     ]
+  go ("or"   ,2) = Just   [miaod 2 Det     ]
+
+  go ("true" ,0) = Just   [miaod 0 Det     ]
+  go ("false",0) = Just   [miaod 0 Det     ]
+  go ("null" ,0) = Just   [miaod 0 Det     ]
+
+  go ("!"    ,1) = Just   [miaod 1 Det     ]
+  go ("not"  ,1) = Just   [miaod 1 Det     ]
+
+  go _           = Nothing
 
 primPossible :: (DFunct,[ModedVar],ModedVar) -> Either Bool (BackendAction ())
-primPossible (f,mvis,mvo) = maybe (Left False) go $ M.lookup (f,length mvis) primOps
+primPossible (f,mvis,mvo) = maybe (Left False) go $ primOps (f,length mvis)
  where
   go :: [QMode (NIX DFunct)] -> Either Bool (BackendAction ())
   go [] = Left True

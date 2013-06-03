@@ -274,8 +274,7 @@ processFile fileName = bracket openOut hClose go
    
   
             uPlans = combineUpdatePlans
-                     $ map (\x -> (x, planEachEval be_b
-                                                   (flip S.member be_c) x))
+                     $ map (\x -> (x, planEachEval be_b be_c x))
                            frs
 
 {-

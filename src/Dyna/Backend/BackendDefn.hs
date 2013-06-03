@@ -36,7 +36,7 @@ data Backend = forall bs . Backend
                -- | Any constants made available by this backend.
                -- 
                -- XXX
-             , be_constants :: S.Set DFunctAr
+             , be_constants :: DFunctAr -> Bool
 
                -- | Debugging hook to render bits of DOpAMine which
                -- are "backend-specific"

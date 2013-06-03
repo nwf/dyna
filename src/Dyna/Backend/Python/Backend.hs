@@ -60,7 +60,7 @@ isFree v = nSub (v^.mv_mi) nfree
 builtins :: BackendPossible PyDopeBS
 builtins (f,is,o) = case () of
   _ | all isGround is
-    -> maybe (Left False) gencall $ M.lookup (f,length is) constants
+    -> maybe (Left False) gencall $ constants (f,length is)
         where
          gencall pc = case () of
                         _ | isFree o ->
@@ -98,51 +98,54 @@ builtins (f,is,o) = case () of
                                [(x^.mv_var, nuniv)]
          _ -> Left True
 
-  _ | M.member (f,length is) constants  -> Left True
+  _ | MA.isJust (constants (f,length is)) -> Left True
   _ -> Left False
 
 infixOp op _ vis = sepBy op $ mpv vis
 mpv = map (pretty . (^.mv_var))
 
-constants :: M.Map (DFunct,Int) PyDopeBS
-constants = M.fromList
-    [(("+",2)     , PDBS $ infixOp "+"    )
-    ,(("-",2)     , PDBS $ infixOp "-"    )
-    ,(("*",2)     , PDBS $ infixOp "*"    )
-    ,(("/",2)     , PDBS $ infixOp "/"    )
-    ,(("^",2)     , PDBS $ infixOp "^"    )
-    ,(("&",2)     , PDBS $ infixOp "&"    )
-    ,(("|",2)     , PDBS $ infixOp "|"    )
-    ,(("%",2)     , PDBS $ infixOp "%"    )
-    ,(("**",2)    , PDBS $ infixOp "**"   )
-    ,(("==",2)    , PDBS $ infixOp "=="   )
-    ,(("!=",2)    , PDBS $ infixOp "!="   )
-    ,(("<",2)     , PDBS $ infixOp "<"    )
-    ,(("<=",2)    , PDBS $ infixOp "<="   )
-    ,((">",2)     , PDBS $ infixOp ">"    )
-    ,((">=",2)    , PDBS $ infixOp ">="   )
-    ,(("=",2)     , PDBS $ infixOp "="    )
-    ,(("!=",2)    , PDBS $ infixOp "!="   )
-    ,(("and",2)   , PDBS $ infixOp "and"  )
-    ,(("or",2)    , PDBS $ infixOp "or"   )
-
-    ,(("true",0)  , PDBS $ nullary "True" )
-    ,(("false",0) , PDBS $ nullary "False")
-    ,(("null",0)  , PDBS $ nullary "None" )
-
-    ,(("-",1)     , PDBS $ call "-"       )
-    ,(("!",1)     , PDBS $ call "not"     )
-    ,(("not",1)   , PDBS $ call "not"     )
-    ,(("mod",1)   , PDBS $ call "mod"     )
-    ,(("abs",1)   , PDBS $ call "abs"     )
-    ,(("log",1)   , PDBS $ call "log"     )
-    ,(("exp",1)   , PDBS $ call "exp"     )
-    ,(("eval",1)  , PDBS $ call "None;exec ")
-    -- XXX not quite what we want, but something like this might
-    -- be nice to have.
-    -- ,(("pair",2)  , PDBS $ call ""        )
-    ]
+constants :: DFunctAr -> Maybe PyDopeBS
+constants = go
  where
+  go ("-",1)     = Just $ PDBS $ call "-"
+  go ("^",2)     = Just $ PDBS $ infixOp "^"
+  go ("|",2)     = Just $ PDBS $ infixOp "|"
+  go ("-",2)     = Just $ PDBS $ infixOp "-"
+  go ("/",2)     = Just $ PDBS $ infixOp "/"
+  go ("*",2)     = Just $ PDBS $ infixOp "*"
+  go ("**",2)    = Just $ PDBS $ infixOp "**"
+  go ("&",2)     = Just $ PDBS $ infixOp "&"
+  go ("%",2)     = Just $ PDBS $ infixOp "%"
+  go ("+",2)     = Just $ PDBS $ infixOp "+"
+
+  go ("mod",1)   = Just $ PDBS $ call "mod"
+  go ("abs",1)   = Just $ PDBS $ call "abs"
+  go ("log",1)   = Just $ PDBS $ call "log"
+  go ("exp",1)   = Just $ PDBS $ call "exp"
+
+  go ("<=",2)    = Just $ PDBS $ infixOp "<="
+  go ("<",2)     = Just $ PDBS $ infixOp "<"
+  go ("=",2)     = Just $ PDBS $ infixOp "="
+  -- XXX "==" means something else in Dyna
+  go ("==",2)    = Just $ PDBS $ infixOp "=="
+  go (">=",2)    = Just $ PDBS $ infixOp ">="
+  go (">",2)     = Just $ PDBS $ infixOp ">"
+  go ("!=",2)    = Just $ PDBS $ infixOp "!="
+
+  go ("and",2)   = Just $ PDBS $ infixOp "and"
+  go ("or",2)    = Just $ PDBS $ infixOp "or"
+
+  go ("true",0)  = Just $ PDBS $ nullary "True"
+  go ("false",0) = Just $ PDBS $ nullary "False"
+  go ("null",0)  = Just $ PDBS $ nullary "None"
+
+  go ("!",1)     = Just $ PDBS $ call "not"
+  go ("not",1)   = Just $ PDBS $ call "not"
+
+  go ("eval",1)  = Just $ PDBS $ call "None;exec "
+  go ("tuple",_) = Just $ PDBS $ call ""
+  go _           = Nothing
+
   nullary v  _ _   = v
   call    fn _ vis = fn <> (parens $ sepBy "," $ mpv vis)
 
@@ -306,7 +309,7 @@ driver am um {-qm-} is fh = do
 
 pythonBackend :: Backend
 pythonBackend = Backend builtins
-                        (M.keysSet constants)
+                        (MA.isJust . constants)
                         (\o is _ _ (PDBS e) -> e o is)
                         driver
 
