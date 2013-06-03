@@ -10,11 +10,13 @@ in the chart.
 
 TODO: create an Interpreter object to hold what is now global state.
 
+FIXME: set= is wrong .. needs to keep counts like bag=
+
 
 This has an absurd parse:
+
   x += f('result = 5').
 
-What should `a += null` and `a += null + 1.` do?
 
 
 What is null?
@@ -29,9 +31,7 @@ What is null?
 
  These programs have different meanings! We can demonstrate by adding evidence.
 
-
-set= is wrong .. needs to keep counts like bag=
-
+ What should `a += null` and `a += null + 1.` do?
 
 
 Warnings/lint checking
@@ -46,15 +46,17 @@ Warnings/lint checking
  - "initializers" aren't just initializers, they are the fully-naive bottom-up
    inference rules.
 
- - TODO: routines from probing the chart.
-
  - XXX: maybe the chart should store pretty printed term and a reference to the
    aggregator (each item get's its own aggregator to avoid a hash lookup).
 
  - XXX: should we store value and aggregators separate from others columns? that
    is, separate the chart and intern table.
 
- - TODO: should probably make a Term object.
+     timv: My new though on this is to store Term objects in the Chart. These
+     objects will contain a mutable reference to value and references to
+     aggregator and arguments.
+
+     TODO: need ot be more strict about interning Terms.
 
  - XXX: we should probably fuse update handlers instead of dispatching to each
    one independently.
@@ -63,6 +65,10 @@ Warnings/lint checking
    delete mode (3) remove initializers.
 
  - TODO: hooks from introspection, eval, and prioritization.
+
+ - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
+   disallow ``a += &b.``
+
 
 REPL
 ====
@@ -126,7 +132,7 @@ INTERPRETER
 
 from __future__ import division
 import os, sys
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 
 from utils import ip, red, green, blue, magenta, yellow, dynahome
@@ -135,9 +141,6 @@ from defn import agg_bind
 
 class AggregatorConflict(Exception):
     pass
-
-
-trace = None
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
 class chart_indirect(dict):
@@ -158,13 +161,14 @@ class aggregator_declaration(object):
         self.map = {}
     def __setitem__(self, key, value):
         if key in self.map and self.map[key] != value:
-            raise AggregatorConflict("Aggregator conflict %s was %r trying to set to %r." % (key, self.map[key], value))
+            raise AggregatorConflict("Aggregator conflict %s was %r trying to "
+                                     "set to %r." % (key, self.map[key], value))
         self.map[key] = value
     def __getitem__(self, key):
         return self.map[key]
 
 
-
+trace = None
 _delete = False
 agenda = set()
 agg_decl = aggregator_declaration()
@@ -185,50 +189,45 @@ def dump_charts(out=sys.stdout):
         print >> out
 
 
-from collections import namedtuple
-class Term(namedtuple('Term', 'fn idx')):
+# TODO: codegen should output a derive Term instance for each functor
+class Term(namedtuple('Term', 'fn args'), object):
 
     def __init__(self, fn, idx):
-        self.row = chart[fn].data[idx]           # mutable reference to row in chart
+        self._value = None
         super(Term, self).__init__(fn, idx)
 
     @property
-    def args(self):
-        return self.row[:-1]
-
-    @property
-    def value(self):
-        return self.row[-1]
-
-    @value.setter
-    def value(self, now):
-        self.row[-1] = now
+    def aggregator(self):
+        return aggregator[self]    # TODO: avoid this lookup
 
     def __repr__(self):
         return pretty(self)
 
+#    @property
+#    def value(self):
+#        return self._value
+
+#    @value.setter
+#    def value(self, val):
+#        assert not isinstance(val, tuple) or isinstance(val, Term)
+#        self._value = val
+
 # TODO: we don't story Term objects in the chart yet.. so we need to use the
 # namedtuple's __eq__ method.
 #
+# TODO: after interning we shouldn't need deep equality.
+#
 #    def __eq__(self, other):
 #        assert isinstance(other, Term), other
-#        if other.fn == self.fn:
-#            if other.idx == self.idx:
-#                return True
-#            else:
-#                return self.args == other.args
-#        else:
-#            return False
+#        return other.fn == self.fn and other.args == self.args
 
 def pretty(item):
     "Pretty print a term. Will retrieve the complete (ground) term from the chart."
-    if not isinstance(item, tuple):
+    if not isinstance(item, Term):
         return repr(item)
-    row = item.row
-    args = row[:-1]
     fn = ''.join(item.fn.split('/')[:-1])  # drop arity from name.
-    pretty_args = map(pretty, args)
-    if not len(pretty_args):          # zero arity -> no parens.
+    pretty_args = map(pretty, item.args)
+    if not len(pretty_args):               # zero arity -> no parens.
         return fn
     return '%s(%s)' % (fn, ','.join(pretty_args))
 
@@ -238,58 +237,96 @@ class Chart(object):
     def __init__(self, name, ncols):
         self.name = name
         self.ncols = ncols
-        self.data = {}
-        self._id = 0
+        self.intern = {}   # args -> term
+        self.ix = [defaultdict(set) for _ in xrange(ncols-1)]  # TODO: no index on values yet.
 
     def __repr__(self):
-        rows = [(r, Term(self.name, i), r[-1]) for i, r in self.data.items() if r[-1] is not None]
-        x = '\n'.join('%-30s := %r' % (p, v) for _, p, v in sorted(rows))
+        rows = [term for term in self.intern.values() if term.value is not None]
+        x = '\n'.join('%-30s := %r' % (term, term.value) for term in sorted(rows))
         return '%s\n=================\n%s' % (self.name, x)
 
-    def __getitem__(self, item):
+    def __getitem__(self, s):
 
-        assert isinstance(item, tuple) and len(item) == self.ncols, \
-            'item width mismatch: ncols %s, item %s' % (self.ncols, len(item))
+        assert isinstance(s, tuple) and len(s) == self.ncols, \
+            'item width mismatch: ncols %s, item %s' % (self.ncols, len(s))
 
-        nonslice = [(i, val) for i, val in enumerate(item) if not isinstance(val, slice)]
-        slices = [i for i, val in enumerate(item) if isinstance(val, slice)]
+        args, val = s[:-1], s[-1]
 
-        # XXX: very inefficient
-        for row in self.data.values():  # note: dict changes size during iteration
-            if row[-1] is None:
+        assert val is not None
+
+        candidates = None
+
+        for (ix, x) in zip(self.ix, args):
+            if isinstance(x, slice):
                 continue
-            if all(row[i] == val for i, val in nonslice):
-                yield tuple(row[i] for i in slices)
+            if candidates is None:
+                candidates = ix[x].copy()
+            else:
+                candidates &= ix[x]
+                if not len(candidates):
+                    break
+
+        if candidates is None:
+            candidates = self.intern.values()
+
+        if isinstance(val, slice):
+            for term in candidates:
+                if term.value is not None:
+                    yield term.args + (term.value,)
+        else:
+            for term in candidates:
+                if term.value == val:
+                    yield term.args + (term.value,)
+
 
     def lookup(self, args):
         "find index for these args"
         assert len(args) == self.ncols - 1                    # XXX: lookup doesn't want val?
-        args = list(args)
-        for idx, row in self.data.iteritems():                # XXX: very inefficient
-            if row[:-1] == args:
-                return idx             # stop on first
+
+        assert isinstance(args, tuple) and not isinstance(args, Term)
+
+        try:
+            return self.intern[args]
+        except KeyError:
+            return None
 
     def update(self, ix, args, val):
         "Update chart"
-        assert len(args) == self.ncols - 1
 
-        # TODO: ix should be a Term object. Actually, if we hash on args we'll
-        # do `self.data[term] = val` the last slot in args is the value.
-        self.data[ix] = list(args) + [val]
+        assert len(args) == self.ncols - 1
+        assert isinstance(args, tuple) and not isinstance(args, Term)
+
+        term = self.intern[args]
+        term.value = val
+        return term
 
     def insert(self, args, val):
+
+        assert isinstance(args, tuple) and not isinstance(args, Term)
+
 
         # debugging check: row is not already in chart.
         assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
 
-        idx = self.next_id()
-        self.update(idx, args, val)
-        return idx
+        self.intern[args] = term = Term(self.name, args)
+        term.value = val
 
-    def next_id(self):
-        idx = self._id
-        self._id += 1
-        return idx
+        for i, x in enumerate(args):
+            self.ix[i][x].add(term)
+
+        return term
+
+
+
+def build(fn, *args):
+    if fn == "true/0":   # TODO: I'd rather have the codegen ensure true/0 is True and false/0 is False
+        return True
+    if fn == "false/0":
+        return False
+    term = chart[fn].lookup(args)
+    if term is None:
+        term = chart[fn].insert(args, None)   # don't know val yet.
+    return term
 
 
 # Update handler indirection -- a temporary hack. Allow us to have many handlers
@@ -369,26 +406,17 @@ def peel(fn, item):
     return item.args
 
 
-def build(fn, *args):
-    if fn == "true/0":
-        return True
-    if fn == "false/0":
-        return False
-    idx = chart[fn].lookup(args)
-    if idx is None:
-        idx = chart[fn].insert(args, None)   # don't know val yet.
-    return Term(fn, idx)
-
-
-def emit(item, val, ruleix=None, variables=None):
+def emit(item, val, ruleix, variables):
 
     print >> trace, (red % 'delete' if _delete else green % 'update'), \
-        '%s (val %s; curr: %s)' % (pretty(item), val, item.value)
+        '%s (val %s; curr: %s)' % (item, val, item.value)
+
+    assert not isinstance(val, tuple) or isinstance(val, Term)
 
     if _delete:
-        aggregator[item].dec(val,ruleix,variables)
+        item.aggregator.dec(val, ruleix, variables)
     else:
-        aggregator[item].inc(val,ruleix,variables)
+        item.aggregator.inc(val, ruleix, variables)
 
     agenda.add(item)
 
@@ -414,16 +442,16 @@ def _go():
         item = agenda.pop()
 
         print >> trace
-        print >> trace, magenta % 'pop   ', pretty(item),
+        print >> trace, magenta % 'pop   ', item,
 
         was = item.value
-        print >> trace, '(was: %s,' % was,
+        print >> trace, '(was: %s,' % (was,),
 
         # TODO: in the case of set and bag the `now` value is the same as `was`
         # because the change happens in place. Thus, sadly, `was == now` and the
         # change will now propagate.
 
-        now = aggregator[item].fold()
+        now = item.aggregator.fold()
         print >> trace, 'now:', str(now) + ')'
 
         if was == now:
