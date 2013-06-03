@@ -1,5 +1,7 @@
 ---------------------------------------------------------------------------
 -- | Class definitions for "context" monads.
+--
+-- This wants to be its own thing eventually.
 
 -- Header material                                                      {{{
 {-# LANGUAGE ConstraintKinds #-}
@@ -10,10 +12,10 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
 module Dyna.XXX.MonadContext(
-  MCVT, MCA(..), MCD(..), MCF(..), MCM(..), MCNC, MCN(..), MCR(..), MCW(..),
+  MCVT, MCA(..), MCD(..), MCF(..), MCM(..), {- MCNC, -} MCN(..), MCR(..), MCW(..),
 ) where
 
-import GHC.Prim (Constraint)
+-- import GHC.Prim (Constraint)
 -- import           Control.Monad.Trans
 -- import           Control.Monad.Trans.Either
 
@@ -30,8 +32,12 @@ class (Monad m) => MCR m k where
 class (Monad m) => MCW m k where
   cassign :: k -> MCVT m k -> m ()
 
--- | The monad @m@ is able to merge the assertion @k = v@ into
+-- | The monad @m@ is able to merge the assertion @k = b@ into
 -- its context, provided a mechanism to merge values.
+--
+-- Note that this is intended for the case when @k@ and @b@ are
+-- distinct types!  In the case where variable aliasing is desired,
+-- use the 'calias' method instead.
 class (Monad m) => MCM m k where
   cmerge :: (MCVT m k -> b -> m (MCVT m k))
          -> k -> b -> m ()
@@ -40,12 +46,12 @@ class (Monad m) => MCM m k where
 class (Monad m) => MCD m k where
   cdelete :: k -> m (MCVT m k)
 
-{-
+-- | The monad @m@ is able to fabricate new keys given a function
+-- which can produce a value from a key.
 class (Monad m) => MCN m k where
-  -- XXX OLD FORM cnew :: (MCVT m k) -> m k
   cnew :: (k -> m (MCVT m k)) -> m k
--}
 
+{-
 type family MCNC k (m' :: * -> *) :: Constraint
 
 -- | The monad @m@ is able to fabricate new keys given a function
@@ -54,6 +60,7 @@ type family MCNC k (m' :: * -> *) :: Constraint
 class (Monad m) => MCN m k where
   cnew :: (Monad m', MCNC k m')
        => (forall a . m a -> m' a) -> (k -> m' (MCVT m k)) -> m' k
+-}
 
 -- | The monad @m@ is able to generate new entities of type @k@.
 class (Monad m) => MCF m k where

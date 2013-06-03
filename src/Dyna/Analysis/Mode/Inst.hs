@@ -29,7 +29,7 @@ module Dyna.Analysis.Mode.Inst(
   InstF(..), inst_uniq, inst_rec, inst_recps,
   iNotReached, iIsNotReached,
   iUniq, iIsFree, iWellFormed_, iEq_, iGround_,
-  iLeq_, iLeqGLB_,
+  iLeq_, iLeqGLB_, TyILeqGLB_,
   iSub_, iSubGLB_, iSubLUB_,
 ) where
 
@@ -312,6 +312,23 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     -- XXX Ought to assert that length is == length is'
 {-# INLINABLE iLeq_ #-}
 
+-- | The type of iLeqGLB_, given a name so that we can reuse it elsewhere.
+--
+-- Note that not all parameters are free -- @r@ is typically @m' (InstF f
+-- i'')@ for some 'Monad' @m'@ built up in terms of @m@, but the lack of
+-- type lambdas forces us to resort to passing the whole type in.
+type TyILeqGLB_ f m i i' i'' r = 
+            (Uniq -> i  -> m i'')               -- ^ Import left
+         -> (Uniq -> i' -> m i'')               -- ^ Import right
+         -> (Uniq -> InstF f i' -> i  -> m i'') -- ^ Lopsided merge left
+         -> (Uniq -> InstF f i  -> i' -> m i'') -- ^ Lopsided merge right
+         -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
+         -> Uniq                                -- ^ Uniq of outer context
+         -> InstF f i                           -- ^ Left
+         -> InstF f i'                          -- ^ Right
+         -> r
+
+
 -- | Compute the GLB under iLeq_ (⋏) at a particular uniqueness.
 --
 -- The uniqueness input is needed for the case when we unify with a free
@@ -336,16 +353,7 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
 -- tests that are restrictive but safe (such as shallow testing for free
 -- variables).
 
-iLeqGLB_ :: (Monad m, Ord f)
-         => (Uniq -> i  -> m i'')               -- ^ Import left
-         -> (Uniq -> i' -> m i'')               -- ^ Import right
-         -> (Uniq -> InstF f i' -> i  -> m i'') -- ^ Lopsided merge left
-         -> (Uniq -> InstF f i  -> i' -> m i'') -- ^ Lopsided merge right
-         -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
-         -> Uniq                                -- ^ Uniq of outer context
-         -> InstF f i                           -- ^ Left
-         -> InstF f i'                          -- ^ Right
-         -> m (InstF f i'')
+iLeqGLB_ :: (Monad m, Ord f) => TyILeqGLB_ f m i i' i'' (m (InstF f i''))
 iLeqGLB_ _ r _ _ _ u IFree      x            = T.mapM (r u) x
 iLeqGLB_ l _ _ _ _ u x          IFree        = T.mapM (l u) x
 

@@ -23,7 +23,9 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Dyna.Analysis.Mode.Execution.NoAliasFunctions (
+module Dyna.Analysis.Mode.Execution.FunctionsNoAlias (
+  -- * Expansion
+  expandV,
   -- * Unification
   unifyVV, unifyVF, unifyUnaliasedNV,
   -- * Matching,
@@ -49,7 +51,7 @@ import qualified Data.Map                          as M
 -- import qualified Data.Maybe                        as MA
 -- import qualified Data.Set                          as S
 -- import qualified Data.Traversable                  as T
-import           Dyna.Analysis.Mode.Execution.NoAliasContext
+import           Dyna.Analysis.Mode.Execution.ContextNoAlias
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Mode
@@ -61,6 +63,22 @@ import           Dyna.XXX.DataUtils
 import           Dyna.XXX.MonadContext
 -- import           Dyna.XXX.MonadUtils
 -- import qualified Debug.Trace                       as XT
+
+------------------------------------------------------------------------}}}
+-- Variable Expansion                                                   {{{
+
+type ExpC m f n = (Ord f, Show f,
+                   Monad m, Functor m,
+                   n ~ NIX f)
+
+expandV :: (ExpC m f n, MCVT m DVar ~ VR f n, MCR m DVar)
+        => DVar -> m n
+expandV v = clookup v >>= \x -> case x of
+                                  VRName n -> return n
+                                  VRStruct y -> nDeep rec y
+ where
+  rec (VRName n)   = return (Left n)
+  rec (VRStruct y) = return (Right y)
 
 ------------------------------------------------------------------------}}}
 -- Leq                                                                  {{{

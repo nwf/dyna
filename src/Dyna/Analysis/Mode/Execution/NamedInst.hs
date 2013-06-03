@@ -19,11 +19,16 @@
 module Dyna.Analysis.Mode.Execution.NamedInst (
     -- * Datatype definition
     NIX(..), NIXM,
-    -- * Well-formedness predicates
-    nWellFormedUniq, nWellFormedOC,
     -- * Unary functions
-    nNotEmpty, nGround, nUpUniq, nExpose, nHide, nShallow,
-    -- * Unary functions on internals
+    -- ** Well-formedness predicates
+    nWellFormedUniq, nWellFormedOC,
+    -- ** Inquiries
+    nAllNotEmpty, nSomeNotEmpty, nGround, nUpUniq,
+    -- ** Construction
+    nHide, nShallow, nDeep,
+    -- ** Destruction
+    nExpose, 
+    -- ** Internals
     nPrune,
     -- * Binary comparators
     nCmp, nEq, nLeq, nSub,
@@ -109,8 +114,6 @@ instance (Show f) => Show (NIX f) where
 -- Utilities                                                            {{{
 
 -- | Throw exception if ever a NIX is not well formed
---
--- XXX Should attempt to do something with the 'NIX' passed in!
 panicwf :: NIX f -> a
 panicwf n = dynacPanic (text "NIX not well-formed"
                         `above` indent 2 (pretty n))
@@ -150,9 +153,6 @@ ml n m x = maybe (panicwf n) id (M.lookup x m)
 -- | Check well-formedness of an inst at a given Uniq.  All uniqueness
 -- annotations within the inst are required to be larger (i.e. less unique,
 -- more restrictive).
---
--- Additionally, each position in the inst may have only one Uniq value
--- on any path that reaches it.
 nWellFormedUniq :: forall f . (Show f) => Uniq -> NIX f -> Bool
 nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
                                              M.empty
@@ -161,12 +161,18 @@ nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
           do
            cached <- gets (M.lookup a)
            case cached of
-             Nothing -> do
-                         id %= M.insert a u
-                         eml n0 (return . nWellFormedUniq u)
-                                (iWellFormed_ q u)
-                                m a
-             Just u' -> return $ u == u'
+             Nothing -> rec
+                -- If we've been here before, it's OK if we are coming in
+                -- more uniquely.  If we are coming in less uniquely (i.e.
+                -- with a greater Uniq), then we need to recurse through
+                -- this binding again.
+             Just u' -> orM1 (u <= u') rec
+   where
+    rec = do
+           id %= M.insert a u
+           eml n0 (return . nWellFormedUniq u)
+                  (iWellFormed_ q u)
+                  m a
 
 -- | Check that a named inst is acyclic.
 --
@@ -209,26 +215,42 @@ nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
 -- This is mostly useful for the test harness, not actual reasoning, at
 -- the moment, since we are not sufficiently precise (i.e. we will miss some
 -- empty unification results).
-nNotEmpty :: forall f . NIX f -> Bool
-nNotEmpty n0@(NIX i0 m0) = evalState (visit i0) S.empty
+nSomeNotEmpty :: forall f . NIX f -> Bool
+nSomeNotEmpty = fix (nNotEmpty_core orAny)
+ where orAny b bs = b `orM1` (anyM bs)
+
+-- | Like 'nNotEmpty' but conjunctive across choices -- that is, this
+-- requires that all possible branches of an automata are non-empty, rather
+-- than 'nNotEmpty', which only checks that there is some reachable state in
+-- the automata.
+nAllNotEmpty :: forall f . (Show f) => NIX f -> Bool
+nAllNotEmpty = fix (nNotEmpty_core andAll)
+ where andAll b bs = b `andM1` (allM bs)
+
+
+
+nNotEmpty_core :: forall f .
+                  (forall m .
+                     (Monad m)
+                  => Bool
+                  -> [m Bool]
+                  -> m Bool)
+               -> (NIX f -> Bool)
+               -> NIX f -> Bool
+nNotEmpty_core disj self n0@(NIX i0 m0) = evalState (visit i0) S.empty
  where
   visit IFree     = return True
   visit (IUniv _) = return True
   visit (IAny _)  = return True
-  visit (IBound _ m b) = b `orM1` (anyM $ M.foldr (\fas a -> allM (map rec fas) : a) [] m)
+  visit (IBound _ m b) = b `disj` (M.foldr (\fas a -> allM (map rec fas) : a) [] m)
 
-  rec idx = do
-    already <- gets (S.member idx)
-    already `orM1` eml n0 (return . nNotEmpty)
-                          (\v -> modify (S.insert idx) >> visit v) m0 idx
-
-
+  rec idx = tsc id idx (eml n0 (return . self) visit m0 idx)
 
 -- | Increase the nonuniqueness of a particular named inst to at least the
 -- given level.
 --
--- This is equivalent to unification with 'IANy' at the given 'Uniq' level,
--- but may be slightly more efficient than actually performing that work.
+-- This would be equivalent to unification with 'IANy' at the given 'Uniq'
+-- level, save that it leaves free variables untouched.
 nUpUniq :: forall f . (Ord f) => Uniq -> NIX f -> NIX f
 {-
  - XXX The beginnings of a possibly more efficient implementation
@@ -270,6 +292,23 @@ nShallow IFree          = Just $ nHide $ IFree
 nShallow (IAny u)       = Just $ nHide $ (IAny u)
 nShallow (IUniv u)      = Just $ nHide $ (IUniv u)
 nShallow (IBound _ _ _) = Nothing
+{-# INLINABLE nShallow #-}
+
+nDeep :: (Show f, Monad m, Functor m)
+      => (r -> m (Either (NIX f) (InstF f r)))
+      -> InstF f r
+      -> m (NIX f)
+nDeep rec root = liftM (\(nr,(_,nm)) -> NIX nr nm) $
+  flip runStateT (0 :: Int, M.empty) $ inst_recps rec' root
+ where
+  rec' r = do
+    a  <- _1 <<%= (+(1 :: Int))
+    rhs <- lift (rec r)
+    rhs' <- either (return . Left) (liftM Right . inst_recps rec') rhs
+    _2 %= M.insert a rhs'
+    return a
+
+
 
 ------------------------------------------------------------------------}}}
 -- Binary predicates                                                    {{{

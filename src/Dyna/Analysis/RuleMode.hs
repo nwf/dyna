@@ -52,8 +52,8 @@ import           Dyna.Analysis.ANF
 import           Dyna.Analysis.ANFPretty
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
-import           Dyna.Analysis.Mode.Execution.NoAliasContext
-import           Dyna.Analysis.Mode.Execution.NoAliasFunctions
+import           Dyna.Analysis.Mode.Execution.ContextNoAlias
+import           Dyna.Analysis.Mode.Execution.FunctionsNoAlias
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Main.Exception
@@ -182,12 +182,6 @@ possible fp r cr =
                     (throwError UFExDomain))
              (throwError UFExDomain)
 
-{-
-        case i of
-          NTVar  v -> fup v (fup o (throwError UFExDomain)
-                                   
--}
-
     -- Structure building or unbuilding
     --
     -- XXX This ought to avail itself of unifyVF but doesn't.
@@ -238,8 +232,8 @@ possible fp r cr =
      mo = nHide (IUniv UShared)
      unifyVU v = unifyUnaliasedNV mo v
      mkMV v = do
-       vi <- clookup v
-       return $ MV v (vrToNIX vi) mo
+       vn <- expandV v
+       return $ MV v vn mo
 
      ensureBound v = fgn v (throwError UFExDomain)
                            (return ())
@@ -393,7 +387,8 @@ planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -- representation of the term being updated, and
          -- result variable.
          -> SIMCtx DVar
-         -- ^ Unbound variables in the rule
+         -- ^ Initial context (which must cover all the variables
+         -- in the given cruxes)
          -> [(Cost, Actions fbs)]
          -- ^ Plans and their costs
 planner_ st sc cr mic ictx = runAgenda

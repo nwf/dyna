@@ -25,7 +25,7 @@ module Dyna.Analysis.Mode.Execution.Context (
     -- ** Inst Keys (§5.3.1, p94)
     KI(..), KR(..), KRI, ENKRI,
     -- ** Variables
-    VV(..), VR(..),
+    VR(..),
 
     -- * Context
     -- ** Notes
@@ -34,31 +34,38 @@ module Dyna.Analysis.Mode.Execution.Context (
     -- ** Monad
     SIMCT(..), runSIMCT,
     -- *** And its context
-    SIMCtx(..), emptySIMCtx,
+    SIMCtx(..), emptySIMCtx, allFreeSIMCtx,
 
     -- ** Internal helper functions
-    aliasX, aliasY,
+    e2x, q2y, aliasN, aliasV, aliasX, aliasY, kUpUniq,
 )where
 
+import           Control.Applicative (Applicative)
 import           Control.Exception(assert)
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Error.Class
 import           Control.Monad.State
 import           Control.Monad.Trans.Either
-import           Control.Monad.Trans.State
+-- import qualified Control.Monad.Trans.Maybe     as CMTM
+import qualified Control.Monad.Trans.State     as CMTS
+import qualified Control.Monad.Trans.Reader    as CMTR
 -- import           Data.Function
-import qualified Data.Map                 as M
-import qualified Data.Traversable         as T
+import qualified Data.Map                      as M
+import qualified Data.IntMap                   as IM
+import qualified Data.Traversable              as T
 -- import           Data.Unique
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
+import qualified Dyna.Analysis.Mode.InstPretty as IP
 import           Dyna.Analysis.Mode.Unification
+import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Main.Exception
+import           Dyna.Term.TTerm
 import           Dyna.XXX.DataUtils
 import           Dyna.XXX.MonadContext
-import qualified Debug.Trace              as XT
-import qualified Text.PrettyPrint.Free    as PP
+-- import qualified Debug.Trace              as XT
+import qualified Text.PrettyPrint.Free         as PP
 
 ------------------------------------------------------------------------}}}
 -- Inst Types                                                           {{{
@@ -67,9 +74,13 @@ import qualified Text.PrettyPrint.Free    as PP
 -- | An aliased variable, also known as an Inst Key.  See §5.3.1, p94.
 --
 -- We use 'Int' internally for the moment
-newtype KI = KI { unKI :: Int } deriving (Eq,Num,Ord,Show)
+newtype KI = KI { unKI :: Int } deriving (Eq,Ord,Show)
 
--- | Key InstMap Values.  These represent aliased bits of structure built up
+-- XXX Should probably track some notion of "display name" instead...
+instance PP.Pretty KI where
+  pretty (KI i) = (PP.text "_AK" PP.<> PP.pretty i)
+
+-- | Key Recursion.  These represent aliased bits of structure built up
 -- during analysis.
 --
 -- Periodically, we will attempt to collect structure that is no longer
@@ -85,12 +96,18 @@ data KR f n k =
   -- | A defined inst (though filtered through the understanding that it
   -- is aliased).
     KRName n
-  -- | An alias chain.  It is safe to semiprune these as desired.
-  | KRKey  k
   -- | An aliased inst ply, which recurses either as an (aliased) named inst
   -- or as aliased structure.
-  | KRInst (KRI f n k)
+  | KRStruct (KRI f n k)
+  -- | An alias chain.  It is safe to semiprune these as desired.
+  | KRKey  k
  deriving (Eq,Ord,Show)
+
+instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
+      => PP.Pretty (KR f n k) where
+  pretty (KRName n)   = PP.pretty n
+  pretty (KRStruct e) = IP.compactly PP.pretty (either PP.pretty PP.pretty) e
+  pretty (KRKey k)    = PP.pretty k
 
 type KRI f n k = InstF f (Either n k)
 
@@ -101,25 +118,7 @@ type KRI f n k = InstF f (Either n k)
 type ENKRI f n k = Either n (KRI f n k)
 
 ------------------------------------------------------------------------}}}
--- Insts: Unaliased Insts                                               {{{
-
-{-
--- | An unaliased variable.  Again we use 'Int' internally for the moment.
-newtype UI = UI { unUI :: Int } deriving (Eq,Num,Ord,Show)
-
--- | Unaliased (User) InstMap Values.  These represent unaliased structure
--- built up during analysis.
---
--- Note that Vars are defined to be acyclic (XXX again, no occurs check
--- right now)
-type UR f n k u = InstF f (VR n k u)
--}
-
-------------------------------------------------------------------------}}}
 -- Insts: Variables                                                     {{{
-
--- | An user variable.
-newtype VV = VV { unVV :: String } deriving (Eq,Ord,Show)
 
 -- | Variables (and unaliased structure) bindings
 data VR f n k =
@@ -131,29 +130,61 @@ data VR f n k =
   | VRKey    k
  deriving (Eq,Ord,Show)
 
+instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
+      => PP.Pretty (VR f n k) where
+  pretty (VRName n)   = PP.pretty n
+  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+  pretty (VRKey k)    = PP.pretty k
+
+-- | Widen from a more restrictive to less restrictive recursion type.
+e2x :: Either n k -> VR f n k
+e2x = either VRName VRKey
+
+-- | A shorthand which is useful in recursive traversals of 'KR's.
+q2y :: InstF f (Either n k) -> InstF f (VR f n k)
+q2y = fmap e2x
+
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}
 -- Context                                                              {{{
 -- Context : Basics                                                     {{{
 
 -- | Simplistic InstMap Context
-data SIMCtx f = SIMCtx { _simctx_next_k   :: KI
-                       , _simctx_map_k    :: M.Map KI (KR f (NIX f) KI)
-                       , _simctx_map_v    :: M.Map VV (VR f (NIX f) KI)
+data SIMCtx f = SIMCtx { _simctx_next_ki_id :: Int
+                       , _simctx_map_k      :: IM.IntMap  (KR f (NIX f) KI)
+                       -- , _simctx_map_k_refs :: IM.IntMap  [DVar]
+                       , _simctx_map_v      :: M.Map DVar (VR f (NIX f) KI)
                        }
  deriving (Show)
 $(makeLenses ''SIMCtx)
 
 newtype SIMCT m f a = SIMCT { unSIMCT :: StateT (SIMCtx f) (EitherT UnifFail m) a }
- deriving (Monad,MonadFix)
+ deriving (Monad,MonadFix,Functor,Applicative)
 
 instance (Monad m) => MonadError UnifFail (SIMCT m f) where
   throwError e = SIMCT (lift (left e))
-  catchError a f = SIMCT (liftCatch catchError (unSIMCT a) (unSIMCT . f))
+  catchError a f = SIMCT (CMTS.liftCatch catchError (unSIMCT a) (unSIMCT . f))
 
 instance MonadIO m => MonadIO (SIMCT m f) where
   liftIO m = SIMCT $ lift (liftIO m)
 
+instance (PP.Pretty f) => PP.Pretty (SIMCtx f) where
+  pretty (SIMCtx _ km vm) =
+    PP.vcat
+    [ PP.text "Unaliased variables:"
+    , PP.indent 2 $
+      PP.vcat $ flip map (M.toAscList vm)
+              $ \(v,vr) ->        PP.pretty v
+                           PP.<+> PP.text "=>"
+                           PP.<+> PP.pretty vr
+    , PP.text "Aliased variables (_AK#):"
+    , PP.indent 2 $
+      PP.vcat $ flip map (IM.toAscList km)
+              $ \(k,kr) ->        PP.pretty k
+                           PP.<+> PP.text "=>"
+                           PP.<+> PP.pretty kr
+	]
+ 
 {-
  - XXX maybe
  
@@ -164,7 +195,12 @@ instance (Monad m) => MonadState (SIMCtx f) (SIMCT m f) where
 -}
 
 emptySIMCtx :: SIMCtx f
-emptySIMCtx = SIMCtx 0 M.empty M.empty
+emptySIMCtx = SIMCtx 0 IM.empty {- IM.empty -} M.empty
+
+-- XXX make take S.Set DVar?
+allFreeSIMCtx :: [DVar] -> SIMCtx f
+allFreeSIMCtx fs = SIMCtx 0 IM.empty
+                 $ M.fromList $ map (\x -> (x, VRStruct IFree)) fs
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
 runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
@@ -175,15 +211,15 @@ runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
 key_canon :: MonadState (SIMCtx f) m => KI -> m KI
 key_canon k = do
   m <- use simctx_map_k
-  let (k',m') = mapSemiprune isKey
-                             KRKey
-                             k
-                             m
+  let (k',m') = intmapSemiprune isKey
+                                (KRKey . KI)
+                                (unKI k)
+                                m
   simctx_map_k .= m'
-  return k'
+  return (KI k')
  where
-  isKey (KRKey x) = Just x
-  isKey _         = Nothing
+  isKey (KRKey (KI x)) = Just x
+  isKey _              = Nothing
 
 key_lookup :: (MonadState (SIMCtx f) m, Show f)
            => KI
@@ -194,14 +230,14 @@ key_lookup k = do
   let r = maybe (dynacPanic $ PP.text "Key context miss:"
                               PP.<+> PP.text (show (k,ck)))
                 krenkri
-              $ M.lookup ck m
-  XT.traceShow ("KL",k,ck,r) $ return ()
+              $ IM.lookup (unKI ck) m
+  -- XT.traceShow ("KL",k,ck,r) $ return ()
   return r
  where
-  krenkri (KRKey k') = error $ "Key context noncanonical: "
+  krenkri (KRKey k') = dynacPanicStr $ "Key context noncanonical: "
                                  ++ (show (k,k'))
   krenkri (KRName n) = Left n
-  krenkri (KRInst i) = Right i
+  krenkri (KRStruct i) = Right i
 
 type instance MCVT (SIMCT m f) KI = ENKRI f (NIX f) KI
 
@@ -209,40 +245,50 @@ instance (Show f, Monad m) => MCR (SIMCT m f) KI where
   clookup = SIMCT . key_lookup
 
 instance (Show f, Monad m) => MCD (SIMCT m f) KI where
-  cdelete k = XT.traceShow ("KD",k) $ SIMCT $ do
+  cdelete k = {- XT.traceShow ("KD",k) $ -} SIMCT $ do
     r <- key_lookup k
-    simctx_map_k %= M.delete k
+    simctx_map_k %= IM.delete (unKI k)
     return r
 
 {-
 instance (Show f, Monad m) => MCW (SIMCT m f) KI where
   cassign v q = SIMCT $
-    simctx_map_k %= M.insert v (either KRName KRInst q)
+    simctx_map_k %= M.insert v (either KRName KRStruct q)
 -}
 
-instance (Show f, Monad m) => MCM (SIMCT m f) KI where
+
+-- XXX I am concerned about side-effects here: the onus is on the provided
+-- callback to manage side-effects within simctx_map_k, since we simply
+-- clobber its ck entry with the result.  In principle, it might have
+-- changed between invocation and return; I'm asserting on this now, and
+-- we'll see if it trips. The Ord instance here is for exactly this assert,
+-- as it calls == on NIX, which calls 'nEq' which needs Ord f.
+instance (Show f, Ord f, Monad m) => MCM (SIMCT m f) KI where
   cmerge f k v = SIMCT $ do
     ck <- key_canon k
     m <- use simctx_map_k
-    maybe (assert (ck == k) $ error $ "Key context miss in merge: "
+    maybe (assert (ck == k) $ dynacPanicStr $ "Key context miss in merge: "
                                       ++ (show k))
           (\v' -> do
              merged <- unSIMCT $ f (krenkri v') v
-             simctx_map_k .= M.insert ck (either KRName KRInst merged) m)
-        $ M.lookup ck m
+             uses (simctx_map_k . at (unKI ck))
+                  (flip assert () . (== Just v'))
+             simctx_map_k %= IM.insert (unKI ck)
+                                       (either KRName KRStruct merged))
+        $ IM.lookup (unKI ck) m
    where
-    krenkri (KRKey k') = error $ "Key context noncanonical in merge: "
+    krenkri (KRKey k') = dynacPanicStr $ "Key context noncanonical in merge: "
                                   ++ (show (k,k'))
     krenkri (KRName n) = Left n
-    krenkri (KRInst i) = Right i
+    krenkri (KRStruct i) = Right i
 
-type instance MCNC KI m = ()
+-- type instance MCNC KI m = ()
 instance (Show f, Monad m) => MCN (SIMCT m f) KI where
-  cnew lf f = do
-    k <- lf $ SIMCT $ simctx_next_k <+= 1
-    q <- f k
-    lf $ SIMCT $ simctx_map_k %= M.insert k (either KRName KRInst q)
-    return k
+  cnew f = do
+    k <- SIMCT $ simctx_next_ki_id <+= 1
+    q <- f (KI k)
+    SIMCT $ simctx_map_k %= IM.insert k (either KRName KRStruct q)
+    return (KI k)
 
 instance (Show f, Monad m) => MCA (SIMCT m f) KI where
   ccanon k = SIMCT $ key_canon k
@@ -255,29 +301,59 @@ instance (Show f, Monad m) => MCA (SIMCT m f) KI where
     vl <- key_lookup cl
     vr <- key_lookup cr
     vm <- unSIMCT $ f vl vr
-    simctx_map_k %= M.insert cl (KRKey cr)
-    simctx_map_k %= M.insert cr (either KRName KRInst vm)
+    simctx_map_k %= IM.insert (unKI cl) (KRKey cr)
+    simctx_map_k %= IM.insert (unKI cr) (either KRName KRStruct vm)
     return cr
 
 ------------------------------------------------------------------------}}}
 -- Context : Constructing Aliased Keys                                  {{{
 
+aliasN :: forall f n k m .
+          (Monad m,
+           MCVT m k ~ ENKRI f n k,
+           MCN m k{-, MCNC k m -})
+       => n -> m k
+aliasN n = cnew $ const $ return $ Left n
+
 aliasX :: forall f n k m .
           (Monad m,
            MCVT m k ~ ENKRI f n k,
-           MCN m k, MCNC k m)
+           MCN m k{-, MCNC k m -})
        => VR f n k -> m k
-aliasX (VRName n)   = cnew id $ const $ return $ Left n
+aliasX (VRName n)   = aliasN n
 aliasX (VRKey  k)   = return k
 aliasX (VRStruct u) = aliasY u
 
 aliasY :: forall f n k m .
           (Monad m,
            MCVT m k ~ ENKRI f n k,
-           MCN m k, MCNC k m)
+           MCN m k{-, MCNC k m -})
        => InstF f (VR f n k) -> m k
 aliasY u = T.sequence (fmap (liftM Right . aliasX) u)
-            >>= cnew id . const . return . Right
+            >>= cnew . const . return . Right
+aliasV :: forall f n k m .
+          (Monad m,
+           MCVT m k ~ ENKRI f n k, MCN m k,
+           MCVT m DVar ~ VR f n k, MCR m DVar, MCW m DVar)
+       => DVar -> m k
+aliasV v = do
+  x <- clookup v
+  k <- aliasX x
+  cassign v $ VRKey k
+  return k
+
+kUpUniq :: (Ord f, n ~ NIX f, Monad m, MCVT m k ~ ENKRI f n k, MCM m k)
+        => Uniq -> k -> m k
+kUpUniq u0 k0 = cmerge go k0 u0 >> return k0
+ where
+   go   (Left n)  u = return $ Left $ nUpUniq u n
+   go a@(Right q) u = case iUniq q of
+                        Nothing           -> return a
+                        Just u' | u' >= u -> return a
+                        Just _            -> liftM Right $ (T.mapM (rec u) q)
+
+   rec u (Left n)  = return $ Left $ nUpUniq u n
+   rec u (Right k) = kUpUniq u k >> return (Right k)
 
 {-
 -- | Called when we are moving a singleton alias key to unaliased structure.
@@ -309,25 +385,25 @@ unalias s k0 = do
 -- Context : User Variables                                             {{{
 
 user_lookup :: (MonadState (SIMCtx f) m, Show f)
-            => VV
+            => DVar
             -> m (VR f (NIX f) KI)
 user_lookup v = do
     m <- use simctx_map_v
-    r <- maybe (error $ "User variable context miss: " ++ (show v))
-               return
-             $ M.lookup v m
-    XT.traceShow ("VL",v,r) $ return ()
+    let r = maybe (dynacPanicStr $ "User variable context miss: " ++ (show v))
+                  id
+                $ M.lookup v m
+    -- XT.traceShow ("VL",v,r) $ return ()
     return r
 
-type instance MCVT (SIMCT m f) VV = VR f (NIX f) KI
+type instance MCVT (SIMCT m f) DVar = VR f (NIX f) KI
 
-instance (Show f, Monad m) => MCR (SIMCT m f) VV where
+instance (Show f, Monad m) => MCR (SIMCT m f) DVar where
   clookup = SIMCT . user_lookup
 
-instance (Show f, Monad m) => MCW (SIMCT m f) VV where
+instance (Show f, Monad m) => MCW (SIMCT m f) DVar where
   cassign v w = SIMCT $ simctx_map_v %= M.insert v w
 
-instance (Show f, Monad m) => MCA (SIMCT m f) VV where
+instance (Show f, Monad m) => MCA (SIMCT m f) DVar where
   ccanon x = return x
 
   calias f l r = SIMCT $ do
@@ -338,6 +414,44 @@ instance (Show f, Monad m) => MCA (SIMCT m f) VV where
     simctx_map_v %= M.insert l x'
     simctx_map_v %= M.insert r x'
     return l
+
+{-
+user_variable_death :: (MonadState (SIMCtx f) m, Show f) => DVar -> m ()
+user_variable_death v = do
+    m <- use simctx_map_v
+    let r = maybe (dynacPanicStr $ "Dying variable not in context: " ++ (show v))
+                  id
+                $ M.lookup v m
+-}
+
+
+------------------------------------------------------------------------}}}
+-- Context : Transformers                                               {{{
+
+-- These instances are used internally to allow us to wrap our workers with
+-- different utility parameters.
+
+type instance MCVT (CMTR.ReaderT r (SIMCT m f)) k = MCVT (SIMCT m f) k
+
+instance (MCA (SIMCT m f) k) => MCA (CMTR.ReaderT r (SIMCT m f)) k where
+  ccanon k = lift (ccanon k)
+
+  calias f k1 k2 = CMTR.ask >>= \e ->
+     lift (calias (\a b -> CMTR.runReaderT (f a b) e) k1 k2)
+
+instance (MCM (SIMCT m f) k) => MCM (CMTR.ReaderT r (SIMCT m f)) k where
+  cmerge f k v = CMTR.ask >>= \e ->
+     lift (cmerge (\a b -> CMTR.runReaderT (f a b) e) k v)
+
+instance (MCN (SIMCT m f) k) => MCN (CMTR.ReaderT r (SIMCT m f)) k where
+  cnew f = CMTR.ask >>= \e ->
+     lift (cnew (\a -> CMTR.runReaderT (f a) e))
+
+instance (MCR (SIMCT m f) k) => MCR (CMTR.ReaderT r (SIMCT m f)) k where
+  clookup k = lift (clookup k)
+
+instance (MCW (SIMCT m f) k) => MCW (CMTR.ReaderT r (SIMCT m f)) k where
+  cassign k v = lift (cassign k v)
 
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}

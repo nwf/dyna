@@ -22,13 +22,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Dyna.Analysis.Mode.Execution.NoAliasContext (
+module Dyna.Analysis.Mode.Execution.ContextNoAlias (
     -- * Inst Types
     -- ** Naming Conventions
     -- $naming
 
     -- ** Variables
-    VR(..), vrToNIX,
+    VR(..), 
 
     -- ** Monad
     SIMCT(..), runSIMCT,
@@ -36,6 +36,7 @@ module Dyna.Analysis.Mode.Execution.NoAliasContext (
     SIMCtx(..), emptySIMCtx, allFreeSIMCtx,
 ) where
 
+import           Control.Applicative (Applicative)
 -- import           Control.Exception(assert)
 import           Control.Lens
 -- import           Control.Monad
@@ -74,6 +75,7 @@ instance (PP.Pretty f, PP.Pretty n) => PP.Pretty (VR f n) where
   pretty (VRName n)   = PP.pretty n
   pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
 
+{-
 -- This is used during rule analysis to capture the state of the binding
 -- chart into the generated DOpAMine.
 --
@@ -83,6 +85,7 @@ instance (PP.Pretty f, PP.Pretty n) => PP.Pretty (VR f n) where
 vrToNIX :: (Show f) => VR f (NIX f) -> NIX f
 vrToNIX (VRName n) = n
 vrToNIX (VRStruct i) = nHide $ fmap vrToNIX i
+-}
 
 ------------------------------------------------------------------------}}}
 -- Context                                                              {{{
@@ -95,7 +98,7 @@ data SIMCtx f = SIMCtx { _simctx_map_v    :: M.Map DVar (VR f (NIX f))
 $(makeLenses ''SIMCtx)
 
 newtype SIMCT m f a = SIMCT { unSIMCT :: StateT (SIMCtx f) (EitherT UnifFail m) a }
- deriving (Monad,MonadFix)
+ deriving (Monad,MonadFix,Functor,Applicative)
 
 instance (Monad m) => MonadError UnifFail (SIMCT m f) where
   throwError e = SIMCT (lift (left e))
@@ -123,6 +126,7 @@ instance (Monad m) => MonadState (SIMCtx f) (SIMCT m f) where
 emptySIMCtx :: SIMCtx f
 emptySIMCtx = SIMCtx M.empty
 
+-- XXX make take S.Set DVar?
 allFreeSIMCtx :: [DVar] -> SIMCtx f
 allFreeSIMCtx fs = SIMCtx $ M.fromList $ map (\x -> (x, VRStruct IFree)) fs
 
