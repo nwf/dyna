@@ -5,40 +5,61 @@
 MISC
 ====
 
- - TODO: create an Interpreter object to hold what is now global state.
-
- - FIXME: timv: I think that set= is wrong .. needs to keep counts like bag=
+ - TODO: create an Interpreter object to hold state.
 
  - TODO: sorted order of Chart seems to have changed. Check that this changed order
    makes sense
 
- - "initializers" aren't just initializers, they are the fully-naive bottom-up
-   inference rules.
-
- - XXX: we should probably fuse update handlers instead of dispatching to each
-   one independently.
+     timv: look at the diff--what were we doing before?
 
  - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
    delete mode (3) remove initializers.
 
  - TODO: hooks from introspection, eval, and prioritization.
 
+     whats the default prioritization?
+
  - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
    disallow ``a += &b.``
 
+     equals (=) aggregation (only one value allowed, multiplicity >0 on only one value)
+
+     a = b for c
+     a = d for e
+
+     c and e might be mutually exclusive in all FP, but not during computation
+     -- this is the same as the error problem (e.g. division problem)
+
  - TODO: doc tests for Dyna code!
 
+ - TODO: repl needs to pass parser a rule index pragma to start from.
+
+ - TODO: build hypergraph from unrolled circuit. This requires a little bit of
+   thinking because we don't yet know what things in the chart have been
+   touched.
+
+
+Use ruleix to make := work at the REPL
+
+:- ruleix 100
+
+
+
+NOTES
+=====
+ - "initializers" aren't just initializers, they are the fully-naive bottom-up
+   inference rules.
 
 
 PARSER
 ======
 
-  - Singled quoted strings:
+  - TODO: Singled quoted strings:
 
     x += f('result = 5').
 
 
-  - Nested expressions:
+  - TODO: Nested expressions:
 
     out(0) dict= _VALUE is (rewrite(X,Y) + rewrite(X,Y,Z)), _VALUE.
 
@@ -136,7 +157,8 @@ import os, sys
 from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 
-from utils import ip, red, green, blue, magenta, yellow, dynahome, notimplemented
+from utils import ip, red, green, blue, magenta, yellow, dynahome, \
+    notimplemented, prioritydict
 from defn import aggregator
 
 
@@ -168,9 +190,9 @@ class aggregator_declaration(object):
             return None
 
 
+error_suppression = False
 trace = None
-_delete = False
-agenda = set()
+agenda = prioritydict()
 agg_decl = aggregator_declaration()
 chart = chart_indirect()
 
@@ -246,15 +268,18 @@ class Chart(object):
             if isinstance(x, slice):
                 continue
             if candidates is None:
+                # initial candidates determined by first non-bound column (if any)
                 candidates = ix[x].copy()
             else:
                 candidates &= ix[x]
                 if not len(candidates):
                     break
 
+        # all arguments must be bound.
         if candidates is None:
             candidates = self.intern.values()
 
+        # handle the value column separately because we don't index it yet.
         if isinstance(val, slice):
             for term in candidates:
                 if term.value is not None:
@@ -345,7 +370,7 @@ def initializer(_):
 initializer.handlers = []
 
 
-def update_dispatcher(item, val):
+def update_dispatcher(item, val, delete):
     """
     Passes update to relevant handlers.
     """
@@ -353,10 +378,13 @@ def update_dispatcher(item, val):
         return
     for handler in register.handlers[item.fn]:
         try:
-            handler(item, val)
+            handler(item, val, delete=delete)
         except (TypeError, ZeroDivisionError) as e:
-            #print >> trace,
-            print '%s on update %s = %s' % (e, item, val)
+            if error_suppression:
+                #print >> trace,
+                print '%s on update %s = %s' % (e, item, val)
+            else:
+                raise e
 
 
 def peel(fn, item):
@@ -377,29 +405,19 @@ def peel(fn, item):
     return item.args
 
 
-def emit(item, val, ruleix, variables):
+def emit(item, val, ruleix, variables, delete):
 
-    print >> trace, (red % 'delete' if _delete else green % 'update'), \
+    print >> trace, (red % 'delete' if delete else green % 'update'), \
         '%s (val %s; curr: %s)' % (item, val, item.value)
 
     assert not isinstance(val, tuple) or isinstance(val, Term)
 
-    if _delete:
+    if delete:
         item.aggregator.dec(val, ruleix, variables)
     else:
         item.aggregator.inc(val, ruleix, variables)
 
-    agenda.add(item)
-
-
-def delete(item, val):
-    # XXX: very ugly handling of deletion by global variable; should probably
-    # target only handler at a time, because this will get called more times
-    # than it should.
-    global _delete
-    _delete = True
-    update_dispatcher(item, val)
-    _delete = False
+    agenda[item] = 0
 
 
 changed = {}
@@ -410,17 +428,13 @@ def _go():
     changed.clear()
 
     while agenda:
-        item = agenda.pop()
+        item = agenda.pop_smallest()
 
         print >> trace
         print >> trace, magenta % 'pop   ', item,
 
         was = item.value
         print >> trace, '(was: %s,' % (was,),
-
-        # TODO: in the case of set and bag the `now` value is the same as `was`
-        # because the change happens in place. Thus, sadly, `was == now` and the
-        # change will now propagate.
 
         now = item.aggregator.fold()
         print >> trace, 'now:', str(now) + ')'
@@ -430,12 +444,12 @@ def _go():
             continue
 
         if was is not None:
-            delete(item, was)
+            update_dispatcher(item, was, delete=True)
 
         item.value = now
 
         if now is not None:
-            update_dispatcher(item, now)
+            update_dispatcher(item, now, delete=False)
 
         changed[item] = now
 
@@ -500,10 +514,13 @@ def do(filename):
 
     for init in initializer.handlers:   # assumes we have cleared
         try:
-            init()
+            init(delete=False)
         except (TypeError, ZeroDivisionError) as e:
-            #print >> trace,
-            print e, 'in initializer.'
+            if error_suppression:
+                #print >> trace,
+                print e, 'in initializer.'
+            else:
+                raise e
 
     go()
 

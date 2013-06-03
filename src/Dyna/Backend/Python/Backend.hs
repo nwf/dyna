@@ -217,11 +217,12 @@ pdope_ (OPEmit h r i vs) =
                    , pretty r
                    , pretty i
                    , varmap
+                   , "delete=delete"
                    ]
  where
   -- A python map of variable name to value
   varmap = encloseSep lbrace rbrace comma
-         $ map (\v -> let v' = pretty v in dquotes v' <+> colon <+> v') vs
+         $ map (\v -> let v' = pretty v in dquotes v' <> colon <+> v') vs
 
 -- | Render a dopamine sequence's checks and loops above a (indended) core.
 pdope :: Actions PyDopeBS -> Doc e
@@ -250,7 +251,7 @@ printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
 printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
-                   `above` "def" <+> char '_' <> tupled [] <+> colon
+                   `above` "def" <+> char '_' <> tupled ["delete"] <+> colon
                    `above` pdope dope
                    <> line
 
@@ -259,7 +260,7 @@ printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDop
 printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
-                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v]) <+> colon
+                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"delete"]) <+> colon
                    `above` pdope dope
                    <> line
 
