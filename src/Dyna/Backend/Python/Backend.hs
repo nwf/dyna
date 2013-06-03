@@ -59,7 +59,7 @@ isFree v = nSub (v^.mv_mi) nfree
 
 builtins :: BackendPossible PyDopeBS
 builtins (f,is,o) = case () of
-  _ | all isGround is 
+  _ | all isGround is
     -> maybe (Left False) gencall $ M.lookup (f,length is) constants
         where
          gencall pc = case () of
@@ -166,7 +166,12 @@ tupledOrUnderscore vs = if length vs > 0
 
 pslice vs = brackets $
        sepBy "," (map (\x -> if nGround (x^.mv_mi) then pretty (x^.mv_var) else ":") vs)
-       <> "," -- add a list comma to ensure getitem is always passed a tuple.
+       <> "," -- add a comma to ensure getitem is always passed a tuple.
+
+piterate vs = parens $
+       sepBy "," (map (\x -> if nGround (x^.mv_mi) then "_" else pretty (x^.mv_var)) vs)
+       <> "," -- add a comma to ensure tuple.
+
 
 filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
@@ -198,7 +203,7 @@ pdope_ (OPIter v vs f _ (Just (PDBS c))) = pretty (v^.mv_var)
 
 pdope_ (OPIter o m f _ Nothing) =
       let mo = m ++ [o] in
-          "for" <+> (tupledOrUnderscore $ filterGround mo)
+          "for" <+> piterate mo --(tupledOrUnderscore $ filterGround mo)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
     -- XXX Ought to make i and vs conditional on... doing debugging or the
