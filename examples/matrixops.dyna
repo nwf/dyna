@@ -34,4 +34,4 @@ m(b, 2, 3) += 0 .
 
 % matrix "c" is the product of matricies "a" and "b"
 :-dispos product(&,&).
-product(a,b) += &c .
+product(a,b) := &c .

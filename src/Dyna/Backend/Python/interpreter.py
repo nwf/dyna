@@ -46,18 +46,6 @@ Warnings/lint checking
  - "initializers" aren't just initializers, they are the fully-naive bottom-up
    inference rules.
 
- - XXX: maybe the chart should store pretty printed term and a reference to the
-   aggregator (each item get's its own aggregator to avoid a hash lookup).
-
- - XXX: should we store value and aggregators separate from others columns? that
-   is, separate the chart and intern table.
-
-     timv: My new though on this is to store Term objects in the Chart. These
-     objects will contain a mutable reference to value and references to
-     aggregator and arguments.
-
-     TODO: need ot be more strict about interning Terms.
-
  - XXX: we should probably fuse update handlers instead of dispatching to each
    one independently.
 
@@ -136,7 +124,7 @@ from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 
 from utils import ip, red, green, blue, magenta, yellow, dynahome
-from defn import agg_bind
+from defn import aggregator
 
 
 class AggregatorConflict(Exception):
@@ -149,11 +137,6 @@ class chart_indirect(dict):
         c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
         return c
 
-class aggregator_indirect(dict):
-    def __missing__(self, item):
-        a = agg_bind(item, agg_decl)
-        self[item] = a
-        return a
 
 # when a new rule comes along it puts a string in the following dictionary
 class aggregator_declaration(object):
@@ -165,14 +148,16 @@ class aggregator_declaration(object):
                                      "set to %r." % (key, self.map[key], value))
         self.map[key] = value
     def __getitem__(self, key):
-        return self.map[key]
+        try:
+            return self.map[key]
+        except KeyError:
+            return None
 
 
 trace = None
 _delete = False
 agenda = set()
 agg_decl = aggregator_declaration()
-aggregator = aggregator_indirect()
 chart = chart_indirect()
 
 
@@ -189,19 +174,25 @@ def dump_charts(out=sys.stdout):
         print >> out
 
 
+def notimplemented(*_,**__):
+    raise NotImplementedError
+
+
 # TODO: codegen should output a derive Term instance for each functor
 class Term(namedtuple('Term', 'fn args'), object):
 
-    def __init__(self, fn, idx):
+    def __init__(self, fn, args):
         self._value = None
-        super(Term, self).__init__(fn, idx)
-
-    @property
-    def aggregator(self):
-        return aggregator[self]    # TODO: avoid this lookup
+        self.aggregator = None
+        super(Term, self).__init__(fn, args)
 
     def __repr__(self):
         return pretty(self)
+
+    __add__ \
+        = __sub__ \
+        = __mul__ \
+        = notimplemented
 
 #    @property
 #    def value(self):
@@ -212,14 +203,6 @@ class Term(namedtuple('Term', 'fn args'), object):
 #        assert not isinstance(val, tuple) or isinstance(val, Term)
 #        self._value = val
 
-# TODO: we don't story Term objects in the chart yet.. so we need to use the
-# namedtuple's __eq__ method.
-#
-# TODO: after interning we shouldn't need deep equality.
-#
-#    def __eq__(self, other):
-#        assert isinstance(other, Term), other
-#        return other.fn == self.fn and other.args == self.args
 
 def pretty(item):
     "Pretty print a term. Will retrieve the complete (ground) term from the chart."
@@ -304,12 +287,12 @@ class Chart(object):
 
         assert isinstance(args, tuple) and not isinstance(args, Term)
 
-
         # debugging check: row is not already in chart.
         assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
 
         self.intern[args] = term = Term(self.name, args)
         term.value = val
+        term.aggregator = aggregator(agg_decl[self.name])
 
         for i, x in enumerate(args):
             self.ix[i][x].add(term)
