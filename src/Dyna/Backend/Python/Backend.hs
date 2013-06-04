@@ -16,6 +16,7 @@ module Dyna.Backend.Python.Backend (pythonBackend) where
 -- import           Control.Exception
 import           Control.Lens ((^.))
 import           Control.Monad
+import           Control.Monad.State
 -- import qualified Data.ByteString            as B
 -- import qualified Data.ByteString.UTF8       as BU
 -- import           Data.Char
@@ -36,6 +37,7 @@ import           Dyna.Main.Exception
 import           Dyna.Term.TTerm
 -- import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.XXX.PPrint
+import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.IO
 import           Text.PrettyPrint.Free
@@ -179,14 +181,14 @@ piterate vs = parens $
 filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
 -- | Render a single dopamine opcode or its surrogate
-pdope_ :: DOpAMine PyDopeBS -> Doc e
+pdope_ :: DOpAMine PyDopeBS -> State Int (Doc e)
 pdope_ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
-pdope_ (OPAsgn v val) = pretty v <+> equals <+> pretty val
-pdope_ (OPCheq v val) = "if" <+> pretty v <+> "!="
-                             <+> pretty val <> ": continue"
-pdope_ (OPCkne v val) = "if" <+> pretty v <+> "=="
-                             <+> pretty val <> ": continue"
-pdope_ (OPPeel vs i f) =
+pdope_ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
+pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
+                                      <+> pretty val <> ": continue"
+pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
+                                      <+> pretty val <> ": continue"
+pdope_ (OPPeel vs i f) = return $
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs
             <+> equals
@@ -194,45 +196,50 @@ pdope_ (OPPeel vs i f) =
      )
     -- you'll get a "TypeError: 'NoneType' is not iterable."
     `above` "except (TypeError, AssertionError): continue"
-pdope_ (OPWrap v vs f) = pretty v
+pdope_ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
                            <> (parens $ pfas f vs <> comma
                                 <> (sepBy "," $ map pretty vs))
 
-pdope_ (OPIter v vs f _ (Just (PDBS c))) = pretty (v^.mv_var)
+pdope_ (OPIter v vs f Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
                                      <+> c v vs
 
-pdope_ (OPIter o m f _ Nothing) =
-      let mo = m ++ [o] in
-          "for" <+> piterate mo --(tupledOrUnderscore $ filterGround mo)
+pdope_ (OPIter o m f _ Nothing) = do
+      i <- incState
+      return $ let mo = m ++ [o] in
+          "for" <+> "d" <> pretty i <> "," <> piterate mo
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
     -- XXX Ought to make i and vs conditional on... doing debugging or the
     -- aggregator for this head caring.  The latter is a good bit more
     -- advanced than we are right now.
-pdope_ (OPEmit h r i vs) =
-  "emit" <> tupled [ pretty h
-                   , pretty r
-                   , pretty i
-                   , varmap
-                   ]
- where
+pdope_ (OPEmit h r i vs) = do
+  ds <- get
+
   -- A python map of variable name to value
-  varmap = encloseSep lbrace rbrace comma
-         $ map (\v -> let v' = pretty v in dquotes v' <> colon <+> v') vs
+  let varmap = encloseSep lbrace rbrace comma $
+         ("'nodes'" <> colon <> (encloseSep lbracket rbracket comma $ map (("d"<>).pretty) [0..ds-1]))
+         : (map (\v -> let v' = pretty v in dquotes v' <> colon <+> v') vs)
+
+  return $ "emit" <> tupled [ pretty h
+                            , pretty r
+                            , pretty i
+                            , varmap
+                            ]
 
 -- | Render a dopamine sequence's checks and loops above a (indended) core.
 pdope :: Actions PyDopeBS -> Doc e
 pdope _d =         (indent 4 $ "for _ in [None]:")
-           `above` (indent 8 $ go _d)
+           `above` (indent 8 $ evalState (go _d) 0)
  where
-  go []  = empty
+  go []  = return empty
   go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
-              in above (pdope_ x)
-                 . (if indents then indent 4 else id)
-                 $ go xs
+              in do
+                   x' <- pdope_ x
+                   xs' <- go xs
+                   return $ x' `above` ((if indents then indent 4 else id) xs')
 
 
 printPlanHeader :: Rule -> Cost -> Maybe Int -> Doc e

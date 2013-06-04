@@ -37,8 +37,6 @@ MISC
    thinking because we don't yet know what things in the chart have been
    touched.
 
- - TODO: transactions for errors.
-
  - TODO: Numeric precision is an issue with BAggregators.
 
      a[0.1] += 1
@@ -147,6 +145,9 @@ from collections import defaultdict, namedtuple
 from functools import partial
 from argparse import ArgumentParser
 
+from StringIO import StringIO
+import webbrowser
+
 from utils import ip, red, green, blue, magenta, yellow, dynahome, \
     notimplemented, prioritydict
 from defn import aggregator
@@ -180,11 +181,12 @@ class aggregator_declaration(object):
             return None
 
 
-error_suppression = False
+error_suppression = True
 trace = None
 agenda = prioritydict()
 agg_decl = aggregator_declaration()
 chart = chart_indirect()
+errors = {}
 
 
 def dump_charts(out=sys.stdout):
@@ -199,14 +201,36 @@ def dump_charts(out=sys.stdout):
         print >> out, chart[x]
         print >> out
 
+    if errors:
+        print >> out
+        print >> out, 'Errors'
+        print >> out, '============'
+        for item, (val, es) in errors.items():
+            print >> out,  'because %r is %r:' % (item, val)
+            for e in es:
+                print >> out, '   ', e
+        print >> out
+
 
 # TODO: codegen should output a derived Term instance for each functor
-class Term(namedtuple('Term', 'fn args'), object):
+class Term(object):
+
+    __slots__ = 'fn args value aggregator'.split()
 
     def __init__(self, fn, args):
-        self._value = None
+        self.fn = fn
+        self.args = args
+        self.value = None
         self.aggregator = None
-        super(Term, self).__init__(fn, args)
+
+    def __cmp__(self, other):
+        if other is None:
+            return 1
+        return cmp((self.fn, self.args), (other.fn, other.args))
+
+    # default hash and eq suffice because we intern
+    #def __hash__(self):
+    #def __eq__(self):
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
@@ -215,19 +239,18 @@ class Term(namedtuple('Term', 'fn args'), object):
             return fn
         return '%s(%s)' % (fn, ','.join(map(repr, self.args)))
 
-    __add__ \
-        = __sub__ \
-        = __mul__ \
-        = notimplemented
+    __add__ = __sub__ = __mul__ = notimplemented
 
-#    @property
-#    def value(self):
-#        return self._value
 
-#    @value.setter
-#    def value(self, val):
-#        assert not isinstance(val, tuple) or isinstance(val, Term)
-#        self._value = val
+_edges = defaultdict(set)
+def edges():
+    def _emit(item, val, ruleix, variables):
+        b = variables['nodes']
+        b.sort()
+        b = tuple(b)
+        _edges[item].add((ruleix, b))
+    for init in initializer.handlers:
+        init(emit=_emit)
 
 
 class Chart(object):
@@ -273,11 +296,11 @@ class Chart(object):
         if isinstance(val, slice):
             for term in candidates:
                 if term.value is not None:
-                    yield term.args + (term.value,)
+                    yield term, term.args + (term.value,)
         else:
             for term in candidates:
                 if term.value == val:
-                    yield term.args + (term.value,)
+                    yield term, term.args + (term.value,)
 
     def lookup(self, args):
         "find index for these args"
@@ -306,7 +329,8 @@ class Chart(object):
 
 
 def build(fn, *args):
-    if fn == "true/0":   # TODO: I'd rather have the codegen ensure true/0 is True and false/0 is False
+    # TODO: codegen should handle true/0 is True and false/0 is False
+    if fn == "true/0":
         return True
     if fn == "false/0":
         return False
@@ -368,13 +392,15 @@ def update_dispatcher(item, val, delete):
     """
     Passes update to relevant handlers.
     """
+
     if val is None:
         return
+
     for handler in register.handlers[item.fn]:
 
         emittiers = []
         _emit = lambda item, val, ruleix, variables: \
-            emittiers.append(lambda: emit(item, val, ruleix, variables, delete=delete))
+            emittiers.append((item, val, ruleix, variables, delete))
 
         try:
             handler(item, val, emit=_emit)
@@ -382,12 +408,21 @@ def update_dispatcher(item, val, delete):
             if error_suppression:
                 #print >> trace,
                 print '%s on update %s = %s' % (e, item, val)
+
+                if item not in errors:
+                    errors[item] = (val, [])
+                errors[item][1].append(e)
+
+                # TODO: store which rule.
+
             else:
                 raise e
         else:
             # no exception, accept emissions.
             for e in emittiers:
-                e()
+                # an error could happen here, but we assume (by contract) that
+                # this is not possible.
+                emit(*e)
 
 
 def emit(item, val, ruleix, variables, delete):
@@ -437,7 +472,16 @@ def _go():
         was = item.value
         print >> trace, '(was: %s,' % (was,),
 
-        now = item.aggregator.fold()
+        if item in errors:    # clear the error
+            del errors[item]
+
+        try:
+            now = item.aggregator.fold()
+        except (ZeroDivisionError, TypeError) as e:
+            errors[item] = ('failed to aggregate %r' % item.aggregator, [e])
+            # TODO: Are we sure there is never a reason to requeue this item.
+            continue
+
         print >> trace, 'now: %s)' % (now,)
 
         if was == now:
@@ -650,6 +694,9 @@ class REPL(cmd.Cmd, object):
         else:
             self.do_changed('')
 
+    def do_draw(self, _):
+        draw()
+
     def cmdloop(self, _=None):
         try:
             super(REPL, self).cmdloop()
@@ -664,6 +711,56 @@ class REPL(cmd.Cmd, object):
 def repl(hist):
     REPL(hist).cmdloop()
 
+
+def hypergraph():
+    from debug import Hypergraph
+    # collect edges
+    edges()
+    # create hypergraph object
+    g = Hypergraph()
+    for c in chart.values():
+        for x in c.intern.values():
+            for e in _edges[x]:
+                label, body = e
+                g.edge(str(x), str(label), map(str, body))
+    return g
+
+
+def draw():
+    g = hypergraph()
+    with file('/tmp/state.html', 'wb') as f:
+        print >> f, """
+        <html>
+        <head>
+        <style>
+        body {
+          background-color: black;
+          color: white;
+        }
+        </style>
+        </head>
+        <body>
+        """
+
+        x = StringIO()
+        dump_charts(x)
+
+        print >> f, '<div style="position:absolute;">%s</div>' \
+            % '<h1>Charts</h1>%s' \
+            % '<pre style="width: 500px;">%s</pre>' \
+            % x.getvalue()
+
+        print >> f, """
+<div style="width: 800px; position:absolute; left: 550px">
+<h1>Hypergraph</h1>
+%s
+</div>
+""" % g.render('/tmp/hypergraph')
+
+        print >> f, '</body></html>'
+
+    webbrowser.open(f.name)
+
 def main():
 #    from repl import repl
 
@@ -674,6 +771,8 @@ def main():
     parser.add_argument('--trace', default='/tmp/dyna.log')
     parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
     parser.add_argument('-o', dest='output', help='Output chart.')
+    parser.add_argument('--draw', action='store_true',
+                        help='Output html page with hypergraph and chart.')
 
     argv = parser.parse_args()
 
@@ -713,6 +812,10 @@ def main():
 
     else:
         repl(hist = '/tmp/dyna.hist')
+
+    if argv.draw:
+        draw()
+
 
 
 if __name__ == '__main__':

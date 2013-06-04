@@ -36,7 +36,6 @@ class Hypergraph(object):
         head = re.sub('"', r'\\"', head)
         body = map(lambda b: re.sub('"', r'\\"', b), body)
 
-
         e = Edge(head, label, tuple(body))
         self.edges.append(e)
 
@@ -61,6 +60,8 @@ class Hypergraph(object):
     def render(self, name, sty=None):
         sty = sty or defaultdict(dict)
 
+        # TODO: misses orphaned nodes.
+
         dot = '%s.dot' % name
         svg = '%s.svg' % name
 
@@ -68,11 +69,8 @@ class Hypergraph(object):
         with file(dot, 'wb') as f:
             print >> f, 'digraph rule {'
             print >> f, 'rankdir=LR;'  # left-to-right layout
-
             print >> f, 'node [style=filled,fillcolor=white];'
-
             print >> f, 'bgcolor="transparent";'
-
             print >> f, 'edge [color=white];'
 
             for e in self.edges:
@@ -91,7 +89,8 @@ class Hypergraph(object):
 
             # node styles
             for x in self.nodes:
-                sty[x].update({'shape': 'circle'})
+#                sty[x].update({'shape': 'circle'})
+                sty[e].update({'shape': 'rectangle'})
                 print >> f, '"%s" [%s]' % (x, ','.join('%s="%s"' % (k,v) for k,v in sty[x].items()))
 
             # edge styles
@@ -145,8 +144,8 @@ class Hypergraph(object):
         return t(root)
 
 
-def show_slice(e, M):
-    return [(b if bind else ':') for b, bind in zip(e.body, M)]
+#def show_slice(e, M):
+#    return [(b if bind else ':') for b, bind in zip(e.body, M)]
 
 
 def isvar(x):
@@ -399,7 +398,6 @@ Initializer:
         print >> html, '</div>'
 
     if browser:
-        #os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
         import webbrowser
         webbrowser.open(html.name)
 
