@@ -69,7 +69,6 @@ class Hypergraph(object):
             print >> f, 'digraph rule {'
             print >> f, 'rankdir=LR;'  # left-to-right layout
 
-
             print >> f, 'node [style=filled,fillcolor=white];'
 
             print >> f, 'bgcolor="transparent";'
@@ -366,18 +365,24 @@ Initializer:
 
             print >> html, '<h2>Update code</h2>'
 
-            for block in re.split('# --\n', code)[1:]:  # drop the begining bit.
-                [(f, bline, bcol, eline, ecol, code)] = \
-                    re.findall('# (.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n#.*\n([\w\W]*)',
+            for block in re.split('\n\s*\n', code):
+
+                x = re.findall('Span:\s*(.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n',
                                block)
 
-                code = re.compile('^\s*#.*', re.M).sub('', code.strip())
+                print '-------------------'
+                print block
+                print x
 
+                if not x:
+                    continue
+
+                [(f, bline, bcol, eline, ecol)] = x
+                code = block
                 lexer = get_lexer_by_name("python", stripall=True)
                 formatter = HtmlFormatter(linenos=False)
                 pretty_code = highlight(code, lexer, formatter)
 
-#
                 print >> html, """\
 <div class="handler-%s">
 <pre>
@@ -387,11 +392,12 @@ Initializer:
 """ % (bline, pretty_code)
 
         print >> html, '</pre>'
-
         print >> html, '</div>'
 
     if browser:
-        os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+        #os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+        import webbrowser
+        webbrowser.open(html.name)
 
 
 

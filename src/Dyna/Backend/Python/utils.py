@@ -20,7 +20,7 @@ def parse_sexpr(e):
     e = re.compile('^\s*;.*?\n', re.M).sub('', e)  # remove comments
 
     es, stack = [], []
-    for token in re.split(r'([()])|\s+', e):
+    for token in re.split(r'("[^"]*?"|[()])|\s+', e):
         if token == '(':
             new = []
             if stack:
