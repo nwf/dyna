@@ -32,8 +32,11 @@ import           Dyna.Term.TTerm (Annotation(..), TBase(..))
 import           Dyna.XXX.TrifectaTest
 import           Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit
+import           Test.Framework.Providers.QuickCheck2
 import           Test.Framework.TH
 import           Test.HUnit                          as H
+import qualified Text.PrettyPrint.Free               as PP
+import           Test.QuickCheck                     as Q
 import           Text.Trifecta
 import           Text.Trifecta.Delta
 
@@ -412,6 +415,26 @@ case_rulesDotExpr = e @=? (progrules sr)
   s1 = Span (Columns 0 0) (Columns 16 16) sr
   s2 = Span (Columns 16 16) (Columns 28 28) sr
   sr = "goal += foo.bar. goal += 1 ."
+
+------------------------------------------------------------------------}}}
+-- Pragmas                                                              {{{
+
+arbPragma :: Gen Pragma
+arbPragma = oneof
+  [ PDispos <$> arbSD <*> arbAtom <*> listOf arbAD
+  , PDisposDefl <$> elements ["dyna", "prologish"]
+  ]
+ where
+  arbSD = elements [SDInherit, SDEval, SDQuote]
+  arbAD = elements [ADEval, ADQuote]
+
+  arbAtom = elements [ "f", "+" ]
+
+prop_pragma_roundtrip = 
+  forAll arbPragma (\p -> p == unsafeParse (testPragma defDLC)
+                      (BU.fromString
+                      (flip PP.displayS "" $ PP.renderCompact
+                                           $ renderPragma p)))
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{

@@ -45,7 +45,7 @@ module Dyna.ParserHS.Parser (
     -- ** Surface langauge
     Term(..), Rule(..),
     -- ** Pragmas
-    ParsedInst(..), ParsedModeInst, Pragma(..),
+    ParsedInst(..), ParsedModeInst, Pragma(..), renderPragma,
     -- ** Line
     Line(..),
     -- * Action
@@ -69,19 +69,20 @@ import qualified Data.Map                         as M
 import           Data.Semigroup ((<>))
 import           Data.Monoid (mempty)
 import           Dyna.Analysis.Mode.Inst
+import qualified Dyna.Analysis.Mode.InstPretty    as IP
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Main.Defns
 import           Dyna.Term.TTerm (Annotation(..), TBase(..),
-                                  DFunct, DFunctAr)
+                                  DFunct)
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils
 import           Dyna.XXX.Trifecta (identNL,
-                                    stringLiteralSQ,unSpan)
+                                    stringLiteralSQ)
 import           Text.Parser.Expression
 import           Text.Parser.LookAhead
 import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
--- import qualified Text.PrettyPrint.Free            as PP
+import qualified Text.PrettyPrint.Free            as PP
 import           Text.Trifecta
 
 ------------------------------------------------------------------------}}}
@@ -132,7 +133,7 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
             | POperDel B.ByteString
                 -- ^ Remove an operator
  
-            | PQMode DFunctAr 
+            -- | PQMode DFunctAr 
                 -- ^ A query mode declaration
 
             | PRuleIx RuleIx
@@ -144,7 +145,7 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
                 -- interpreted.  Eventually this will go away, when our
                 -- REPLs have captive compilers.
             
-            | PMisc Term
+            -- | PMisc Term
                 -- ^ Fall-back parser for :- lines.
  deriving (Eq,Show)
 
@@ -532,7 +533,7 @@ parseInst = choice [ PIVar <$> var
                    , symbol "free"   *> pure (PIInst IFree)
                    , symbol "any"    *> (PIInst . IAny  <$> optUniq)
                    , symbol "ground" *> (PIInst . IUniv <$> optUniq)
-                   , symbol "bound"  *> boundinst UShared
+                   , symbol "bound"  *> (optBUniq >>= boundinst)
 
                    -- Some uniques are acceptable in this context and have
                    -- slightly different meanings
@@ -542,7 +543,8 @@ parseInst = choice [ PIVar <$> var
                    , symbol "clobbered" *> pure (PIInst (IUniv UClobbered))
                    ]
  where
-  optUniq = parens ( parseUniq ) <|> pure UShared
+  optUniq  = parens   ( parseUniq ) <|> pure UShared
+  optBUniq = brackets ( parseUniq ) <|> pure UShared
 
   -- XXX this $base thing is pretty bad.  Suggestions are welcome.
   boundinst u = braces $ (PIInst <$>) $
@@ -562,13 +564,14 @@ parseUniq = choice [ symbol "clobbered" *> pure UClobbered
                    ]
 
 ------------------------------------------------------------------------}}}
+-- Parsing pragma bodies                                                {{{
 
-pragmaBody :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
+pragmaBody :: (DeltaParsing m, LookAheadParsing m)
            => m Pragma
 pragmaBody = choice
   [ -- try $ symbol "aggr" *> parseAggr          -- XXX alternate syntax for aggr
-    symbol "dispos" *> parseDisposition -- in-place dispositions
-  , symbol "dispos_def" *> parseDisposDefl -- set default dispositions
+    symbol "dispos_def" *> parseDisposDefl -- set default dispositions
+  , symbol "dispos" *> parseDisposition -- in-place dispositions
   , symbol "inst"   *> parseInstDecl    -- instance delcarations
   , symbol "mode"   *> parseMode        -- mode/qmode decls
   , symbol "oper"   *> parseOper        -- new {pre,in,post}fix oper
@@ -638,15 +641,82 @@ pragmaBody = choice
                     <*  symbol ">>"
                     <*> (Right <$> parseInst <|> Left <$> parseNameWithArgs instName)
 
+------------------------------------------------------------------------}}}
+-- Printing pragma bodies                                               {{{
 
-pragmaline :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
-           => m Pragma
-pragmaline =    symbol ":-"
-             *> whiteSpace
-             *> (pragmaBody
-                  <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma"))
-             <* whiteSpace
-             <* {- optional -} (char '.')
+renderFunctor :: B.ByteString -> PP.Doc e
+renderFunctor f = PP.squotes (PP.pretty f)
+
+renderInst :: ParsedInst -> PP.Doc e
+renderInst (PIVar v)               = PP.pretty v
+renderInst (PIInst IFree)          = "free"
+renderInst (PIInst (IAny u))       = "any" PP.<> PP.parens (IP.fullUniq u)
+renderInst (PIInst (IUniv u))      = "ground" PP.<> PP.parens (IP.fullUniq u)
+renderInst (PIInst (IBound u m b)) =
+  "bound" PP.<> PP.brackets (IP.fullUniq u)
+          PP.<> (if b then "$base" PP.<> PP.semi else PP.empty)
+          PP.<> (PP.encloseSep PP.lparen PP.rparen PP.semi
+                 $ map (\(k,v) -> PP.pretty k PP.<> PP.tupled (map renderInst v))
+                 $ M.toList m)
+
+renderMode :: ParsedModeInst -> PP.Doc e
+renderMode = either renderPNWA renderInst
+
+renderPNWA :: NameWithArgs -> PP.Doc e
+renderPNWA (PNWA n as) = PP.pretty n PP.<> PP.tupled (map PP.pretty as)
+
+renderPragma_ :: Pragma -> PP.Doc e
+renderPragma_ (PDisposDefl s) = "dispos_def" PP.<+> PP.text s
+
+renderPragma_ (PDispos s f as) = "dispos" PP.<+> rs s
+                                          PP.<> renderFunctor f
+                                          PP.<> PP.tupled (map ra as)
+ where
+  rs SDInherit = PP.empty
+  rs SDQuote   = "&"
+  rs SDEval    = "*"
+
+  ra ADQuote   = "&"
+  ra ADEval    = "*"
+
+renderPragma_ (PInst n i) = "inst" PP.<+> renderPNWA n
+                                   PP.<+> renderInst i
+
+renderPragma_ (POperAdd f i n) = "oper" PP.<+> "add"
+                                        PP.<+> rf f
+                                        PP.<+> PP.pretty i
+                                        PP.<+> PP.pretty n
+ where
+  rf PFPre  = "pre"
+  rf PFPost = "post"
+  rf (PFIn a) = "in" PP.<+> ra a
+
+  ra AssocLeft  = "left"
+  ra AssocNone  = "none"
+  ra AssocRight = "right"
+
+renderPragma_ (POperDel n) = "oper" PP.<+> "del" PP.<+> PP.pretty n
+
+renderPragma_ (PMode n i o) = "mode" PP.<+> renderPNWA n
+                                     PP.<+> renderMode i
+                                     PP.<+> renderMode o
+
+renderPragma_ (PRuleIx r) = "ruleix" PP.<+> PP.pretty r
+
+renderPragma :: Pragma -> PP.Doc e
+renderPragma = PP.enclose ":-" PP.dot . renderPragma_
+
+------------------------------------------------------------------------}}}
+
+pragma :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
+       => m Pragma
+pragma =    symbol ":-"
+         *> whiteSpace
+         *> (pragmaBody
+            -- <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma")
+            )
+         <* whiteSpace
+         <* {- optional -} (char '.')
 
 
 ------------------------------------------------------------------------}}}
@@ -655,7 +725,7 @@ pragmaline =    symbol ":-"
 dline :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
       => m (Spanned Line)
 dline = whiteSpace
-        *> spanned (choice [ LPragma <$> pragmaline
+        *> spanned (choice [ LPragma <$> pragma
                            , LRule <$> spanned rule
                            ])
 
@@ -686,6 +756,6 @@ testRule   = configureParser rule
 
 testPragma :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m Pragma
-testPragma = configureParser pragmaBody
+testPragma = configureParser pragma
 
 ------------------------------------------------------------------------}}}

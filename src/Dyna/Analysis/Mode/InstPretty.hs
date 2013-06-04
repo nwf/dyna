@@ -2,6 +2,9 @@
 -- | Functions for pretty-printing Insts
 --
 -- Intended to be imported qualified
+--
+-- XXX Maybe some of the parser's handling of insts should end up over here,
+-- too?
 
 -- Header material                                                      {{{
 {-# LANGUAGE OverloadedStrings #-}
@@ -19,6 +22,13 @@ compactUniq UMostlyUnique    = "mu"
 compactUniq UShared          = "sh"
 compactUniq UMostlyClobbered = "mc"
 compactUniq UClobbered       = "cl"
+
+fullUniq :: (IsString a) => Uniq -> a
+fullUniq UUnique          = "unique"
+fullUniq UMostlyUnique    = "mostlyunique"
+fullUniq UShared          = "shared"
+fullUniq UMostlyClobbered = "mostlyclobbered"
+fullUniq UClobbered       = "clobbered"
             
 compactly :: (f -> Doc e)
           -> (a -> Doc e)
