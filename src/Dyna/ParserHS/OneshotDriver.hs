@@ -67,17 +67,19 @@ data PCS = PCS
     --
     -- XXX add arity to key?
   , _pcs_operspec  :: OperSpec
-  , _pcs_opertab   :: EOT
+  , _pcs_ot_cache  :: EOT
     -- ^ Cache the operator table so we are not rebuilding it
     -- before every parse operation
   , _pcs_ruleix    :: RuleIx
   }
 $(makeLenses ''PCS)
 
-_pcs_dlc pcs = DLC (_pcs_opertab pcs)
+_pcs_dlc pcs = DLC (_pcs_ot_cache pcs)
 
 update_pcs_dt = pcs_dt_cache <<~
                 liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
+
+update_pcs_ot = pcs_ot_cache <<~ flip mkEOT True <$> (use pcs_operspec)
 
 dtmk "dyna"      = disposTab_dyna
 dtmk "prologish" = disposTab_dyna
@@ -104,7 +106,7 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_modemap   = mempty -- XXX
 
              , _pcs_operspec  = defOperSpec
-             , _pcs_opertab   = mkEOT (defPCS ^. pcs_operspec) True
+             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) True
 
              , _pcs_ruleix    = 0
              }
@@ -147,7 +149,17 @@ pcsProcPragma (p :~ s) = dynacSorry $ "Cannot handle pragma"
                                       PP.<//> prettySpanLoc s
 
 -- XXX
-pragmasFromPCS pcs = empty
+pragmasFromPCS (PCS dt_mk dt_over _
+                    im mm
+                    om _
+                    rix) =
+  PP.vcat $ map renderPragma $
+       (map (\((k,_),(s,as)) -> PDispos s k as)
+          $ M.toList dt_over)
+    ++ [PDisposDefl dt_mk]
+    ++ (map (\(n,(as,pi,_)) -> PInst (PNWA n as) pi) $ M.toList im)
+    ++ (map (\(n,(as,pmf,pmt,_)) -> PMode (PNWA n as) pmf pmt) $ M.toList mm)
+    ++ [PRuleIx rix]
 
 nextRule :: (DeltaParsing m, LookAheadParsing m, MonadState PCS m)
          => m (Spanned Rule)
@@ -161,12 +173,12 @@ oneshotDynaParser :: (DeltaParsing m, LookAheadParsing m)
                   => m ParsedDynaProgram
 oneshotDynaParser = (postProcess =<<)
                   $ flip runStateT defPCS
-                  $ many $ do
+                  $ many (try $ do
                             r <- nextRule
                             rix <- pcs_ruleix <<%= (+1)
                             dt  <- use pcs_dt_cache
-                            return $ (rix, dt, r)
-                    <* whiteSpace
+                            return $ (rix, dt, r))
+                    <* optional (dynaWhiteSpace (someSpace))
  where
   postProcess (rs,pcs) = return $ PDP rs (pragmasFromPCS pcs)
 

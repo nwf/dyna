@@ -249,9 +249,11 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs _ <- parse
+    P.PDP rs pp <- parse
 
-    dump DumpParsed (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
+    dump DumpParsed $
+         (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
+     <> line <> pp
    
     let (frs, anfWarns) = unzip $ map normRule rs
 
@@ -292,7 +294,7 @@ processFile fileName = bracket openOut hClose go
             dump DumpDopUpd (renderDopUpds be_ddi uPlans')
 
             -- Invoke the backend code generator
-            be_d aggm uPlans' {- qPlans -} initializers' out
+            be_d aggm uPlans' {- qPlans -} initializers' pp out
 
   parse = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser <* T.eof) fileName

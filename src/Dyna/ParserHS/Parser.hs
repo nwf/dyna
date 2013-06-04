@@ -43,7 +43,7 @@ module Dyna.ParserHS.Parser (
     -- * Parser output types
     NameWithArgs(..),
     -- ** Surface langauge
-    Term(..), Rule(..),
+    Term(..), Rule(..), dynaWhiteSpace,
     -- ** Pragmas
     ParsedInst(..), ParsedModeInst, Pragma(..), renderPragma,
     -- ** Line
@@ -177,6 +177,9 @@ newtype EOT = EOT { unEOT :: forall m .
 -- XXX Add support for Haskell-style `foo`.  This requires augmenting
 -- the PFIn branch of interpret below to check for the ` framing and
 -- change the symbol returned (but not the symbol matched!)
+--
+-- XXX On parser failure, we get a huge mass of cruft for "expected: ...",
+-- since it blats out the entire operator table.  Can we fix that?
 mkEOT :: OperSpec
       -> Bool   -- ^ add some measure of fail-safety using generic
                 -- parsers
@@ -225,7 +228,7 @@ instance MonadTrans DynaLanguage where
   lift = DL . lift
 
 instance (TokenParsing m, MonadPlus m) => TokenParsing (DynaLanguage m) where
-  someSpace = buildSomeSpaceParser (lift someSpace) dynaCommentStyle
+  someSpace = dynaWhiteSpace (lift someSpace)
   semi      = lift semi
   highlight h (DL m) = DL (highlight h m)
 
@@ -257,6 +260,9 @@ dynaCommentStyle =  CommentStyle
   , _commentLine  = "%"
   , _commentNesting = True
   }
+
+dynaWhiteSpace :: (TokenParsing m) => m () -> m ()
+dynaWhiteSpace m = buildSomeSpaceParser m dynaCommentStyle
 
 ------------------------------------------------------------------------}}}
 -- Identifier Syles                                                     {{{
@@ -494,7 +500,7 @@ parseAggr = token
 rule :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
      => m Rule
 rule = do
-  _ <- optional whiteSpace
+  _ <- whiteSpace
   h@(_ :~ hs) <- term
   choice [ do
             _    <- try (char '.' <* lookAhead whiteSpace)

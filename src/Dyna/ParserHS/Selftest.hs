@@ -183,13 +183,14 @@ case_tyAnnot = e @=? (term fintx)
 ------------------------------------------------------------------------}}}
 -- Aggregators                                                          {{{
 
+test_aggregators :: [TF.Test]
 test_aggregators = hUnitTestToTests $ TestList
   [ TestLabel "valid" $ TestList $
       map (\x -> (BU.toString x) ~: x ~=? unsafeParse testAggr x)
         ["+=", "*=", ".=", "min=", "max=", "?=", ":-", "max+=" ]
   , TestLabel "invalid" $ TestList $
       map (\x -> TestLabel (BU.toString x) $ TestCase $ checkParseFail_ testAggr x)
-        [".", ". ", "+=3", "+=a" ]
+        [".", ". ", "+=3", "+3=", "+=a", "+a=" ]
   ]
 
 ------------------------------------------------------------------------}}}
@@ -430,6 +431,7 @@ arbPragma = oneof
 
   arbAtom = elements [ "f", "+" ]
 
+prop_pragma_roundtrip :: Property
 prop_pragma_roundtrip = 
   forAll arbPragma (\p -> p == unsafeParse (testPragma defDLC)
                       (BU.fromString
@@ -444,23 +446,5 @@ selftest = $(testGroupGenerator)
 
 main :: IO ()
 main = $(defaultMainGenerator)
-
-------------------------------------------------------------------------}}}
--- Experimental debris (XXX)                                            {{{
-
-{-
-runParser :: (Show a) => (forall r . Language (Parser r String) a) -> B.ByteString -> Result TermDoc a
-runParser p = parseByteString (dynafy p <* eof) M.mempty
-
-testParser :: (Show a) => (forall r . Language (Parser r String) a) -> String -> IO ()
-testParser p = parseTest (dynafy p <* eof)
-
-testDyna :: (Show a) => (forall r . Language (Parser r String) a) -> String -> Result TermDoc a
-testDyna p i = runParser p (BU.fromString i)
-
-cs r e = case r of
-           Success w s | S.null w -> assertEqual "XXX" e s
-           _ -> assertBool "XXX" False
--}
 
 ------------------------------------------------------------------------}}}

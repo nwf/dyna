@@ -41,7 +41,7 @@ noBackend = Backend
           , be_driver         = driver
           }
 
-driver am um {-_-} is fh = hPutStrLn fh "No backend selected; stopping."
+driver _ _ {-_-} _ _ fh = hPutStrLn fh "No backend selected; stopping."
 
 ------------------------------------------------------------------------}}}
 -- Primitive operations                                                 {{{

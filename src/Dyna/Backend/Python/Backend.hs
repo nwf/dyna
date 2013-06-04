@@ -274,7 +274,7 @@ printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope 
 -- Driver                                                               {{{
 
 driver :: BackendDriver PyDopeBS
-driver am um {-qm-} is fh = do
+driver am um {-qm-} is pp fh = do
   -- Aggregation mapping
   forM_ (M.toList am) $ \((f,a),v) -> do
      hPutStrLn fh $ show $    "agg_decl"

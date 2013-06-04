@@ -16,19 +16,24 @@ module Dyna.Analysis.ANFSelftest where
 import qualified Data.ByteString              as B
 import qualified Data.List                    as L
 import qualified Data.Map                     as M
+import           Data.Monoid
 import qualified Text.Trifecta                as T
 import           Text.PrettyPrint.Free
 
 import           Dyna.Analysis.ANF
+import qualified Dyna.ParserHS.OneshotDriver  as PD
 import qualified Dyna.ParserHS.Parser         as P
 import           Dyna.ParserHS.Selftest
 import           Dyna.Term.Normalized
+import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
 
 testNormRule :: B.ByteString -> (Rule, ANFWarns)
-testNormRule = normRule . unsafeParse P.rawDRule
+testNormRule s = normRule ( 0
+                          , disposTab_dyna mempty
+                          , unsafeParse (T.spanned (P.testRule defDLC)) s)
 
 {-
 e1 = testNormRule "f(X)."
