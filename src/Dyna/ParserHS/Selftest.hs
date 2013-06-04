@@ -19,6 +19,7 @@ module Dyna.ParserHS.Selftest where
 import           Control.Applicative
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString                     as B
+import qualified Data.ByteString.UTF8                as BU
 -- import           Data.Foldable (toList)
 -- import           Data.Monoid (mempty)
 -- import qualified Data.Sequence                       as S
@@ -29,10 +30,10 @@ import           Dyna.ParserHS.OneshotDriver
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm (Annotation(..), TBase(..))
 import           Dyna.XXX.TrifectaTest
-import qualified Test.Framework                      as TF
+import           Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit
 import           Test.Framework.TH
-import           Test.HUnit
+import           Test.HUnit                          as H
 import           Text.Trifecta
 import           Text.Trifecta.Delta
 
@@ -177,6 +178,18 @@ case_tyAnnot = e @=? (term fintx)
   fintx = "f(:int X)"
 
 ------------------------------------------------------------------------}}}
+-- Aggregators                                                          {{{
+
+test_aggregators = hUnitTestToTests $ TestList
+  [ TestLabel "valid" $ TestList $
+      map (\x -> (BU.toString x) ~: x ~=? unsafeParse testAggr x)
+        ["+=", "*=", ".=", "min=", "max=", "?=", ":-", "max+=" ]
+  , TestLabel "invalid" $ TestList $
+      map (\x -> TestLabel (BU.toString x) $ TestCase $ checkParseFail_ testAggr x)
+        [".", ". ", "+=3", "+=a" ]
+  ]
+
+------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
 progrule :: ByteString -> Spanned Rule
@@ -188,14 +201,14 @@ progrules = unsafeParse (many (spanned (testRule defDLC)) <* eof)
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
 oneshotRules = xlate . unsafeParse (oneshotDynaParser)
  where
-  xlate (PDP rs) = map (\(i,_,sr) -> (i,sr)) rs
+  xlate (PDP rs _) = map (\(i,_,sr) -> (i,sr)) rs
 
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progrule sr)
  where
   e  = Rule
        (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
-       "&="
+       "|="
        (TFunctor "true" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
@@ -211,6 +224,29 @@ case_ruleSimple = e @=? (progrule sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 10 10) sr
   sr = "goal += 1."
+
+case_ruleSimple_funny_spacing :: Assertion
+case_ruleSimple_funny_spacing = e @=? (progrule sr)
+ where
+  e  = Rule
+       (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 5 5) sr)
+       "+="
+       (TFunctor "a" [] :~ Span (Columns 7 7) (Columns 8 8) sr)
+      :~ ts
+  ts = Span (Columns 0 0) (Columns 9 9) sr
+  sr = "goal +=a."
+
+case_ruleSimple_no_spaces :: Assertion
+case_ruleSimple_no_spaces = e @=? (progrule sr)
+ where
+  e  = Rule
+       (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+       "+="
+       (TFunctor "a" [] :~ Span (Columns 6 6) (Columns 7 7) sr)
+      :~ ts
+  ts = Span (Columns 0 0) (Columns 8 8) sr
+  sr = "goal+=a."
+
 
 case_ruleSimple0 :: Assertion
 case_ruleSimple0 = e @=? (progrule sr)

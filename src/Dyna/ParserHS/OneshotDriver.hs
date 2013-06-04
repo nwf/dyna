@@ -36,7 +36,8 @@ import qualified Text.PrettyPrint.Free            as PP
 -- Output                                                               {{{
 
 data ParsedDynaProgram = PDP
-  { _pdp_rules  :: [(RuleIx, DisposTab, Spanned Rule)]
+  { _pdp_rules    :: [(RuleIx, DisposTab, Spanned Rule)]
+  , _pdp_next_rix :: RuleIx
   }
 
 ------------------------------------------------------------------------}}}
@@ -148,6 +149,6 @@ oneshotDynaParser = (postProcess =<<) $ flip runStateT defPCS
                                                 return $ (rix, dtmk dto, r)
                                         <* whiteSpace
  where
-  postProcess (rs,pcs) = return $ PDP rs
+  postProcess (rs,pcs) = return $ PDP rs (pcs^.pcs_ruleix)
 
 ------------------------------------------------------------------------}}}

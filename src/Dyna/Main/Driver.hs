@@ -249,7 +249,7 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs <- parse
+    P.PDP rs _ <- parse
 
     dump DumpParsed (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
    

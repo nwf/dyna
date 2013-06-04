@@ -51,7 +51,7 @@ module Dyna.ParserHS.Parser (
     -- * Action
     parse,
     -- * Test harness hooks
-    testTerm, testRule, testPragma,
+    testTerm, testAggr, testRule, testPragma,
 ) where
 
 import           Control.Applicative
@@ -323,13 +323,11 @@ dynaOperStyle = IdentifierStyle
   , _styleReservedHighlight = ReservedOperator
   }
 
-dynaAggStyle :: TokenParsing m => IdentifierStyle m
-dynaAggStyle = IdentifierStyle
-  { _styleName = "Aggregator"
-  , _styleStart   =     (oneOfSet $ usualpunct CS.\\ CS.fromList ".,")
-                    <|> lower
-  , _styleLetter  =     (oneOfSet $ usualpunct)
-                    <|> alphaNum
+dynaAggNameStyle :: TokenParsing m => IdentifierStyle m
+dynaAggNameStyle = IdentifierStyle
+  { _styleName = "Aggregator Name"
+  , _styleStart   = lower
+  , _styleLetter  = letter
   , _styleReserved = mempty
   , _styleHighlight = Operator
   , _styleReservedHighlight = ReservedOperator
@@ -337,8 +335,8 @@ dynaAggStyle = IdentifierStyle
 
 -- | Aggregators must end with one of these symbols; used to prevent
 -- an over-zealous interpretation of concatenation as a rule.
-aggTermSyms :: H.HashSet Char
-aggTermSyms = H.fromList "=-"
+aggTermSyms :: CS.CharSet
+aggTermSyms = CS.fromList "=-"
 
 dynaNameStyle :: TokenParsing m => IdentifierStyle m
 dynaNameStyle = IdentifierStyle
@@ -480,33 +478,32 @@ tfexpr = buildExpressionParser moreETable tlexpr <?> "Expression"
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
 
-parseAggr :: (DeltaParsing m) => m B.ByteString
-parseAggr =
+-- XXX There must be a better way.
+parseAggr :: (DeltaParsing m, LookAheadParsing m) => m B.ByteString
+parseAggr = token
  (do
-   a <- ident dynaAggStyle
-   when (not $ (last a) `H.member` aggTermSyms) $
-     unexpected "Improper terminal character in aggregator"
-   bsf (pure a)
+   an <- optional (identNL dynaAggNameStyle)
+   as <- manyTill (oneOfSet usualpunct)
+                  (try $ lookAhead $ oneOfSet aggTermSyms
+                                   <* notFollowedBy (oneOfSet usualpunct))
+   ae <- oneOfSet aggTermSyms
+   bsf (pure $ maybe id (++) an $ as ++ [ae])
  ) <?> "Aggregator"
 
 rule :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
      => m Rule
-rule = optional whiteSpace
-       *> choice [
-             -- HEAD AGGR TFEXPR .
-             try $ Rule <$> term
-                        <*  whiteSpace
-                        <*> parseAggr
-                        <*> tfexpr
-
-             -- HEAD .
-           , do
-                h@(_ :~ s) <- term
-                Rule <$> pure h
-                     <*> pure "&="
-                     <*> pure (TFunctor "true" [] :~ s)
-           ]
-       <* {- optional -} (char '.')
+rule = do
+  _ <- optional whiteSpace
+  h@(_ :~ hs) <- term
+  choice [ do
+            _    <- try (char '.' <* lookAhead whiteSpace)
+            return (Rule h "|=" (TFunctor "true" [] :~ hs))
+         , do
+            aggr <- parseAggr
+            body <- tfexpr
+            _    <- char '.'
+            return (Rule h aggr body)
+         ]
 
 ------------------------------------------------------------------------}}}
 -- Pragmas                                                              {{{
@@ -678,6 +675,10 @@ parse = configureParser dline
 testTerm   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m (Spanned Term)
 testTerm   = configureParser term
+
+testAggr   :: (DeltaParsing m, LookAheadParsing m)
+           => m B.ByteString
+testAggr   = parseAggr
 
 testRule   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m Rule
