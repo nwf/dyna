@@ -69,7 +69,6 @@ class Hypergraph(object):
             print >> f, 'digraph rule {'
             print >> f, 'rankdir=LR;'  # left-to-right layout
 
-
             print >> f, 'node [style=filled,fillcolor=white];'
 
             print >> f, 'bgcolor="transparent";'
@@ -223,12 +222,20 @@ def main(dynafile, browser=True):
 <head>
 <style>
 
-html, body {margin:0; padding:0;}
+html, body {margin:0; padding:0; width: 5000px;}
 
-#dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%; padding-left: 10px;  }
-#circuit-pane { position:absolute; width: 50%; top: 10px; left: 42%; padding-left: 5%; }
-#dopamine-pane { position: absolute; top: 10px; left: 100%; width: 42%; padding-right: 5%; }
-#update-handler-pane { position: absolute; top: 10px; left: 150%; width: 45%; padding-right: 5%; }
+#dyna-source, #circuit-pane, #dopamine-pane, #update-handler-pane {
+  padding-right: 10px;
+  width: 700px;
+  display: inline;
+  float: left;
+  padding: 20px;
+}
+
+#dyna-source { width: 500px; }
+#circuit-pane { width: 700px; }
+#dopamine-pane { width: 500px; }
+#update-handler-pane { width: 500px; }
 
 #dyna-source, #circuit-pane, #dopamine-pane {
   border-right: 1px solid #666
@@ -366,18 +373,20 @@ Initializer:
 
             print >> html, '<h2>Update code</h2>'
 
-            for block in re.split('# --\n', code)[1:]:  # drop the begining bit.
-                [(f, bline, bcol, eline, ecol, code)] = \
-                    re.findall('# (.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n#.*\n([\w\W]*)',
+            for block in re.split('\n\s*\n', code):
+
+                x = re.findall('Span:\s*(.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n',
                                block)
 
-                code = re.compile('^\s*#.*', re.M).sub('', code.strip())
+                if not x:
+                    continue
 
+                [(f, bline, bcol, eline, ecol)] = x
+                code = block
                 lexer = get_lexer_by_name("python", stripall=True)
                 formatter = HtmlFormatter(linenos=False)
                 pretty_code = highlight(code, lexer, formatter)
 
-#
                 print >> html, """\
 <div class="handler-%s">
 <pre>
@@ -387,11 +396,12 @@ Initializer:
 """ % (bline, pretty_code)
 
         print >> html, '</pre>'
-
         print >> html, '</div>'
 
     if browser:
-        os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+        #os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
+        import webbrowser
+        webbrowser.open(html.name)
 
 
 

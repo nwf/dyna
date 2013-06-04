@@ -235,31 +235,31 @@ pdope _d =         (indent 4 $ "for _ in [None]:")
                  $ go xs
 
 
-printPlanHeader :: Handle -> Rule -> Cost -> Maybe Int -> IO ()
-printPlanHeader h r c mn = do
-  hPutStrLn h $ "# --"
-    -- XXX This "prefixSD" thing is the only real reason we're doing this in
-    -- IO; it'd be great if wl-pprint-extras understood how to prefix each
-    -- line it was laying out.
-  displayIO h $ prefixSD "# " $ renderPretty 1.0 100
-                $ (prettySpanLoc $ r_span r) <> line
-  hPutStrLn h $ "# EvalIx: " ++ (show mn)
-  hPutStrLn h $ "# Cost: " ++ (show c)
+printPlanHeader :: Rule -> Cost -> Maybe Int -> Doc e
+printPlanHeader r c mn = do
+  vcat ["'''"
+       , "Span:  " <+> (prettySpanLoc $ r_span r)
+       , "RuleIx:" <+> (pretty $ r_index r)
+       , "EvalIx:" <+> (pretty mn)
+       , "Cost:  " <+> (pretty c)
+       , "'''"]
 
-printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
-printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) dope = do
+printInitializer :: Handle -> Rule -> Cost -> Actions PyDopeBS -> IO ()
+printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
-                   `above` "def" <+> char '_' <> tupled ["emit"] <+> colon
+                   `above` "def" <+> char '_' <> tupled ["emit"] <> colon
+                   `above` (indent 4 $ printPlanHeader rule cost Nothing)
                    `above` pdope dope
                    <> line
 
 -- XXX INDIR EVAL
-printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
-printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
+printUpdate :: Handle -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
+printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
-                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <+> colon
+                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <> colon
+                   `above` (indent 4 $ printPlanHeader rule cost (Just evalix))
                    `above` pdope dope
                    <> line
 
@@ -282,14 +282,12 @@ driver am um {-qm-} is fh = do
      hPutStrLn fh ""
      hPutStrLn fh $ "# " ++ show fa
      forM_ ps $ \(r,n,c,vi,vo,act) -> do
-       printPlanHeader fh r c (Just n)
-       printUpdate fh r fa (vi,vo) act
+       printUpdate fh r c n fa (vi,vo) act
 
   hPutStrLn fh ""
   hPutStrLn fh $ "# ==Initializers=="
   forM_ is $ \(r,c,a) -> do
-    printPlanHeader  fh r c Nothing
-    printInitializer fh r a
+    printInitializer fh r c a
 
 {-
   hPutStrLn fh $ "# ==Queries=="
