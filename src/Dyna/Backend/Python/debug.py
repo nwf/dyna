@@ -222,12 +222,20 @@ def main(dynafile, browser=True):
 <head>
 <style>
 
-html, body {margin:0; padding:0;}
+html, body {margin:0; padding:0; width: 5000px;}
 
-#dyna-source { position:absolute; height: 95%; width: 42%; top: 10px; left: 0%; padding-left: 10px;  }
-#circuit-pane { position:absolute; width: 50%; top: 10px; left: 42%; padding-left: 5%; }
-#dopamine-pane { position: absolute; top: 10px; left: 100%; width: 42%; padding-right: 5%; }
-#update-handler-pane { position: absolute; top: 10px; left: 150%; width: 45%; padding-right: 5%; }
+#dyna-source, #circuit-pane, #dopamine-pane, #update-handler-pane {
+  padding-right: 10px;
+  width: 700px;
+  display: inline;
+  float: left;
+  padding: 20px;
+}
+
+#dyna-source { width: 500px; }
+#circuit-pane { width: 700px; }
+#dopamine-pane { width: 500px; }
+#update-handler-pane { width: 500px; }
 
 #dyna-source, #circuit-pane, #dopamine-pane {
   border-right: 1px solid #666
@@ -369,10 +377,6 @@ Initializer:
 
                 x = re.findall('Span:\s*(.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n',
                                block)
-
-                print '-------------------'
-                print block
-                print x
 
                 if not x:
                     continue
