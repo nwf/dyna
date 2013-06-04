@@ -1,6 +1,6 @@
 
 % Dijkstra's algorithm for single-source shortest path
-path(*start) min= 0 .
+path(start) min= 0 .
 path(B) min= path(A) + edge(A,B).
 
 start := "a".
