@@ -118,7 +118,7 @@ constants = go
   go ("%",2)     = Just $ PDBS $ infixOp "%"
   go ("+",2)     = Just $ PDBS $ infixOp "+"
 
-  go ("mod",1)   = Just $ PDBS $ call "mod"
+  go ("mod",2)   = Just $ PDBS $ call "mod"
   go ("abs",1)   = Just $ PDBS $ call "abs"
   go ("log",1)   = Just $ PDBS $ call "log"
   go ("exp",1)   = Just $ PDBS $ call "exp"
@@ -217,7 +217,6 @@ pdope_ (OPEmit h r i vs) =
                    , pretty r
                    , pretty i
                    , varmap
-                   , "delete=delete"
                    ]
  where
   -- A python map of variable name to value
@@ -251,7 +250,7 @@ printInitializer :: Handle -> Rule -> Actions PyDopeBS -> IO ()
 printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
-                   `above` "def" <+> char '_' <> tupled ["delete"] <+> colon
+                   `above` "def" <+> char '_' <> tupled ["emit"] <+> colon
                    `above` pdope dope
                    <> line
 
@@ -260,7 +259,7 @@ printUpdate :: Handle -> Rule -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDop
 printUpdate fh rule@(Rule _ h _ r _ _ _ _) (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@register" <> parens (pfa f a)
-                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"delete"]) <+> colon
+                   `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <+> colon
                    `above` pdope dope
                    <> line
 

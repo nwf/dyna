@@ -7,11 +7,6 @@ MISC
 
  - TODO: create an Interpreter object to hold state.
 
- - TODO: sorted order of Chart seems to have changed. Check that this changed order
-   makes sense
-
-     timv: look at the diff--what were we doing before?
-
  - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
    delete mode (3) remove initializers.
 
@@ -22,42 +17,31 @@ MISC
  - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
    disallow ``a += &b.``
 
-     equals (=) aggregation (only one value allowed, multiplicity >0 on only one value)
+     Equals aggregation only one value allowed, mult. >0 on single value. The
+     following program has one FP of `c` end `e` are mutually exclusive.
 
-     a = b for c
-     a = d for e
+       a = b for c
+       a = d for e
 
-     c and e might be mutually exclusive in all FP, but not during computation
-     -- this is the same as the error problem (e.g. division problem)
+     This might not be the case during computation -- this is the same as the
+     error problem.
 
  - TODO: doc tests for Dyna code!
 
  - TODO: repl needs to pass parser a rule index pragma to start from.
 
+      blocked: nwf will tell me what bits of parser state to send back to him.
+
  - TODO: build hypergraph from unrolled circuit. This requires a little bit of
    thinking because we don't yet know what things in the chart have been
    touched.
 
+ - TODO: transactions for errors.
 
-Use ruleix to make := work at the REPL
-
-:- ruleix 100
-
-
-
-NOTES
-=====
- - "initializers" aren't just initializers, they are the fully-naive bottom-up
-   inference rules.
 
 
 PARSER
 ======
-
-  - TODO: Singled quoted strings:
-
-    x += f('result = 5').
-
 
   - TODO: Nested expressions:
 
@@ -150,11 +134,15 @@ INTERPRETER
   timv: This isn't sufficiently motivating because we can just leave `a` as
   `null` until we pass the divide by zero error.
 
+
+
+
 """
 
 from __future__ import division
 import os, sys
 from collections import defaultdict, namedtuple
+from functools import partial
 from argparse import ArgumentParser
 
 from utils import ip, red, green, blue, magenta, yellow, dynahome, \
@@ -301,7 +289,8 @@ class Chart(object):
     def insert(self, args, val):
 
         # debugging check: row is not already in chart.
-        assert self.lookup(args) is None, '%r already in chart with value %r' % (args, val)
+        assert self.lookup(args) is None, \
+            '%r already in chart with value %r' % (args, val)
 
         self.intern[args] = term = Term(self.name, args)
         term.value = val
@@ -358,8 +347,11 @@ def register(fn):
 register.handlers = defaultdict(list)
 
 
+# - "initializers" aren't just initializers -- They are fully-naive bottom-up
+#   inference routines. At the moment we only use them to initialize the chart.
+
 def initializer(_):
-    "Same idea as register"
+    "Implementation idea is very similar to register."
 
     def wrap(handler):
         initializer.handlers.append(handler)
@@ -377,14 +369,23 @@ def update_dispatcher(item, val, delete):
     if val is None:
         return
     for handler in register.handlers[item.fn]:
+
+        emittiers = []
+        _emit = lambda item, val, ruleix, variables: \
+            emittiers.append(lambda: emit(item, val, ruleix, variables, delete=delete))
+
         try:
-            handler(item, val, delete=delete)
+            handler(item, val, emit=_emit)
         except (TypeError, ZeroDivisionError) as e:
             if error_suppression:
                 #print >> trace,
                 print '%s on update %s = %s' % (e, item, val)
             else:
                 raise e
+        else:
+            # no exception, accept emissions.
+            for e in emittiers:
+                e()
 
 
 def peel(fn, item):
@@ -410,14 +411,12 @@ def emit(item, val, ruleix, variables, delete):
     print >> trace, (red % 'delete' if delete else green % 'update'), \
         '%s (val %s; curr: %s)' % (item, val, item.value)
 
-    assert not isinstance(val, tuple) or isinstance(val, Term)
-
     if delete:
         item.aggregator.dec(val, ruleix, variables)
     else:
         item.aggregator.inc(val, ruleix, variables)
 
-    agenda[item] = 0
+    agenda[item] = 0   # everything is high priority
 
 
 changed = {}
@@ -437,12 +436,13 @@ def _go():
         print >> trace, '(was: %s,' % (was,),
 
         now = item.aggregator.fold()
-        print >> trace, 'now:', str(now) + ')'
+        print >> trace, 'now: %s)' % (now,)
 
         if was == now:
             print >> trace, yellow % 'unchanged'
             continue
 
+        # TODO: handle was and now at the same time to avoid the two passes.
         if was is not None:
             update_dispatcher(item, was, delete=True)
 
@@ -493,7 +493,8 @@ def load(f):
         print >> trace, yellow % h.read()
 
     # load generated code.
-    execfile(f, globals())
+    execfile(f, globals())     # if we want to isolate side-effects of new code
+                               # we can pass in something insead of globals()
 
 
 def dump(code, filename='/tmp/tmp.dyna'):
@@ -513,8 +514,11 @@ def do(filename):
     load(filename)
 
     for init in initializer.handlers:   # assumes we have cleared
+
+        _emit = partial(emit, delete=False)
+
         try:
-            init(delete=False)
+            init(emit=_emit)
         except (TypeError, ZeroDivisionError) as e:
             if error_suppression:
                 #print >> trace,
@@ -526,16 +530,15 @@ def do(filename):
 
 
 
-import cmd
-import readline
+import cmd, readline
 
 class REPL(cmd.Cmd, object):
 
     def __init__(self, hist):
         cmd.Cmd.__init__(self)
-        #self.prompt = ":- "
         self.hist = hist
         if not os.path.exists(hist):
+            readline.clear_history()
             with file(hist, 'wb') as f:
                 f.write('')
         readline.read_history_file(hist)
@@ -569,22 +572,10 @@ class REPL(cmd.Cmd, object):
 
     def do_changed(self, _):
         if not changed:
-            #print 'nothing changed.'
-            #print
             return
         print '============='
         for x, v in sorted(changed.items()):
             print '%s := %r' % (x, v)
-        print
-
-    def do_dump(self, _):
-        print '============='
-        for fn in sorted(chart):
-            c = chart[fn]
-            for i, r in sorted(c.data.items(), key=lambda x: x[1]):  # sort by Term's arguments
-                val = r[-1]
-                if val is not None:
-                    print '%-30s := %r' % (Term(fn, i), val)
         print
 
     def do_chart(self, args):
@@ -629,7 +620,7 @@ class REPL(cmd.Cmd, object):
             print "Queries don't end with a dot."
             return
 
-        query = 'out(%s) dict= _VALUE is %s, _VALUE.' % (self.lineno, line)
+        query = 'out(%s) dict= _VALUE is (%s), _VALUE.' % (self.lineno, line)
 
         print blue % query
 
@@ -663,6 +654,9 @@ class REPL(cmd.Cmd, object):
         except KeyboardInterrupt:
             print '^C'
             self.cmdloop()
+        except Exception as e:
+            readline.write_history_file(self.hist)
+            raise e
 
 
 def repl(hist):
