@@ -1,5 +1,5 @@
-import math, operator
-from collections import defaultdict, Counter
+import operator
+from collections import Counter
 from utils import red
 
 
@@ -47,7 +47,7 @@ def user_vars(variables):
     # remove the 'u' prefix on user variables 'uX'
 
     # Note: We also ignore user variables with an underscore prefix
-    
+
     return tuple((name[1:], val) for name, val in variables.items() if name.startswith('u') and not name.startswith('u_'))
 
 

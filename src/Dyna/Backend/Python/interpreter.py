@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 """
-
 MISC
 ====
+
+ - TODO: mode planning failures are slient.
 
  - TODO: create an Interpreter object to hold state.
 
@@ -38,20 +39,24 @@ MISC
 
  - TODO: transactions for errors.
 
+ - TODO: Numeric precision is an issue with BAggregators.
 
+     a[0.1] += 1
+     a[0.1 + eps] -= 1
 
-PARSER
-======
+   Approaches:
 
-  - TODO: Nested expressions:
+    - arbitrary precision arithmetic
 
-    out(0) dict= _VALUE is (rewrite(X,Y) + rewrite(X,Y,Z)), _VALUE.
+    - approximate deletion ("buckets"), find the nearest neighbor and delete it.
 
-    FATAL: Encountered error in input program:
-     Parser error
-     /tmp/tmp.dyna:1:14: error: expected: "."
-     rewrite(X,Y) + rewrite(X,Y,Z)<EOF>
-                  ^
+    - hybrid: maintain streaming sum and the bag check periodically for quality
+      and null.
+
+    - numeric approximations, stream folding (fails to get null)
+
+    - delete the hyperedge: not sure this is perfect because hyperedges aren't
+      named with numeric values of variables.
 
 
 What is null?
@@ -81,8 +86,8 @@ REPL
 
  - TODO: (Aggregator conflicts)
 
-   The good: we throw and AggregatorConflict exception if newly loaded code
-   tries to overwrite an aggregator in `agg_decl`.
+   We throw and AggregatorConflict exception if newly loaded code tries to
+   overwrite an aggregator in `agg_decl`.
 
    However, we need to make sure that we don't load subsequent code pertaining
    to this rule that we should reject altogether.
@@ -119,7 +124,7 @@ INTERPRETER
 
   The reason we have to support error is because the system might need to go
   through an error state before it can reach it's fixed out. In order to be
-  invariant to execution order (preserve our semantice) we to need to have the
+  invariant to execution order (preserve our semantics) we to need to have the
   ability fo reach pass thru an error state.
 
   for example:
@@ -133,9 +138,6 @@ INTERPRETER
 
   timv: This isn't sufficiently motivating because we can just leave `a` as
   `null` until we pass the divide by zero error.
-
-
-
 
 """
 
