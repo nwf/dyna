@@ -152,11 +152,11 @@ prop_nSubGLB_is_G i1 i2 i3 = nWFU i1 && nWFU i2 && nWFU i3
 -- input half of the mode, then unify the input variables with the output
 -- half of the mode.  We know that the output half is ≼ the input half.
 prop_call_test_sufficient :: NIX TestFunct -> NIX TestFunct -> QCP.Property
-prop_call_test_sufficient i1 i2 = nWFN i1 && nWFN i2 && nSub i1 i2
-                              QCP.==> nWFN (nLeqGLB i1 i2)
+prop_call_test_sufficient i1 i2 = nWFN' i1 && nWFN' i2 && nSub i1 i2
+                              QCP.==> nWFN' (nLeqGLB i1 i2)
 
 selftest :: TF.Test
-selftest = moreTries 10000 $ moreTests 400 $(testGroupGenerator)
+selftest = moreTries 5000 $(testGroupGenerator)
 
 main :: IO ()
 main = TF.defaultMain [selftest]
