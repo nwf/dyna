@@ -160,7 +160,7 @@ class AggregatorConflict(Exception):
 class chart_indirect(dict):
     def __missing__(self, key):
         arity = int(key.split('/')[-1])
-        c = self[key] = Chart(name = key, ncols = arity + 1)  # +1 for value
+        c = self[key] = Chart(name = key, arity = arity)
         return c
 
 
@@ -232,11 +232,11 @@ class Term(namedtuple('Term', 'fn args'), object):
 
 class Chart(object):
 
-    def __init__(self, name, ncols):
+    def __init__(self, name, arity):
         self.name = name
-        self.ncols = ncols
+        self.arity = arity
         self.intern = {}   # args -> term
-        self.ix = [defaultdict(set) for _ in xrange(ncols-1)]  # TODO: no index on values yet.
+        self.ix = [defaultdict(set) for _ in xrange(arity)]
 
     def __repr__(self):
         rows = [term for term in self.intern.values() if term.value is not None]
@@ -244,16 +244,15 @@ class Chart(object):
         return '%s\n=================\n%s' % (self.name, x)
 
     def __getitem__(self, s):
-
-        assert isinstance(s, tuple) and len(s) == self.ncols, \
-            'item width mismatch: ncols %s, item %s' % (self.ncols, len(s))
+        assert len(s) == self.arity + 1, \
+            'item width mismatch: arity %s, item %s' % (self.arity, len(s))
 
         args, val = s[:-1], s[-1]
 
         assert val is not None
 
+        # filter set of candidates by each bound argument
         candidates = None
-
         for (ix, x) in zip(self.ix, args):
             if isinstance(x, slice):
                 continue
@@ -263,10 +262,11 @@ class Chart(object):
             else:
                 candidates &= ix[x]
                 if not len(candidates):
+                    # no candidates left
                     break
 
-        # all arguments must be bound.
         if candidates is None:
+            # This happens when all arguments are free.
             candidates = self.intern.values()
 
         # handle the value column separately because we don't index it yet.
@@ -281,7 +281,7 @@ class Chart(object):
 
     def lookup(self, args):
         "find index for these args"
-        assert len(args) == self.ncols - 1
+        assert len(args) == self.arity
 
         try:
             return self.intern[args]
@@ -390,6 +390,19 @@ def update_dispatcher(item, val, delete):
                 e()
 
 
+def emit(item, val, ruleix, variables, delete):
+
+    print >> trace, (red % 'delete' if delete else green % 'update'), \
+        '%s (val %s; curr: %s)' % (item, val, item.value)
+
+    if delete:
+        item.aggregator.dec(val, ruleix, variables)
+    else:
+        item.aggregator.inc(val, ruleix, variables)
+
+    agenda[item] = 0   # everything is high priority
+
+
 def peel(fn, item):
     """
     Find item's args in the appropriate chart. Assert that idx matches
@@ -406,19 +419,6 @@ def peel(fn, item):
     assert isinstance(item, Term)
     assert item.fn == fn
     return item.args
-
-
-def emit(item, val, ruleix, variables, delete):
-
-    print >> trace, (red % 'delete' if delete else green % 'update'), \
-        '%s (val %s; curr: %s)' % (item, val, item.value)
-
-    if delete:
-        item.aggregator.dec(val, ruleix, variables)
-    else:
-        item.aggregator.inc(val, ruleix, variables)
-
-    agenda[item] = 0   # everything is high priority
 
 
 changed = {}
