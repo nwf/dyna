@@ -106,7 +106,7 @@ instance (EqLen xs ys) => EqLen (x ': xs) (y ': ys)
 
 infixr 5 :+
 
--- | A heterogenous list
+-- | A heterogeneous list
 data HList a where
  HN   :: HList '[]
  (:+) :: a -> HList b -> HList (a ': b)
@@ -144,7 +144,7 @@ hrlmap' f (a :+ as) = f a :+ (hrlmap' f as)
 
 infixr 5 :++
 
--- | A heterogenous list in which every element is the image of some
+-- | A heterogeneous list in which every element is the image of some
 -- type-function @r :: * -> *@.
 data HRList (r :: k -> *) (a :: [k]) where
  HRN   :: HRList r '[]
@@ -171,7 +171,7 @@ hrlmapa :: (Applicative m)
 hrlmapa _  HRN       = pure HRN
 hrlmapa f (a :++ as) = liftA2 (:++) (f a) (hrlmapa f as)
 
--- | Eliminate a HRList to a homogenous list
+-- | Eliminate a HRList to a homogeneous list
 hrlproj :: (forall a . r a -> b) -> HRList r t -> [b]
 hrlproj _  HRN       = []
 hrlproj f (a :++ as) = f a : (hrlproj f as)

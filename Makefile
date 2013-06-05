@@ -1,13 +1,13 @@
 # -*-  indent-tabs-mode:t;  -*-
 
-all: build
+all: deps build
 
 upstream:
 	git submodule init
-	git submodule update external/ekmett-parsers external/ekmett-trifecta
-	cabal install --user --enable-tests --only-dependencies \
-      external/ekmett-parsers external/ekmett-trifecta .
-	cabal install --user external/ekmett-parsers external/ekmett-trifecta 
+	# git submodule update external/ekmett-parsers external/ekmett-trifecta
+	# cabal install --user --enable-tests --only-dependencies \
+	#  external/ekmett-parsers external/ekmett-trifecta .
+	# cabal install --user external/ekmett-parsers external/ekmett-trifecta
 
 deps:
 	alex --version || cabal install alex
@@ -18,7 +18,7 @@ build:
 	cabal configure --user --enable-tests
 	cabal build
 
-tests:
+test tests: build
 	dist/build/dyna-selftests/dyna-selftests
 	# cabal test
 

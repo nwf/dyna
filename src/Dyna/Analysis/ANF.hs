@@ -301,6 +301,12 @@ normTerm_ _   ss (P.TFunctor f [t T.:~ st]) | f == dynaQuoteOper = do
 -- Evaluation is a little different: in addition to forcing the context to
 -- evaluate, it must also evaluate if the context from on high is one of
 -- evaluation!
+--
+-- XXX This is not right.  Consider ":-dispos &pair(*,*)."  If I want to
+-- evaluate a pair/2 in evaluation context, then I need to write &(*pair(1,2)),
+-- so that the & suppresses the context's influence and * overrides the
+-- pair's disposition.... actually that's true of variables, too.  f(*X)
+-- does not mean what it should in the new syntax.
 normTerm_ c   ss (P.TFunctor f [t T.:~ st]) | f == dynaEvalOper =
     normTerm_ (ECExplicit,ADEval) (st:ss) t
     >>= \nt -> case c of

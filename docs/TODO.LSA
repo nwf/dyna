@@ -11,9 +11,10 @@ Parse QMode pragmas
 
 List notation
 
------ Frontend
+Strict end-of-rule punctuation, warn if blank line at plausible end-of-rule
+position? (polish for LSA)
 
-:= syntactic sugar
+----- Frontend
 
 ----- Analysis
 
@@ -31,14 +32,16 @@ Unification alias tracking (after LSA?)
 
 ----- Backend
 
-Check that we have = aggregation working correctly.
+",/2" runtime error if first argument is not true or false
+    Probably OK for this one to crash the program!
 
-Special error value (for = agg violation, div by 0, ...)
-	Some flavor of "root cause" pointer / string / ... ?
+Check that we have = aggregation working correctly.
 
 Could we maybe get a better chart representation?
 	And better queries into the chart?  We should be able to extract
 	adorned queries from the planner's output without too much effort...
+
+Prioritization heuristic
 
 Maybe something better for initializers or update API? (Low priority)
 
@@ -46,20 +49,19 @@ DOpAMine improvements for non-ground structure (probably no time!)
 
 ----- Documentation
 
+Forward port shortest path tutorial
+
 Mention ^C in documentation for diverging programs.
 
 Be sure to mention, repeatedly, that this is experimental software and is
 likely to break both early and often.  Explain the difference between panic
 messages and errors.
 
------ Whole pipeline
+----- REPL
 
-Need some better mechanism for executing queries after the agenda empties.
-	Take query, feed back to compiler / planner / ...
-		In general, we'd need to indicate which set of things we are
-		at present maintaining and possibly feed the whole program back
-		through the pipeline... if we stick with everything being
-		materialized, we can just feed the query through.
+Make use of resumable parsing functionality
+
+----- Whole pipeline
 
 Can we extract backpointers from the chart or generate code to do so?
 
@@ -69,3 +71,21 @@ Can we run anything on e.g. WSJ with L0 grammar?
 How about... (other things students might want to do)
 	train a log-linear model (e.g. by using := for weights)
 	find the K most-frequent bigrams (even from the repl?)
+
+----- Things that still have bits and bobs pending
+
+Queries (initializers), new rule insertions (both plans and initializers)
+
+Need some better mechanism for executing queries after the agenda empties.
+	Take query, feed back to compiler / planner / ...
+		In general, we'd need to indicate which set of things we are
+		at present maintaining and possibly feed the whole program back
+		through the pipeline... if we stick with everything being
+		materialized, we can just feed the query through.
+
+DOpAMine improvements for logging of hyper-edges
+    Right now we manage this through timv's cleverness in the backend,
+    rather than anything formal.
+
+Graphical view of the hypergraph
+    Tim has something pretty neat working

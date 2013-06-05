@@ -150,10 +150,9 @@ fgn v cf cg cn = do
 
 possible :: (Monad m)
          => BackendPossible fbs
-         -> Rule
          -> Crux DVar TBase
          -> SIMCT m DFunct (Actions fbs)
-possible fp r cr =
+possible fp cr =
   case cr of
     -- XXX This is going to be such a pile.  We really, really should have
     -- unification crank out a series of DOpAMine opcodes for us, but for
@@ -210,20 +209,22 @@ possible fp r cr =
                                  (throwError UFExDomain)
 
     -- XXX Indirect evaluation is not yet supported
-    Left (eix, CEval _ _) -> dynacSorry $ "Indir eval"
-                                      <+> parens ("eix=" <> pretty eix)
-                                      <+> "in rule at"
-                                      </> prettySpanLoc (r_span r)
+    Left (_, CEval _ _) -> throwError UFExDomain
 
     -- Evaluation
     Left (_, CCall vo vis funct) -> do
       is <- mapM mkMV vis 
       o  <- mkMV vo
       case fp (funct,is,o) of
-          -- XXX Not a built-in, so we assume that it can be iterated in full.
+          -- XXX Not a built-in, so we assume that it can be
+          -- iterated in full.
         Left False      -> do mapM_ bind (vo:vis)
                               return [OPIter o is funct DetNon Nothing]
+
+          -- Builtin called in improper mode; bail on this plan
         Left True        -> throwError UFExDomain
+
+          -- Builtin called in accessible mode; apply bindings and return
         Right (BAct a m) -> do runReaderT
                                  (mapM_ (uncurry $ flip unifyUnaliasedNV) m)
                                  (UnifParams True True) -- XXX Live?
@@ -239,39 +240,6 @@ possible fp r cr =
                            (return ())
                            (throwError UFExDomain)
      bind x = runReaderT (unifyVU x) (UnifParams False False)
-
-------------------------------------------------------------------------}}}
--- ANF to Cruxes                                                        {{{
-
-{-
-anfVars :: ANFState -> S.Set DVar
-anfVars (AS { as_evals = evals, as_unifs = unifs, as_assgn = assgns } ) =
-  S.unions [ M.foldWithKey (\k v s -> S.insert k (go1 v s)) S.empty evals
-           , M.foldWithKey (\k v s -> S.insert k (go2 v s)) S.empty assgns
-           , foldr (\(v1,v2) s -> S.insert v1 (S.insert v2 s)) S.empty unifs
-           ]
-  where
-   go s (_,vs) = S.union s (S.fromList vs)
-   go1 e s = either (flip S.insert s) (go s) e
-   go2 e s = either (const s) (go s) e
-
-
-eval_cruxes :: ANFState -> [EvalCrux DVar]
-eval_cruxes = M.foldrWithKey (\o i -> (crux o i :)) [] . as_evals
- where
-  crux :: DVar -> EVF -> EvalCrux DVar
-  crux o (Left v) = CEval o v
-  crux o (Right (f,as)) = CCall o as f
-
-unif_cruxes :: ANFState -> [UnifCrux DVar NTV]
-unif_cruxes (AS { as_assgn = assigns, as_unifs = unifs }) =
-     M.foldrWithKey (\o i -> (crux o i :)) [] assigns
-  ++ map (\(v1,v2) -> CAssign v1 (NTVar v2)) unifs
- where
-  crux :: DVar -> EBF -> UnifCrux DVar NTV
-  crux o (Left  x)              = CAssign o (NTBase x)
-  crux o (Right (f,as))         = CStruct o as f
--}
 
 ------------------------------------------------------------------------}}}
 -- Costing Plans                                                        {{{
@@ -458,12 +426,12 @@ planUpdate :: BackendPossible fbs
            -> SIMCtx DVar
            -> Maybe (Cost, Actions fbs)
 planUpdate bp r sc anf mi ictx = fmap (second (finalizePlan r)) $
-  bestPlan $ planner_ (possible bp r) sc anf (Just mi) ictx
+  bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
 planInitializer bp r = fmap (second (finalizePlan r)) $
   let cruxes = r_cruxes r in
-  bestPlan $ planner_ (possible bp r) simpleCost cruxes Nothing
+  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
 -- | Given a particular crux and the remaining evaluation cruxes in a rule, 

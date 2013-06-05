@@ -83,10 +83,10 @@ alias_unifyVF n1 n2 =
   fmap fst $ runIdentity
            $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
            $ do
-              flip runReaderT (UnifParams True False) $ do
-                FA.unifyUnaliasedNV n1 vA
+              _ <- flip runReaderT (UnifParams True False) $ do
+                _ <- FA.unifyUnaliasedNV n1 vA
                 FA.unifyUnaliasedNV n2 vB
-              FA.unifyVF True (const $ return True) vA G [vB]
+              _ <- FA.unifyVF True (const $ return True) vA G [vB]
               FA.expandV vA
  where
    vA = "A"
