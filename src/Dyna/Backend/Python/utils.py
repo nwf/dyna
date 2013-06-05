@@ -143,3 +143,39 @@ class prioritydict(dict):
 
     setdefault = None
     update = None
+
+
+def parse_attrs(fn):
+    attrs = dict(re.findall('\s*(\S+):\s*(.*)\s*\n', fn.__doc__.strip()))
+    if 'Span' in attrs:
+        attrs['rule'] = rule_source(attrs['Span']).strip()
+    return attrs
+
+
+def rule_source(span):
+    """
+    Utility for retrieving source code for Parsec error message.
+    """
+    [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
+    (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
+
+    with file(filename) as f:
+        src = f.read()
+
+    lines = [l + '\n' for l in src.split('\n')]
+
+    rlines = lines[bl-1: el]
+
+    if len(rlines) > 1:
+        s = rlines[0][bc-1:]
+        m = rlines[1:-1]
+        e = rlines[-1][:ec]
+        return s + ''.join(m) + e
+
+    else:
+        [line] = rlines
+        return line[bc-1:ec]
+
+
+if __name__ == '__main__':
+    rule_source('examples/papa.dyna:4:1-examples/papa.dyna:4:47')

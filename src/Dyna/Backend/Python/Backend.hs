@@ -203,13 +203,13 @@ pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
 pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
                                       <+> pretty val <> ": continue"
 pdope_ (OPPeel vs i f) = return $
-    "try:" `above` (indent 4 $
+    --"try:" `above` (indent 4 $
            tupledOrUnderscore vs
             <+> equals
                 <+> "peel" <> (parens $ pfas f vs <> comma <> pretty i)
-     )
+    --)
     -- you'll get a "TypeError: 'NoneType' is not iterable."
-    `above` "except (TypeError, AssertionError): continue"
+    --`above` "except (TypeError, AssertionError): continue"
 pdope_ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
@@ -268,7 +268,7 @@ printPlanHeader r c mn = do
 printInitializer :: Handle -> Rule -> Cost -> Actions PyDopeBS -> IO ()
 printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "@initializer" <> parens (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
+                 $ "@initializer" <> (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
                    `above` "def" <+> char '_' <> tupled ["emit"] <> colon
                    `above` (indent 4 $ printPlanHeader rule cost Nothing)
                    `above` pdope dope
@@ -278,7 +278,7 @@ printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
 printUpdate :: Handle -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
 printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "@register" <> parens (pfa f a)
+                 $ "@register" <> (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <> colon
                    `above` (indent 4 $ printPlanHeader rule cost (Just evalix))
                    `above` pdope dope
@@ -297,7 +297,7 @@ driver am um {-qm-} is pr fh = do
 
   -- Aggregation mapping
   forM_ (M.toList am) $ \((f,a),v) -> do
-     hPutStrLn fh $ show $    "agg_decl"
+     hPutStrLn fh $ show $    "_agg_decl"
                            <> brackets (dquotes $ pretty f <> "/" <> pretty a)
                            <+> equals <+> (dquotes $ pretty v)
 

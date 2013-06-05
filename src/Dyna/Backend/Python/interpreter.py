@@ -1,8 +1,22 @@
 #!/usr/bin/env python
 
 """
+
+This error message is unhelpful
+
+    :-dispos_def dyna.
+    :-ruleix 27.
+    rewrite("VP", "V", "NP") -= 100.
+
+    FATAL: Encountered error in input program:
+     Parser error
+     /tmp/tmp.dyna:1:1: error: expected: end of input
+     :-dispos_def dyna.
+
 MISC
 ====
+
+ - TODO: filter and bulk loader
 
  - TODO: make sure interpreter uses the right exceptions. The codegen catches a
    few things -- I think assertionerror is one them... we should probably do
@@ -90,16 +104,16 @@ REPL
  - TODO: (Aggregator conflicts)
 
    We throw and AggregatorConflict exception if newly loaded code tries to
-   overwrite an aggregator in `agg_decl`.
+   overwrite an aggregator in `_agg_decl`.
 
    However, we need to make sure that we don't load subsequent code pertaining
    to this rule that we should reject altogether.
 
-   timv: At the moment I believe we're safe because agg_decl is set before any
-   of the registers (i.e. it's at the top of the generated code). This obviously
-   isn't the best way to do this, but we're going to have to overhaul this
-   entire infrastructure soon to handle rule-retraction.. So we can fix this
-   later.
+   timv: At the moment I believe we're safe because `_agg_decl` is set before
+   any of the registers (i.e. it's at the top of the generated code). This
+   obviously isn't the best way to do this, but we're going to have to overhaul
+   this entire infrastructure soon to handle rule-retraction.. So we can fix
+   this later.
 
 """
 
@@ -118,7 +132,19 @@ from defn import aggregator
 
 
 class AggregatorConflict(Exception):
-    pass
+    def __init__(self, key, expected, got):
+        msg = "Aggregator conflict %r was %r trying to set to %r." \
+            % (key, expected, got)
+        super(AggregatorConflict, self).__init__(msg)
+
+
+class DynaInitializerException(Exception):
+    def __init__(self, exception, init):
+        msg = '%r in ininitializer for rule\n  %s\n        %s' % \
+            (exception,
+             init.dyna_attrs['Span'],
+             init.dyna_attrs['rule'])
+        super(DynaInitializerException, self).__init__(msg)
 
 
 # TODO: as soon as we have safe names for these things we can get rid of this.
@@ -133,11 +159,10 @@ class chart_indirect(dict):
 class aggregator_declaration(object):
     def __init__(self):
         self.map = {}
-    def __setitem__(self, key, value):
-        if key in self.map and self.map[key] != value:
-            raise AggregatorConflict("Aggregator conflict %s was %r trying to "
-                                     "set to %r." % (key, self.map[key], value))
-        self.map[key] = value
+    def __setitem__(self, key, val):
+        if key in self.map and self.map[key] != val:
+            raise AggregatorConflict(key, self.map[key], val)
+        self.map[key] = val
     def __getitem__(self, key):
         try:
             return self.map[key]
@@ -145,13 +170,21 @@ class aggregator_declaration(object):
             return None
 
 
+# options
 error_suppression = True
 trace = None
-agg_decl = aggregator_declaration()
+
 agenda = prioritydict()
 chart = chart_indirect()
 errors = {}
 changed = {}
+
+# declarations
+_agg_decl = aggregator_declaration()
+_edges = defaultdict(set)
+_updaters = defaultdict(list)
+_initializers = []
+_rules = {}
 
 
 def dump_charts(out=sys.stdout):
@@ -213,14 +246,13 @@ class Term(object):
     __add__ = __sub__ = __mul__ = notimplemented
 
 
-_edges = defaultdict(set)
 def edges():
     def _emit(item, val, ruleix, variables):
         b = variables['nodes']
         b.sort()
         b = tuple(b)
         _edges[item].add((ruleix, b))
-    for init in initializer.handlers:
+    for init in _initializers:
         init(emit=_emit)
 
 
@@ -290,7 +322,7 @@ class Chart(object):
 
         self.intern[args] = term = Term(self.name, args)
         term.value = val
-        term.aggregator = aggregator(agg_decl[self.name])
+        term.aggregator = aggregator(_agg_decl[self.name])
 
         # indexes new term
         for i, x in enumerate(args):
@@ -319,44 +351,32 @@ def register(fn):
     Decorator for registering update handlers. Used by update dispatcher.
 
     Note: registration is with a global/mutable table.
-
-    For testing purposes clear current handlers
-    >>> register.handlers.clear()
-
-    >>> @register("test")
-    ... def _(H, V):
-    ...     return 'OK', H, V
-    ...
-    >>> [h] = register.handlers['test']
-    >>> h("head", "val")
-    ('OK', 'head', 'val')
-
     """
 
     def wrap(handler):
-        register.handlers[fn].append(handler)
+        handler.dyna_attrs = parse_attrs(handler)
+        _updaters[fn].append(handler)
         # you can't call these guys directly. Must go thru handler
         # indirection table
         return None
 
     return wrap
 
-register.handlers = defaultdict(list)
-
 
 # - "initializers" aren't just initializers -- They are fully-naive bottom-up
 #   inference routines. At the moment we only use them to initialize the chart.
+
+from utils import parse_attrs
 
 def initializer(_):
     "Implementation idea is very similar to register."
 
     def wrap(handler):
-        initializer.handlers.append(handler)
+        handler.dyna_attrs = parse_attrs(handler)
+        _initializers.append(handler)
         return None
 
     return wrap
-
-initializer.handlers = []
 
 
 def update_dispatcher(item, val, delete):
@@ -367,7 +387,7 @@ def update_dispatcher(item, val, delete):
     if val is None:
         return
 
-    for handler in register.handlers[item.fn]:
+    for handler in _updaters[item.fn]:
 
         emittiers = []
         _emit = lambda item, val, ruleix, variables: \
@@ -383,8 +403,10 @@ def update_dispatcher(item, val, delete):
                 if item not in errors:
                     errors[item] = (val, [])
 
-                errors[item][1].append('%s\n        in rule %s' % \
-                                           (e, re.findall('Span:\s*(.*?)\n', handler.__doc__)[0]))
+                errors[item][1].append('%s\n        in rule %s\n            %s' % \
+                                           (e,
+                                            handler.dyna_attrs['Span'],
+                                            handler.dyna_attrs['rule']))
 
             else:
                 raise e
@@ -441,9 +463,6 @@ def _go():
         was = item.value
         print >> trace, '(was: %s,' % (was,),
 
-        if item in errors:    # clear the error
-            del errors[item]
-
         try:
             now = item.aggregator.fold()
         except (ZeroDivisionError, TypeError) as e:
@@ -457,8 +476,17 @@ def _go():
             print >> trace, yellow % 'unchanged'
             continue
 
+        was_error = False
+        if item in errors:    # clear the error
+            was_error = True
+            del errors[item]
+
         # TODO: handle `was` and `now` at the same time to avoid the two passes.
-        if was is not None:
+        if was is not None and not was_error:
+
+            # if `was` resulted in an error we know it didn't propagate so we
+            # can skip running the update dispatcher in delete mode.
+
             update_dispatcher(item, was, delete=True)
 
         item.value = now
@@ -488,6 +516,7 @@ def dynac_code(code, debug=False, run=True):
     out = '%s.plan.py' % dyna
 
     with file(dyna, 'wb') as f:
+        f.write(globals().get('parser_state', ''))  # include parser state if any.
         f.write(code)
 
     if dynac(dyna, out):   # stop if the compiler failed.
@@ -507,6 +536,9 @@ def load(f):
         print >> trace, magenta % 'Loading new code'
         print >> trace, yellow % h.read()
 
+    # TODO: loading new code should be atomic. if we fail for some reason we
+    # need to revert.
+
     # load generated code.
     execfile(f, globals())     # if we want to isolate side-effects of new code
                                # we can pass in something insead of globals()
@@ -524,25 +556,22 @@ def do(filename):
 
     assert os.path.exists(filename)
 
-    initializer.handlers = []    # XXX: do we really want to clear?
+    global _initializers
+    _initializers = []     # XXX: do we really want to clear?
 
     load(filename)
 
-    for init in initializer.handlers:   # assumes we have cleared
+    for init in _initializers:   # assumes we have cleared
 
-        _emit = partial(emit, delete=False)
+        def _emit(head, val, *args, **kw):
+            return emit(head, val, *args, delete=False, **kw)
 
         try:
             init(emit=_emit)
         except (TypeError, ZeroDivisionError) as e:
-            if error_suppression:
-                #print >> trace,
-                print e, 'in initializer.'
-            else:
-                raise e
+            raise DynaInitializerException(e, init)
 
     go()
-
 
 
 import cmd, readline
@@ -592,6 +621,7 @@ class REPL(cmd.Cmd, object):
         for x, v in sorted(changed.items()):
             print '%s := %r' % (x, v)
         print
+        dump_errors()
 
     def do_chart(self, args):
         if not args:
@@ -606,6 +636,7 @@ class REPL(cmd.Cmd, object):
             for f in args.split():
                 print chart[f]
                 print
+            dump_errors()
 
     def emptyline(self):
         """Do nothing on empty input line"""

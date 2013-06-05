@@ -5,6 +5,11 @@ a += 1/b.
 
 c += "" + b.
 
+% initializer exceptions.
+%p += 1+null.
+%q max= 3/0.
+
+    b := b/0. a += b/0.
 
 d += null.
 d += 1.
