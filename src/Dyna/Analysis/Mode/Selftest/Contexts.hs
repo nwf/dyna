@@ -2,6 +2,7 @@
 -- | Tests for context and unification functions.
 
 -- Header material                                                      {{{
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -20,6 +21,7 @@ import           Dyna.Analysis.Mode.Selftest.NamedInst
 import           Dyna.Analysis.Mode.Selftest.Term
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.XXX.TestFramework
 import qualified Test.Framework                                as TF
 import           Test.Framework.Providers.QuickCheck2
 import           Test.QuickCheck.Property                      as QCP
@@ -28,16 +30,60 @@ import           Test.Framework.TH
 ------------------------------------------------------------------------}}}
 -- Utility Functions                                                    {{{
 
-
-unifProp filter test gold i1 i2 =
-  filter i1 && filter i2 QCP.==>
+unifProp :: forall t a f .
+            (Eq a, Ord f)
+         => (t -> Bool)
+         -> (t -> t -> Either a (NIX f))
+         -> (t -> t -> Either a (NIX f))
+         -> t
+         -> t
+         -> Property
+unifProp filt test gold i1 i2 =
+  filt i1 && filt i2 QCP.==>
   case (test i1 i2, gold i1 i2) of
     (Left t , Left g ) -> t == g
     (Right t, Right g) -> nEq t g
     (_, _)             -> False
 
+unifProp2 :: forall t a f .
+            (Eq a, Ord f)
+         => (t -> Bool)
+         -> (t -> t -> Either a (NIX f))
+         -> (t -> t -> Either a (NIX f))
+         -> t
+         -> t
+         -> Property
+unifProp2 filt test gold i1 i2 =
+  filt i1 && filt i2 QCP.==>
+  case (test i1 i2, test i2 i1, gold i1 i2) of
+    (Left  t1, Left  t2, Left  g) -> g `elem` [t1,t2]
+    (Right t1, Right t2, Right g) -> nEq t1 g || nEq t2 g
+    (_       , Left  t , Left  g) -> g == t
+    (Left  t , _       , Left  g) -> g == t
+    (_       , Right t , Right g) -> nEq t g
+    (Right t , _       , Right g) -> nEq t g
+    (_, _, _)                     -> False
+
+
 ------------------------------------------------------------------------}}}
 -- Tests                                                                {{{
+
+prop_no_unifyUnaliasedNV :: NIX TestFunct -> NIX TestFunct -> QCP.Property
+prop_no_unifyUnaliasedNV = unifProp2 wf no_unifyUnaliasedNV lattice
+ where
+  wf n = nWFN' n && n `nSub` (nHide $ IUniv UClobbered)
+
+  lattice n1 n2 = fmap (nUpUniq UShared) $ nLeqGLBRL n1 n2
+
+  no_unifyUnaliasedNV n1 n2 =
+    fmap fst $ runIdentity
+             $ flip CNA.runSIMCT (CNA.allFreeSIMCtx [v])
+             $ flip runReaderT (UnifParams True False)
+             $ do
+                _ <- FNA.unifyUnaliasedNV n1 v
+                _ <- FNA.unifyUnaliasedNV n2 v
+                FNA.expandV v
+   where v = "A"
 
 prop_alias_unifyUnaliasedNV :: NIX TestFunct -> NIX TestFunct -> QCP.Property
 prop_alias_unifyUnaliasedNV = unifProp nWFN' alias_unifyUnaliasedNV nLeqGLBRL
@@ -47,8 +93,8 @@ prop_alias_unifyUnaliasedNV = unifProp nWFN' alias_unifyUnaliasedNV nLeqGLBRL
              $ flip CA.runSIMCT (CA.allFreeSIMCtx [v])
              $ flip runReaderT (UnifParams True False)
              $ do
-                FA.unifyUnaliasedNV n1 v
-                FA.unifyUnaliasedNV n2 v
+                _ <- FA.unifyUnaliasedNV n1 v
+                _ <- FA.unifyUnaliasedNV n2 v
                 FA.expandV v
    where v = "A"
 
@@ -60,9 +106,9 @@ prop_alias_unify = unifProp nWFN' alias_unify nLeqGLBRL
              $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
              $ flip runReaderT (UnifParams True False)
              $ do
-                FA.unifyUnaliasedNV n1 vA
-                FA.unifyUnaliasedNV n2 vB
-                FA.unifyVV vA vB
+                _ <- FA.unifyUnaliasedNV n1 vA
+                _ <- FA.unifyUnaliasedNV n2 vB
+                _ <- FA.unifyVV vA vB
                 FA.expandV vA
    where vA = "A"
          vB = "B"
@@ -74,29 +120,29 @@ prop_alias_unify = unifProp nWFN' alias_unify nLeqGLBRL
 -- of dead and live unifications that do not map onto the lattice functions.
 prop_alias_unifyVF :: NIX TestFunct -> NIX TestFunct -> QCP.Property
 prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
-
-gold n1 n2 = nLeqGLBRD n1 (nHide $ IBound UUnique
+ where
+  gold n1 n2 = nLeqGLBRD n1 (nHide $ IBound UUnique
                                              (M.singleton G [n2])
                                              False)
 
-alias_unifyVF n1 n2 =
-  fmap fst $ runIdentity
-           $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
-           $ do
-              _ <- flip runReaderT (UnifParams True False) $ do
-                _ <- FA.unifyUnaliasedNV n1 vA
-                FA.unifyUnaliasedNV n2 vB
-              _ <- FA.unifyVF True (const $ return True) vA G [vB]
-              FA.expandV vA
- where
-   vA = "A"
-   vB = "B"
+  alias_unifyVF n1 n2 =
+    fmap fst $ runIdentity
+             $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
+             $ do
+                _ <- flip runReaderT (UnifParams True False) $ do
+                  _ <- FA.unifyUnaliasedNV n1 vA
+                  FA.unifyUnaliasedNV n2 vB
+                _ <- FA.unifyVF True (const $ return True) vA G [vB]
+                FA.expandV vA
+   where
+     vA = "A"
+     vB = "B"
 
 ------------------------------------------------------------------------}}}
 -- Harness Toplevel                                                     {{{
 
 selftest :: TF.Test
-selftest = $(testGroupGenerator)
+selftest = moreTries 1000 $(testGroupGenerator)
 
 main :: IO ()
 main = $(defaultMainGenerator)
