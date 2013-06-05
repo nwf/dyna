@@ -8,3 +8,4 @@ Tutorial
 
    hello
    dijkstra
+   errors

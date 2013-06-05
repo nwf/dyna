@@ -61,7 +61,7 @@ case $CMD in
 
     run)
     export PREFIX=$HPATH
-    $@
+    "$@"
     ;;
 
     reinstall)
