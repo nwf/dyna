@@ -300,7 +300,7 @@ class Chart(object):
         else:
             for term in candidates:
                 if term.value == val:
-                    yield term, term.args + (term.value,)
+                    yield term, term.args + (term.value,)   # TODO: change codegen to avoid addition..
 
     def lookup(self, args):
         "find index for these args"
