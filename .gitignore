@@ -4,5 +4,9 @@
 
 dist/
 examples/*.d
-examples/*.out
+examples/*.hist
 examples/*.plan
+examples/*.plan.py
+examples/*.out
+
+docs/sphinx/_build

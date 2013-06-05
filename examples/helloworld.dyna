@@ -1,0 +1,6 @@
+goal += hello*world.        % an inference rule for deriving values
+hello := 6.                 % some initial values
+world := 7.
+
+% This file is mentioned in the tutorial!
+% XREF:docs/sphinx/tutorial/hello.rst

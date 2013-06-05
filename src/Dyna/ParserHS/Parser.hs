@@ -144,11 +144,10 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
                 -- rule index as an opaque token rather than something to be
                 -- interpreted.  Eventually this will go away, when our
                 -- REPLs have captive compilers.
-            
-            -- | PMisc Term
-                -- ^ Fall-back parser for :- lines.
+ 
+            {- --- | PMisc Term
+                -- ^ Fall-back parser for :- lines. -}
  deriving (Eq,Show)
-
 
 -- | The type of a parsed inst declaration
 data ParsedInst = PIVar   !B.ByteString

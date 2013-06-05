@@ -114,20 +114,62 @@ data QuickExit = QEBiblio
                | QEHelpBackend
                | QEHelpDump
                | QEVersion
+               | QEVersionNumber
 
 quickExit :: QuickExit -> IO ()
--- XXX
-quickExit QEBiblio = putStrLn "Bibliographic suggestions would appear here"
-quickExit QEHelp =
+quickExit QEBiblio = do
+  qeBanner "Recommended readings"
+  PPA.putDoc $ PPA.vcat
+   [ (PPA.<$>) (for PPA.green "users")
+     $ PPA.indent 2 $ PPA.vcat
+       [ "Documentation, including a tutorial,"
+         PPA.<+> "is available by running"
+         PPA.<+> PPA.white "make sphinxdoc"
+         PPA.<+> PPA.dot
+       ]
+   , (PPA.<$>) (for PPA.yellow "theoreticians and academics")
+     $ PPA.indent 2 $ PPA.vcat
+       [ "Several papers are available at"
+         PPA.<+> PPA.underline
+                    "http://www.dyna.org/wiki/index.php?title=Publications"
+         PPA.<+> PPA.dot
+       ]
+   , (PPA.<$>) (for PPA.red "developers")
+     $ PPA.indent 2 $ PPA.vcat
+       [ "Source-based documentation can be built by"
+         PPA.<+> PPA.white "make haddock"
+         PPA.<+> PPA.dot
+       ]
+   , PPA.empty
+   ]
+ where
+  for c w = "For" PPA.<+> c w PPA.<> PPA.colon
+
+quickExit QEHelp = do
+  qeBanner "Help! I need somebody! Help! Not just anybody! Heeelp!"
+  putStrLn disclaimer
   putStrLn (usageInfo h helpfulOptions)
  where
+  disclaimer =  "This version of Dyna2 represents a prototype!\n"
+             ++ "There are known inefficiencies and less-than-ideal code.\n"
+             ++ "We hope that you enjoy using it despite these woes! :)"
+
   h = "\nUsage: dyna -B backend -o FILE.out FILE.dyna\n\nOption summary:"
 quickExit QEHelpBackend = do
+  qeBanner "Backend information"
   putDoc backendHelp
   putStrLn ""
-quickExit QEHelpDump = putStrLn (usageInfo "\nDump options:" $ dumpOpts False)
-quickExit QEVersion = return ()
+quickExit QEHelpDump = do
+  qeBanner "Debugging dumps"
+  putStrLn (usageInfo "" $ dumpOpts False)
+quickExit QEVersion = putStrLn $ "Dyna " ++ version
+quickExit QEVersionNumber = putStrLn version
 
+version :: String
+version = "0.4" -- XREF:VERSION
+
+qeBanner :: String -> IO ()
+qeBanner s = putStrLn $ "Dyna " ++ version ++ ": " ++ s
 
 data Opt = OptQE QuickExit
          | OptBackend Backend
@@ -146,9 +188,16 @@ helpMoreOpts =
 infoOpts :: [OptDescr Opt]
 infoOpts = 
   [ Option ['V'] ["version"] (NoArg $ OptQE QEVersion) "display version and exit"
-  -- This is an excellent idea we might consider, taken from the 'pi'
-  -- program of http://www.ginac.de/CLN/
+
+  -- This is an excellent idea, taken from 'pi' at http://www.ginac.de/CLN/
   , Option [] ["bibliography"] (NoArg $ OptQE QEBiblio) "relevant papers"
+  ]
+
+-- | Miscellaneous options which the user probably does not care about
+unhelpfulOpts :: [OptDescr Opt]
+unhelpfulOpts =
+  [ Option [] ["version-number"] (NoArg $ OptQE QEVersionNumber)
+                                 "Display just the version number and exit"
   ]
 
 coreOpts :: [OptDescr Opt]
@@ -165,8 +214,9 @@ coreOpts =
 allOptions :: [OptDescr Opt]
 allOptions =
   helpOpt : helpMoreOpts ++ infoOpts ++ coreOpts ++ (dumpOpts True)
+          ++ unhelpfulOpts
 
--- When the user has asked for help, what do they want to see?
+-- | When the user has asked for help, what do they want to see?
 helpfulOptions :: [OptDescr Opt]
 helpfulOptions = helpMoreOpts ++ infoOpts ++ coreOpts
 
@@ -175,7 +225,6 @@ procArgs argv = do
   case getOpt Permute allOptions argv of
     (os,as,[]) -> case foldOpts os of
                     Left x -> do
-                               putStrLn "Dyna 0.4"
                                quickExit x
                                exitSuccess
                     Right f -> return $ (f defaultDynacConfig, as)
@@ -316,7 +365,7 @@ main_ argv = do
 
 main :: IO ()
 main = catches (getArgs >>= main_)
-               [Handler printerr, Handler someExnPanic]
+               [Handler printerr, Handler exit, Handler someExnPanic]
 
  where
   printerr x = pe x >> exitFailure
@@ -335,6 +384,9 @@ main = catches (getArgs >>= main_)
     PP.hPutDoc stderr (sorryMsg <> line <> taMsg <> line <> PP.indent 1 d)
     hPutStrLn stderr ""
   pe (Panic d) = panic d
+
+  exit ExitSuccess = return ()
+  exit (ExitFailure n) = panic $ "Haskell exit code: " <+> pretty n
 
   someExnPanic (e :: SomeException) = panic $ "Uncaught Haskell exception:"
                                               <+> text (show e)

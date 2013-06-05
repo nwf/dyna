@@ -1,6 +1,6 @@
 # -*-  indent-tabs-mode:t;  -*-
 
-all: deps build
+all: deps build sphinxbuild
 
 upstream:
 	git submodule init
@@ -10,8 +10,8 @@ upstream:
 	# cabal install --user external/ekmett-parsers external/ekmett-trifecta
 
 deps:
-	alex --version || cabal install alex
-	happy --version || cabal install happy
+	alex --version >/dev/null || cabal install alex
+	happy --version >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
 build:
@@ -39,6 +39,7 @@ run-parser:
 # perfect, but it does OK.
 
 HADDOCK_HTML ?= "../\\$$pkgid/html"
+.PHONY: haddock
 haddock:
 	mkdir -p dist/alldoc
 	haddock --html -o dist/alldoc \
@@ -47,8 +48,20 @@ haddock:
 	 `runghc -imisc HaddockPaths "$(HADDOCK_HTML)"` \
 	 `grep -ie '^\( \|\t\)*main-is:' dyna.cabal | sed -e "s/^.*Is: */src\//"`
 
+# Build our sphinx documentation
+.PHONY: sphinxbuild sphinxdoc
+sphinxbuild:
+	(cd docs/sphinx; make html)
+
+sphinxdoc: sphinxbuild
+	python -c 'import webbrowser; \
+	  webbrowser.open("./docs/sphinx/_build/html/index.html")'
+
+doc: sphinxbuild haddock
+
 # If the cabal file doesn't do the right thing, this tries to work through
 # it all by hand.  Blech!  But it's better than nothing.
+.PHONY: ghcbuild
 ghcbuild:
 	mkdir -p dist/build/dyna/
 	mkdir -p dist/build/dyna/dyna-tmp
@@ -66,6 +79,7 @@ ghcbuild:
 
 # Every now and again we need to make a profiling build of some component
 # of the tree.  Set MAINMOD and MAINFILE and make this target.
+.PHONY: profbuild
 profbuild:
 	mkdir -p dist/pb
 	ghc --make -isrc \

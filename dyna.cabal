@@ -1,4 +1,5 @@
 Name:           dyna
+-- XREF:VERSION
 Version:        0.4
 Cabal-Version:  >=1.14
 Build-Type:     Simple

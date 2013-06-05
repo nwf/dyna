@@ -1,18 +1,25 @@
-
 % Dijkstra's algorithm for single-source shortest path
-path(start) min= 0 .
+path(start) min= 0.
 path(B) min= path(A) + edge(A,B).
+goal min= path(end).
 
-start := "a".
+edge("BOS","JFK") := 187.
+edge("BOS","MIA") := 1258.
+edge("JFK","DFW") := 1391.
+edge("JFK","SFO") := 2582.
+edge("JFK","MIA") := 1090.
+edge("MIA","DFW") := 1121.
+edge("MIA","LAX") := 2342.
+edge("DFW","ORD") := 802.
+edge("DFW","LAX") := 1235.
+edge("ORD","DFW") := 802.
+edge("LAX","ORD") := 1749.
 
-edge("a","b") := 1.
-edge("b","d") := 1.
-edge("a","d") := 3.
-edge("a","c") := 1.
-edge("c","d") := 2.
+edge("FriendHouse","BOS") := 10.
+edge("ORD","MyHouse") := 20.
 
-% Expected
-%  path("a") = 0
-%  path("b") = 1
-%  path("c") = 1
-%  path("d") = 2
+start := "FriendHouse".
+end   := "MyHouse".
+
+% This file is mentioned in the tutorial!
+% XREF:docs/sphinx/tutorial/dijkstra.rst
