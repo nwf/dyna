@@ -4,7 +4,13 @@
 MISC
 ====
 
+ - TODO: make sure interpreter uses the right exceptions. The codegen catches a
+   few things -- I think assertionerror is one them... we should probably do
+   whatever this is doing with a custom exception.
+
  - TODO: mode planning failures are slient.
+
+      timv: I think this is a job for @nwf
 
  - TODO: create an Interpreter object to hold state.
 
@@ -13,10 +19,10 @@ MISC
 
  - TODO: hooks from introspection, eval, and prioritization.
 
-     whats the default prioritization?
+     What's the default prioritization?
 
- - TODO: Term's should only be aggregated with ``=`` or ``:=``. We should
-   disallow ``a += &b.``
+ - TODO: Term values should only be aggregated with ``=`` or ``:=`` maybe even
+   ``set=``. We should disallow ``a += &b.``
 
      Equals aggregation only one value allowed, mult. >0 on single value. The
      following program has one FP of `c` end `e` are mutually exclusive.
@@ -33,11 +39,10 @@ MISC
 
       blocked: nwf will tell me what bits of parser state to send back to him.
 
- - TODO: build hypergraph from unrolled circuit. This requires a little bit of
-   thinking because we don't yet know what things in the chart have been
-   touched.
-
  - TODO: Numeric precision is an issue with BAggregators.
+
+         timv: Are we sure we have this bug? or possible that we want to handle
+         it in an adhoc fashion?
 
      a[0.1] += 1
      a[0.1 + eps] -= 1
@@ -96,52 +101,11 @@ REPL
    entire infrastructure soon to handle rule-retraction.. So we can fix this
    later.
 
-
-INTERPRETER
-===========
-
- - Error values (with provenance ideally)
-
-   Consider the following program:
-    | c += 0
-    | b += 1
-    | a += b / c
-    | d += a
-    | e += d
-
-   Results in the fixed point:
-    | c = 0
-    | b = 1
-    | a = error("divison by zero in rule 'a += b / c'")
-    | d = error("because a = error in 'rule d += a.'")   # because error annihilate aggregators
-    | e = error("because of d ...")
-
-  Should errors have linear provenance? The error could have come from more than
-  one parent.
-
-
-  The reason we have to support error is because the system might need to go
-  through an error state before it can reach it's fixed out. In order to be
-  invariant to execution order (preserve our semantics) we to need to have the
-  ability fo reach pass thru an error state.
-
-  for example:
-   :- a += 1/c.
-   :- b += 0.         % (1)
-   :- b += 1.         % (2)
-
-  If we process (1) before (2) we get an error value for `a` due to the divide
-  by zero but then once (2) is processed the error should go away because `b` is
-  no longer `0`. Whereas, (2) before (1) is ok!
-
-  timv: This isn't sufficiently motivating because we can just leave `a` as
-  `null` until we pass the divide by zero error.
-
 """
 
 from __future__ import division
-import os, sys
-from collections import defaultdict, namedtuple
+import re, os, sys
+from collections import defaultdict
 from functools import partial
 from argparse import ArgumentParser
 
@@ -183,10 +147,11 @@ class aggregator_declaration(object):
 
 error_suppression = True
 trace = None
-agenda = prioritydict()
 agg_decl = aggregator_declaration()
+agenda = prioritydict()
 chart = chart_indirect()
 errors = {}
+changed = {}
 
 
 def dump_charts(out=sys.stdout):
@@ -201,15 +166,21 @@ def dump_charts(out=sys.stdout):
         print >> out, chart[x]
         print >> out
 
-    if errors:
-        print >> out
-        print >> out, 'Errors'
-        print >> out, '============'
-        for item, (val, es) in errors.items():
-            print >> out,  'because %r is %r:' % (item, val)
-            for e in es:
-                print >> out, '   ', e
-        print >> out
+    dump_errors(out)
+
+
+def dump_errors(out=sys.stdout):
+    if not errors:
+        return
+    # only print errors if we 'em.
+    print >> out
+    print >> out, 'Errors'
+    print >> out, '============'
+    for item, (val, es) in errors.items():
+        print >> out,  'because %r is %r:' % (item, val)
+        for e in es:
+            print >> out, '   ', e
+    print >> out
 
 
 # TODO: codegen should output a derived Term instance for each functor
@@ -411,9 +382,9 @@ def update_dispatcher(item, val, delete):
 
                 if item not in errors:
                     errors[item] = (val, [])
-                errors[item][1].append(e)
 
-                # TODO: store which rule.
+                errors[item][1].append('%s\n        in rule %s' % \
+                                           (e, re.findall('Span:\s*(.*?)\n', handler.__doc__)[0]))
 
             else:
                 raise e
@@ -456,8 +427,6 @@ def peel(fn, item):
     return item.args
 
 
-changed = {}
-
 def _go():
     "the main loop"
 
@@ -488,7 +457,7 @@ def _go():
             print >> trace, yellow % 'unchanged'
             continue
 
-        # TODO: handle was and now at the same time to avoid the two passes.
+        # TODO: handle `was` and `now` at the same time to avoid the two passes.
         if was is not None:
             update_dispatcher(item, was, delete=True)
 

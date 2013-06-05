@@ -1,4 +1,5 @@
 % Find the most frequent word type and it's frequency in a collection of tokens.
+smoothing := 0.0.
 
 tokens(W) += 1 for word(W,I).   % tokens of word W
 
@@ -9,8 +10,8 @@ maxtokens max= tokens(W).       % number of tokens for the most frequent type
 
 mostfreq max= &pair(tokens(W), W).
 
-mostfreq_type := pair(Cnt, W) is mostfreq, W.
-mostfreq_cnt := pair(Cnt, W) is mostfreq, Cnt.
+mostfreq_type := pair(Cnt,W) is mostfreq, W.
+mostfreq_cnt := pair(Cnt,W) is mostfreq, Cnt.
 
 %%%
 % Just for fun, you can also aggregate types as a set (you can't use sets as a
@@ -26,10 +27,9 @@ bigram(U,V) += 1 for word(U,T), word(V,T+1).
 
 % conditional probably p(U|V)
 p_cond(U,V) := (bigram(U,V) + smoothing) / (tokens(V) + smoothing).
-smoothing := 0.0.
 
 % probability of enture word sequence
-prob_seq *= word(U, T), word(V,T+1), p_cond(U,V).
+prob_seq *= word(U,T), word(V,T+1), p_cond(U,V).
 
 
 % Data!
