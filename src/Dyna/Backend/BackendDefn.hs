@@ -7,7 +7,7 @@
 
 module Dyna.Backend.BackendDefn where
 
-import qualified Data.Set as S
+import qualified Data.Set                         as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
 import           Dyna.Analysis.DOpAMine (BackendRenderDopIter)
@@ -32,8 +32,18 @@ type BackendDriver bs = AggMap                    -- ^ Aggregation
                       -> IO ()
 
 data Backend = forall bs . Backend
-             { -- | Hook for planner to get builtin information
-               be_builtin :: BackendPossible bs
+             { -- | Aggregators exported by this backend, if specified.
+               --
+               -- If not given, the parser will use a generic set of
+               -- aggregators.
+               --
+               -- XXX This is not really right, as the set of aggregators is
+               -- a property of Dyna, not of the backend, but for the
+               -- moment...
+               be_aggregators :: Maybe (S.Set String)
+
+               -- | Hook for planner to get builtin information
+             , be_builtin :: BackendPossible bs
 
                -- | Any constants made available by this backend.
                -- 

@@ -35,7 +35,8 @@ import qualified Debug.Trace                as XT
 
 noBackend :: Backend
 noBackend = Backend
-          { be_builtin        = primPossible
+          { be_aggregators    = Nothing
+          , be_builtin        = primPossible
           , be_constants      = MA.isJust . primOps -- XXX
           , be_debug_dop_iter = \_ _ _ _ _ -> empty
           , be_driver         = driver

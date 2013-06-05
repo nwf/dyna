@@ -298,7 +298,7 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs pp <- parse
+    P.PDP rs pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
 
     dump DumpParsed $
          (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
@@ -317,7 +317,7 @@ processFile fileName = bracket openOut hClose go
                                  empty aggm)
 
     case dcfg_backend ?dcfg of
-      Backend be_b be_c be_ddi be_d ->
+      Backend _ be_b be_c be_ddi be_d ->
         let initializers = MA.mapMaybe
                              (\(f,mca) -> (\(c,a) -> (f,c,a)) `fmap` mca)
                            $ map (\x -> (x, planInitializer be_b x)) frs
@@ -345,8 +345,8 @@ processFile fileName = bracket openOut hClose go
             -- Invoke the backend code generator
             be_d aggm uPlans' {- qPlans -} initializers' pp out
 
-  parse = do
-    pr <- T.parseFromFileEx (P.oneshotDynaParser <* T.eof) fileName
+  parse aggs = do
+    pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
     case pr of
       TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
       TR.Success rs -> return rs

@@ -48,7 +48,7 @@ _tNumeric :: Either Integer Double -> Term
 _tNumeric = TBase . TNumeric
 
 defDLC :: DLCfg
-defDLC = DLC (mkEOT defOperSpec True)
+defDLC = DLC (mkEOT defOperSpec True) genericAggregators
 
 term :: ByteString -> Spanned Term
 term = unsafeParse (testTerm defDLC <* eof)
@@ -185,13 +185,27 @@ case_tyAnnot = e @=? (term fintx)
 
 test_aggregators :: [TF.Test]
 test_aggregators = hUnitTestToTests $ TestList
-  [ TestLabel "valid" $ TestList $
-      map (\x -> (BU.toString x) ~: x ~=? unsafeParse testAggr x)
+  [ TestLabel "generic valid" $ TestList $
+      map (\x -> (BU.toString x) ~: x ~=? unsafeParse testGenericAggr x)
         ["+=", "*=", ".=", "min=", "max=", "?=", ":-", "max+=" ]
-  , TestLabel "invalid" $ TestList $
-      map (\x -> TestLabel (BU.toString x) $ TestCase $ checkParseFail_ testAggr x)
+  , TestLabel "generic invalid" $ TestList $
+      map (\x -> TestLabel (BU.toString x) $ TestCase
+                                           $ checkParseFail_ testGenericAggr x)
         [".", ". ", "+=3", "+3=", "+=a", "+a=" ]
+  , TestLabel "custom accept" $
+      let r = unsafeParse (testRule cdlc) r1
+      in r ~=? Rule (TFunctor "a" [] :~ Span (Columns 0 0) (Columns 2 2) r1)
+                    "+="
+                    (TFunctor "b" [] :~ Span (Columns 5 5) (Columns 6 6) r1)
+  , TestLabel "custom reject" $ TestCase
+                              $ checkParseFail_ (testRule cdlc) "a *= b."
   ]
+ where
+  r1 = "a += b."
+
+  cdlc = DLC { dlc_opertab = dlc_opertab defDLC
+             , dlc_aggrs   = fmap BU.fromString (string "+=")
+             }
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
@@ -203,7 +217,7 @@ progrules :: ByteString -> [Spanned Rule]
 progrules = unsafeParse (many (spanned (testRule defDLC)) <* eof)
 
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
-oneshotRules = xlate . unsafeParse (oneshotDynaParser)
+oneshotRules = xlate . unsafeParse (oneshotDynaParser Nothing)
  where
   xlate (PDP rs _) = map (\(i,_,sr) -> (i,sr)) rs
 

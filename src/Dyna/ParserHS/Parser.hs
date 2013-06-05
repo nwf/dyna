@@ -43,7 +43,7 @@ module Dyna.ParserHS.Parser (
     -- * Parser output types
     NameWithArgs(..),
     -- ** Surface langauge
-    Term(..), Rule(..), dynaWhiteSpace,
+    Term(..), Rule(..), dynaWhiteSpace, genericAggregators,
     -- ** Pragmas
     ParsedInst(..), ParsedModeInst, Pragma(..), renderPragma,
     -- ** Line
@@ -51,7 +51,7 @@ module Dyna.ParserHS.Parser (
     -- * Action
     parse,
     -- * Test harness hooks
-    testTerm, testAggr, testRule, testPragma,
+    testTerm, testGenericAggr, testRule, testPragma,
 ) where
 
 import           Control.Applicative
@@ -217,7 +217,12 @@ parseNameWithArgs n = PNWA <$> n
 ------------------------------------------------------------------------}}}
 -- Parser Monad                                                         {{{
 
-data DLCfg = DLC { dlc_opertab :: EOT }
+data DLCfg = DLC { dlc_opertab :: EOT
+                 , dlc_aggrs   :: forall m .
+                                  (CharParsing m, DeltaParsing m,
+                                   LookAheadParsing m)
+                               => m B.ByteString
+                 }
 
 newtype DynaLanguage m a = DL { unDL :: ReaderT DLCfg m a }
   deriving (Functor,Applicative,Alternative,Monad,MonadPlus,
@@ -485,8 +490,8 @@ tfexpr = buildExpressionParser moreETable tlexpr <?> "Expression"
 -- Rules                                                                {{{
 
 -- XXX There must be a better way.
-parseAggr :: (DeltaParsing m, LookAheadParsing m) => m B.ByteString
-parseAggr = token
+genericAggregators :: (DeltaParsing m, LookAheadParsing m) => m B.ByteString
+genericAggregators = token
  (do
    an <- optional (identNL dynaAggNameStyle)
    as <- manyTill (oneOfSet usualpunct)
@@ -505,7 +510,8 @@ rule = do
             _    <- try (char '.' <* lookAhead whiteSpace)
             return (Rule h "|=" (TFunctor "true" [] :~ hs))
          , do
-            aggr <- parseAggr
+            aggr <- join $ asks dlc_aggrs
+            _    <- whiteSpace
             body <- tfexpr
             _    <- char '.'
             return (Rule h aggr body)
@@ -751,9 +757,9 @@ testTerm   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m (Spanned Term)
 testTerm   = configureParser term
 
-testAggr   :: (DeltaParsing m, LookAheadParsing m)
-           => m B.ByteString
-testAggr   = parseAggr
+testGenericAggr :: (DeltaParsing m, LookAheadParsing m)
+                => m B.ByteString
+testGenericAggr = genericAggregators
 
 testRule   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m Rule

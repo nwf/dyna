@@ -25,7 +25,7 @@ import           Control.Monad.State
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 -- import qualified Data.Ord                   as O
--- import qualified Data.Set                   as S
+import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
 -- import           Dyna.Analysis.Aggregation
@@ -42,6 +42,20 @@ import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           System.IO
 import           Text.PrettyPrint.Free
 -- import qualified Text.Trifecta              as T
+
+------------------------------------------------------------------------}}}
+-- Supported aggregations                                               {{{
+
+aggrs = S.fromList
+  [ "max=" , "min="
+  , "+=" , "*="
+  , "and=" , "or=" , "&=" , "|="
+  , ":-"
+  , "majority=" , "set=" , "bag="
+  , ":="
+  , "dict="
+  ]
+
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Backend Information                                         {{{
@@ -274,7 +288,13 @@ printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope 
 -- Driver                                                               {{{
 
 driver :: BackendDriver PyDopeBS
-driver am um {-qm-} is pp fh = do
+driver am um {-qm-} is pr fh = do
+  -- Parser resume state
+  hPutStrLn fh "parser_state = \"\"\""
+  hPutStrLn fh $ show pr
+  hPutStrLn fh "\"\"\""
+  hPutStrLn fh ""
+
   -- Aggregation mapping
   forM_ (M.toList am) $ \((f,a),v) -> do
      hPutStrLn fh $ show $    "agg_decl"
@@ -313,7 +333,8 @@ driver am um {-qm-} is pp fh = do
 -- Export                                                               {{{
 
 pythonBackend :: Backend
-pythonBackend = Backend builtins
+pythonBackend = Backend (Just aggrs)
+                        builtins
                         (MA.isJust . constants)
                         (\o is _ _ (PDBS e) -> e o is)
                         driver

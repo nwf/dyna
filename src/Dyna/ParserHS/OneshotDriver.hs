@@ -21,7 +21,9 @@ import           Control.Applicative
 import           Control.Lens
 import           Control.Monad.State
 import qualified Data.ByteString                  as B
+import qualified Data.ByteString.UTF8             as BU
 import qualified Data.Map                         as M
+import qualified Data.Set                         as S
 import           Data.Monoid (mempty)
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
@@ -74,7 +76,10 @@ data PCS = PCS
   }
 $(makeLenses ''PCS)
 
-_pcs_dlc pcs = DLC (_pcs_ot_cache pcs)
+mkdlc aggs pcs = DLC (_pcs_ot_cache pcs)
+                     (maybe genericAggregators ct aggs)
+ where
+  ct = fmap BU.fromString . choice . map (try . string) . S.toList
 
 update_pcs_dt = pcs_dt_cache <<~
                 liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
@@ -162,23 +167,27 @@ pragmasFromPCS (PCS dt_mk dt_over _
     ++ [PRuleIx rix]
 
 nextRule :: (DeltaParsing m, LookAheadParsing m, MonadState PCS m)
-         => m (Spanned Rule)
-nextRule = do
-  (l :~ s) <- gets _pcs_dlc >>= parse
-  case l of
-    LPragma  p -> pcsProcPragma (p :~ s) >> nextRule
-    LRule r -> return r
+         => Maybe (S.Set String)
+         -> m (Spanned Rule)
+nextRule aggs = go
+ where
+  go = do
+    (l :~ s) <- gets (mkdlc aggs) >>= parse
+    case l of
+      LPragma  p -> pcsProcPragma (p :~ s) >> go
+      LRule r -> return r
 
 oneshotDynaParser :: (DeltaParsing m, LookAheadParsing m)
-                  => m ParsedDynaProgram
-oneshotDynaParser = (postProcess =<<)
-                  $ flip runStateT defPCS
-                  $ many (try $ do
-                            r <- nextRule
-                            rix <- pcs_ruleix <<%= (+1)
-                            dt  <- use pcs_dt_cache
-                            return $ (rix, dt, r))
-                    <* optional (dynaWhiteSpace (someSpace))
+                  => Maybe (S.Set String)
+                  -> m ParsedDynaProgram
+oneshotDynaParser aggs = (postProcess =<<)
+   $ flip runStateT defPCS
+   $ many (try $ do
+             r <- nextRule aggs
+             rix <- pcs_ruleix <<%= (+1)
+             dt  <- use pcs_dt_cache
+             return $ (rix, dt, r))
+     <* optional (dynaWhiteSpace (someSpace))
  where
   postProcess (rs,pcs) = return $ PDP rs (pragmasFromPCS pcs)
 
