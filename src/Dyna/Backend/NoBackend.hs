@@ -3,12 +3,15 @@
 --
 -- It is anticipated that this will be useful for debugging the earlier
 -- stages of the compiler.
+--
+-- XXX Add a self-test that all primOps modes are supported by other
+-- backends.
 
 -- Header material                                                      {{{
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
-module Dyna.Backend.NoBackend (noBackend) where
+module Dyna.Backend.NoBackend (noBackend, primPossible) where
 
 import           Control.Lens
 import           Control.Monad
@@ -97,7 +100,7 @@ primPossible (f,mvis,mvo) = maybe (Left False) go $ primOps (f,length mvis)
   go [] = Left True
   go (x:xs) = -- XT.traceShow ("PRIMPOSS",mvis,mvo,x) $
               if and (zipWithTails nSub p p qim pim)
-               then Right $ BAct [OPIter mvo mvis f DetNon (Just ())] qom
+               then Right $ BAct [OPIter mvo mvis f (x^.qmode_det) (Just ())] qom
                else go xs
     where
      mvs = mvo:mvis

@@ -14,6 +14,7 @@ import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Main.Defns
 import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
+import           Dyna.XXX.PPrint
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
@@ -51,7 +52,7 @@ data DOpAMine bscg
               -- | Check that the input dvar is an interned representation
               -- of the given functor (and arity as computed from the list
               -- length) and if so, unpack its arguments into those dvars.
-              | OPPeel     [DVar]      DVar        DFunct        -- -+
+              | OPPeel     [DVar]      DVar        DFunct    Det -- -+
 
               -- | The reverse of OPPeel
               | OPWrap     DVar        [DVar]      DFunct        -- -+
@@ -105,7 +106,7 @@ detOfDop x = case x of
                OPAsgn _ _       -> Det
                OPCheq _ _       -> DetSemi
                OPCkne _ _       -> DetSemi
-               OPPeel _ _ _     -> DetSemi
+               OPPeel _ _ _ d   -> d
                OPWrap _ _ _     -> Det
                OPIndr _ _       -> DetSemi
                OPIter _ _ _ d _ -> d
@@ -131,8 +132,10 @@ renderDOpAMine = r
   r _ (OPCheq a b)        = text "OPCheq" <+> pretty a  <+> pretty b
   r _ (OPCkne a b)        = text "OPCkne" <+> pretty a  <+> pretty b
   r _ (OPIndr a b)        = text "OPIndr" <+> pretty a  <+> pretty b
-  r _ (OPPeel vs v f)     = text "OPPeel" <+> pretty vs
-                                          <+> pretty v  <+> pretty f
+  r _ (OPPeel vs v f d)   = text "OPPeel" <+> pretty vs
+                                          <+> pretty v
+                                          <+> pretty f
+                                          <+> text (show d)
   r _ (OPWrap v vs f)     = text "OPWrap" <+> pretty v
                                           <+> pretty vs <+> pretty f
   r e (OPIter v vs f d b) = text "OPIter"
@@ -143,9 +146,10 @@ renderDOpAMine = r
                             <> maybe empty
                                      ((space <>) . braces . e v vs f d)
                                      b
-  r _ (OPEmit h v i vs)   = text "OPEmit" <+> pretty h
-                                          <+> pretty v
-                                          <+> pretty i
-                                          <+> pretty vs
+  r _ (OPEmit h v i vs)   = text "OPEmit"
+                            <+> pretty h
+                            <+> pretty v
+                            <+> pretty i
+                            <+> fillList (map pretty vs)
 
 ------------------------------------------------------------------------}}}

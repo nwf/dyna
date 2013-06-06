@@ -52,8 +52,8 @@ import           Dyna.Analysis.ANF
 import           Dyna.Analysis.ANFPretty
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
-import           Dyna.Analysis.Mode.Execution.ContextNoAlias
-import           Dyna.Analysis.Mode.Execution.FunctionsNoAlias
+import           Dyna.Analysis.Mode.Execution.Context
+import           Dyna.Analysis.Mode.Execution.Functions
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Main.Exception
@@ -137,7 +137,10 @@ mapMaybeModeCompat mis mo =
 -- | Free, Ground, or Neither.  A rather simplistic take on unification.
 --
 -- XXX There is nothing good about this.
-fgn :: forall a m . (Monad m, MCVT m DVar ~ VR DFunct (NIX DFunct), MCR m DVar)
+fgn :: forall a m k .
+       (Monad m, Functor m,
+        MCVT m k    ~ ENKRI DFunct (NIX DFunct) k, MCR m k,
+        MCVT m DVar ~ VR DFunct (NIX DFunct) k, MCR m DVar)
     => DVar -> m a -> m a -> m a -> m a
 fgn v cf cg cn = do
   ff <- v `subVN` (nHide IFree)
@@ -193,7 +196,8 @@ possible fp cr =
                    (is', mcis) <- zipWithM maybeCheck is newvars >>= return . unzip
                    let cis = MA.catMaybes mcis
                    mapM_ bind is
-                   return ([ OPPeel is' o funct ] ++ map (uncurry OPCheq) cis)
+                   return ([ OPPeel is' o funct DetSemi ]
+                           ++ map (uncurry OPCheq) cis)
 
       newvars = map (\n -> BC.pack $ "_chk_" ++ (show n)) [0::Int ..]
 
@@ -261,7 +265,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
                               -- counter-act the cost to encourage them
                               -- to be earlier in the plan.
     OPCkne _ _          -> 0
-    OPPeel _ _ _        -> 0
+    OPPeel _ _ _ _      -> 0
     OPWrap _ _ _        -> 1  -- Upweight building due to side-effects
                               -- in the intern table
     OPIter o is _ d _   -> case d of
@@ -290,7 +294,6 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 
 data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
                           , pp_binds          :: BindChart
-                          , pp_restrictSearch :: Bool
                           , pp_score          :: Cost
                           , pp_plan           :: Actions fbs
                           }
@@ -310,36 +313,32 @@ stepPartialPlan :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
 stepPartialPlan poss score p =
   {- XT.trace ("SPP:\n"
              ++ "  " ++ show (pp_cruxes p) ++ "\n"
-             ++ "  " ++ show (pp_binds p) ++ "\n"
+             ++ show (indent 2 $ pretty $ pp_binds p) ++ "\n"
            ) $ -}
   if S.null (pp_cruxes p)
    then Left $ (pp_score p, pp_plan p)
    else Right $
     let rc = pp_cruxes p
-    in if pp_restrictSearch p
-       -- XXX I am not sure this is right
-       --
-       --     force consideration of non-evaluation cruxes if
-       --     any nonevaluation crux has a possible move.
-       --     If a non-evaluation plan exists, commit to its
-       --     cheapest choice as the only option here.
-       --
-       --     This prevents us from considering the multitude
-       --     stupid plans that begin by evaluating when they
-       --     don't have to.
-       then case step (S.filter (not . cruxIsEval) rc) of
-              [] -> step (S.filter cruxIsEval rc)
-              xs -> [argmin (flip score []) xs]
-       else step rc
+    -- XXX I am not sure this is right
+    --
+    --     force consideration of non-evaluation cruxes if
+    --     any nonevaluation crux has a possible move.
+    --     If a non-evaluation plan exists, commit to its
+    --     cheapest choice as the only option here.
+    --
+    --     This prevents us from considering the multitude
+    --     stupid plans that begin by evaluating when they
+    --     don't have to.
+    in case step (S.filter (not . cruxIsEval) rc) of
+         [] -> step (S.filter cruxIsEval rc)
+         xs -> [argmin (flip score []) xs]
  where
    step = S.fold (\crux ps ->
-                  let bc = pp_binds p
-                      pl = pp_plan p
-                      plan = runIdentity $ runSIMCT (poss crux) bc
+                  let pl = pp_plan p
+                      plan = runIdentity $ runSIMCT (poss crux) (pp_binds p)
                       rc' = S.delete crux (pp_cruxes p)
-                      r'  = (not $ cruxIsEval crux) || (pp_restrictSearch p)
                   in either (const ps)
-                            (\(act,bc') -> PP rc' bc' r' (score p act) (pl ++ act)
+                            (\(act,bc') -> PP rc' bc' (score p act) (pl ++ act)
                                            : ps)
                             plan
                 ) []
@@ -362,7 +361,6 @@ planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
 planner_ st sc cr mic ictx = runAgenda
    $ PP { pp_cruxes = cr
         , pp_binds  = ctx'
-        , pp_restrictSearch = False
         , pp_score  = 0
         , pp_plan   = ip
         }
@@ -390,7 +388,7 @@ planner_ st sc cr mic ictx = runAgenda
   -- XREF:INITPLAN
   (ip,bis) = case mic of
               Nothing -> ([],[])
-              Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f
+              Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f DetSemi
                                                  , OPAsgn o (NTVar ho)]
                                               , o:is)
               Just (CEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)

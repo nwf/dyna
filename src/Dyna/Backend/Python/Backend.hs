@@ -202,7 +202,7 @@ pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
                                       <+> pretty val <> ": continue"
 pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
                                       <+> pretty val <> ": continue"
-pdope_ (OPPeel vs i f) = return $
+pdope_ (OPPeel vs i f _) = return $
     --"try:" `above` (indent 4 $
            tupledOrUnderscore vs
             <+> equals
@@ -233,7 +233,7 @@ pdope_ (OPEmit h r i vs) = do
   ds <- get
 
   -- A python map of variable name to value
-  let varmap = encloseSep lbrace rbrace comma $
+  let varmap = braces $ align $ fillPunct (comma <> space) $
          ("'nodes'" <> colon <> (encloseSep lbracket rbracket comma $ map (("d"<>).pretty) [0..ds-1]))
          : (map (\v -> let v' = pretty v in dquotes v' <> colon <+> v') vs)
 
