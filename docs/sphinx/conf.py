@@ -260,8 +260,6 @@ texinfo_documents = [
 
 # rst_prolog = ""
 
-extlinks = {'dynasrc': ('https://www.github.com/nwf/dyna/blob/master/%s',
-                        'file ' )
-           ,'githubbug': ("https://github.com/nwf/dyna/issues/%s",
-                        'issue ')
+extlinks = {'dynasrc': ('https://www.github.com/nwf/dyna/blob/master/%s', '')
+           ,'githubbug': ("https://github.com/nwf/dyna/issues/%s", 'issue ')
            }

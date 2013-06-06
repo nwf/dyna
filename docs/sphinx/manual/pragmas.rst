@@ -156,7 +156,7 @@ expect and follows the usual rules of arithmetic.
 
 .. admonition:: bug
 
-   For the moment, the source is the spec.  See the source
+   For the moment, the source is the spec.  See the source in
    :dynasrc:`src/Dyna/Term/SurfaceSyntax.hs` for full details.
 
 #########

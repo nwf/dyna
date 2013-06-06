@@ -21,6 +21,8 @@ Contents:
 
    tutorial/index
 
+   manual/index
+
    spec/index
 
    Bibliography <bib>

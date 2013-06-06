@@ -1,10 +1,9 @@
-.. Specification index
+.. Manual index
    This file is enumerated in the toctree directive of index.rst
 
-Specifications
-##############
+User Manual
+###########
 
 .. toctree::
 
-   syntax
-   glossary
+   pragmas
