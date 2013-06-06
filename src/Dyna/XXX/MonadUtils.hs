@@ -1,6 +1,8 @@
 module Dyna.XXX.MonadUtils(
   -- * Data utilities generalizing 'Dyna.XXX.DataUtils'
   mapForallM, mapExistsM, setForallM, setExistsM,
+  -- * Control-flow
+  timesM,
   -- * Logic utilities
   andM, andM1, orM, orM1, allM, anyM,
   -- * MonadState utilities
@@ -33,6 +35,13 @@ allM = foldM andM1 True
 
 anyM :: Monad m => [m Bool] -> m Bool
 anyM = foldM orM1 False
+
+timesM :: Monad m => (a -> m a) -> Int -> a -> m a
+timesM f = go
+ where
+  go n _ | n < 0 = error "timesM negative iteration count"
+  go 0 a = return a
+  go n a = f a >>= go (n-1)
 
 mapForallM, mapExistsM :: (Monad m)
                        => (k -> v -> m Bool) -> M.Map k v -> m Bool
