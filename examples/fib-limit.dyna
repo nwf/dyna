@@ -1,0 +1,8 @@
+f(1) += 1 .
+f(2) += 1 .
+
+% Fix the productive divergence by imposing an arbitrary, but tunable
+% limit.
+f(X) += f(X-1) + f(X-2) for X < lim.
+
+lim := 10.

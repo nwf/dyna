@@ -37,6 +37,9 @@
 -- "Dyna.Backend.Python"'s @findHeadFA@ function.
 
 -- XXX This module does not use Control.Lens but should.
+--
+-- XXX The handling of underscores is not quite right and frequently leads
+-- to dead assignments.
 
 -- FIXME: "str" is the same a constant str.
 
@@ -375,20 +378,23 @@ normConjunct :: (Functor m, MonadReader ANFDict m, MonadState ANFState m)
 normConjunct ss f i si r sr n d rev =
   case (n,d) of
     (0,Nothing) -> do
-                    go Nothing Nothing
+                    di <- nextVar "_b"
+                    dr <- nextVar "_c"
+                    go di dr
                     newWarn "Quoted functor discarded" ss
     (0,Just d') -> do
                     di <- nextVar "_b"
                     dr <- nextVar "_c"
-                    go (Just di) (Just dr)
+                    go di dr
                     doStruct (selfstruct di dr) d'
-    (1,Just d') -> go Nothing (Just d')
+    (1,Just d') -> do
+                    di <- newLoad "_b" (Right $ (dynaUnitTerm,[]))
+                    go di d'
     (_,_      ) -> do
-                    di <- nextVar "_b"
+                    di <- newLoad "_b" (Right $ (dynaUnitTerm,[]))
                     dr <- nextVar "_c"
-                    go (Just di) (Just dr)
-                    t <- newLoad "_x" (Right $ selfstruct di dr)
-                    ct <- timesM (newEval "_x" . Left) (n-1) t
+                    go di dr
+                    ct <- timesM (newEval "_x" . Left) (n-1) dr
                     maybe (return ()) (doUnif ct) d
 
 
@@ -396,8 +402,8 @@ normConjunct ss f i si r sr n d rev =
   selfstruct ni nr = (f,if rev then [nr,ni] else [ni,nr]) 
 
   go di dr = do
-    normTerm_ ADEval (0,False) (si:ss) di i
-    normTerm_ ADEval (0,False) (sr:ss) dr r
+    normTerm_ ADEval (0,False) (si:ss) (Just di) i
+    normTerm_ ADEval (0,False) (sr:ss) (Just dr) r
 
 
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)

@@ -70,7 +70,11 @@ mkExample name =
 
 goldens :: TF.Test
 goldens = TF.testGroup "Python Backend End-To-End"
-          $ map mkExample ["simple", "dijkstra", "papa2", "matrixops"]
+                -- Sorted roughly by likelihood that all subsequent examples
+                -- will be broken. ;)
+          $ map mkExample [ "simple", "fib-limit", "dijkstra"
+                          , "papa2", "matrixops"
+                          ]
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{
