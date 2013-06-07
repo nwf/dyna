@@ -4,9 +4,11 @@ Generates a visual representation of a Dyna program rules after the
 normalization process.
 """
 
-import re, os, shutil
+import re, os, shutil, webbrowser
 from collections import defaultdict, namedtuple
-from utils import magenta, red, green, yellow, white, read_anf, dynahome
+from cStringIO import StringIO
+from utils import magenta, red, green, yellow, white, read_anf
+from config import dynahome
 
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -142,10 +144,6 @@ class Hypergraph(object):
                 yield v
 
         return t(root)
-
-
-#def show_slice(e, M):
-#    return [(b if bind else ':') for b, bind in zip(e.body, M)]
 
 
 def isvar(x):
@@ -398,9 +396,56 @@ Initializer:
         print >> html, '</div>'
 
     if browser:
-        import webbrowser
         webbrowser.open(html.name)
 
+
+def hypergraph(interpreter):
+    # collect edges
+    interpreter.collect_edges()
+    # create hypergraph object
+    g = Hypergraph()
+    for c in interpreter.chart.values():
+        for x in c.intern.values():
+            for e in interpreter.edges[x]:
+                label, body = e
+                g.edge(str(x), str(label), map(str, body))
+    return g
+
+
+def draw(interpreter):
+    g = hypergraph(interpreter)
+    with file('/tmp/state.html', 'wb') as f:
+        print >> f, """
+        <html>
+        <head>
+        <style>
+        body {
+          background-color: black;
+          color: white;
+        }
+        </style>
+        </head>
+        <body>
+        """
+
+        x = StringIO()
+        interpreter.dump_charts(x)
+
+        print >> f, '<div style="position:absolute;">%s</div>' \
+            % '<h1>Charts</h1>%s' \
+            % '<pre style="width: 500px;">%s</pre>' \
+            % x.getvalue()
+
+        print >> f, """
+        <div style="width: 800px; position:absolute; left: 550px">
+        <h1>Hypergraph</h1>
+        %s
+        </div>
+        """ % g.render('/tmp/hypergraph')
+
+        print >> f, '</body></html>'
+
+    webbrowser.open(f.name)
 
 
 if __name__ == '__main__':

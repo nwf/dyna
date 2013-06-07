@@ -1,0 +1,3 @@
+% example to test string quoting
+
+test("I'd like to \"quote\"") += 1.
