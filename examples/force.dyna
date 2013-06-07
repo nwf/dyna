@@ -1,5 +1,8 @@
 % Try to use the force to lay out a few nodes
-
+%
+% run with 
+%   ./dyna examples/force.dyna --postprocess src/Dyna/Backend/Python/graph.py
+%
 % Kamada-Kawai force directed layout
 % http://graphael.cs.arizona.edu/papers/graphael_final.pdf
 
