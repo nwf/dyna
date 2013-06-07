@@ -7,7 +7,8 @@ normalization process.
 import re, os, shutil, webbrowser
 from collections import defaultdict, namedtuple
 from cStringIO import StringIO
-from utils import magenta, red, green, yellow, white, read_anf, dynahome
+from utils import magenta, red, green, yellow, white, read_anf
+from config import dynahome
 
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name

@@ -19,13 +19,15 @@ Building
 --------
 
 First, ensure that you have the Haskell platform 2012.2 or later installed,
-either through your favorite package manager or by installing it
-stand-alone.  You'll want to have the following programs installed, too:
+either through your favorite package manager or by installing it stand-alone.
+You'll want to have the following programs installed:
 
     * Python 2.7 or compatible
-    * IPython
-    * Pygments (for pretty code output in our compiler-debugging tools)
     * graphviz
+
+The python modules required
+
+    $ easy_install path.py ipython pygments
 
 You should probably run
 
@@ -48,8 +50,7 @@ And read up on the documentation:
 At this point, the code is still rather "in the works" so you probably want
 to...
 
-* Run the python backend interactively (leave off the "-i" for bulk
-operation):
+* Run the python backend interactively (leave off the "-i" for bulk operation):
 
         ./dyna -i examples/papa2.dyna
 

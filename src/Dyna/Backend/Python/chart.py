@@ -32,13 +32,18 @@ class Term(object):
     __add__ = __sub__ = __mul__ = notimplemented
 
 
-#def _repr(x):
-#    if isinstance(x, basestring):
-#        # dyna doesn't accept single-quoted strings
-#        return '"%s"' % x.replace('"', r'\"')
-#    else:
-#        return repr(x)
-_repr = repr
+def _repr(x):
+    if x is True:
+        return 'true'
+    elif x is False:
+        return 'false'
+    elif x is None:
+        return 'null'
+    elif isinstance(x, basestring):
+        # dyna doesn't accept single-quoted strings
+        return '"%s"' % x.replace('"', r'\"')
+    else:
+        return repr(x)
 
 
 class Chart(object):
@@ -52,7 +57,7 @@ class Chart(object):
 
     def __repr__(self):
         rows = [term for term in self.intern.values() if term.value is not None]
-        x = '\n'.join('%-30s := %r' % (term, term.value) for term in sorted(rows))
+        x = '\n'.join('%-30s := %s' % (term, _repr(term.value)) for term in sorted(rows))
         return '%s\n=================\n%s' % (self.name, x)
 
     def __getitem__(self, s):

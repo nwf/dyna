@@ -1,8 +1,9 @@
 import os, sys
 import cmd, readline
 from utils import blue, yellow, green, magenta, ip
-
+from chart import _repr
 from interpreter import AggregatorConflict
+from config import dotdynadir
 import debug
 
 class REPL(cmd.Cmd, object):
@@ -22,6 +23,15 @@ class REPL(cmd.Cmd, object):
     @property
     def prompt(self):
         return ':- ' #% self.lineno
+
+    def do_rules(self, _):
+        self.interp.dump_rules()
+
+    def do_retract_rule(self, idx):
+        self.interp.remove_rule(idx)
+
+    def do_retract_item(self, item):
+        self.interp.retract_item(item)
 
     def do_exit(self, _):
         readline.write_history_file(self.hist)
@@ -74,8 +84,10 @@ class REPL(cmd.Cmd, object):
         else:
             print 'Did not understand argument %r please use (on or off).' % args
 
-#    def do_debug(self, line):
-#        dynac_code(line, debug=True, run=False)
+    def do_debug(self, line):
+        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
+            f.write(line)
+        debug.main(f.name)
 
     def do_query(self, line):
 
@@ -83,15 +95,18 @@ class REPL(cmd.Cmd, object):
             print "Queries don't end with a dot."
             return
 
-        query = 'out(%s) dict= _VALUE is (%s), _VALUE.' % (self.lineno, line)
-
-        print blue % query
+        query = 'out(%s) dict= %s.' % (self.lineno, line)
 
         self.default(query)
 
-        for (_, results) in self.interp.chart['out/1'][self.lineno,:]:
-            for result in results:
-                print result
+        try:
+            [(_, (_, results))] = self.interp.chart['out/1'][self.lineno,:]
+        except ValueError:
+            print 'No results.'
+            return
+
+        for val, bindings in results:
+            print '   ', val, 'when', bindings
         print
 
     def default(self, line):
@@ -116,7 +131,7 @@ class REPL(cmd.Cmd, object):
                 return
             print '============='
             for x, v in sorted(changed.items()):
-                print '%s := %r' % (x, v)
+                print '%s := %s' % (x, _repr(v))
             print
             self.interp.dump_errors()
 

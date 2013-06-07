@@ -6,20 +6,20 @@ MISC
 
  - TODO: faster charts (dynamic argument types? jason's trie data structure)
 
- - TODO: write files to ~/.dyna
+ - TODO: write all files to ~/.dyna
+
+ - TODO: `None` does not propagate, eventually it will becase of the `?` prefix
+   operator.
 
  - TODO: (@nwf) String quoting (see example/stringquote.py)
+
+ - TODO: (@nwf) mode planning failures are slient
 
  - TODO: filter and bulk loader
 
  - TODO: make sure interpreter uses the right exceptions. The codegen catches a
    few things -- I think assertionerror is one them... we should probably do
    whatever this is doing with a custom exception.
-
- - TODO: (@nwf) mode planning failures are slient
-
- - TODO: deleting a rule: (1) remove update handlers (2) run initializers in
-   delete mode (3) remove initializers.
 
  - TODO: hooks from introspection, eval, and prioritization.
 
@@ -90,11 +90,12 @@ from collections import defaultdict
 from argparse import ArgumentParser
 
 import debug
-from chart import Chart, Term
+from chart import Chart, Term, _repr
 from defn import aggregator
-from utils import ip, red, green, blue, magenta, yellow, dynahome, \
-    notimplemented, prioritydict, parse_attrs
-from config import dotdynadir
+from utils import ip, red, green, blue, magenta, yellow, \
+    notimplemented, parse_attrs, ddict, dynac
+from prioritydict import prioritydict
+from config import dotdynadir, dynahome
 
 
 class AggregatorConflict(Exception):
@@ -118,6 +119,21 @@ class DynaCompilerError(Exception):
     pass
 
 
+class Rule(object):
+    def __init__(self, idx):
+        self.idx = idx
+        self.init = None
+        self.updaters = []
+    @property
+    def span(self):
+        return self.init.dyna_attrs['Span']
+    @property
+    def src(self):
+        return self.init.dyna_attrs['rule']
+    def __repr__(self):
+        return 'Rule(%s, %r)' % (self.idx, self.src)
+
+
 class Interpreter(object):
 
     def __init__(self):
@@ -125,30 +141,26 @@ class Interpreter(object):
         self.agg_name = {}
         self.edges = defaultdict(set)
         self.updaters = defaultdict(list)
-        self.initializers = []
         # data structures
         self.agenda = prioritydict()
         self.parser_state = ''
 
-        agg = self.agg_name
-        class dd(dict):
-            def __missing__(self, fn):
-                arity = int(fn.split('/')[-1])
-                self[fn] = c = Chart(fn, arity, lambda: aggregator(agg[fn]))
-                return c
-        self.chart = dd()
+        def newchart(fn):
+            arity = int(fn.split('/')[-1])
+            return Chart(fn, arity, lambda: aggregator(self.agg_name[fn]))
 
+        self.chart = ddict(newchart)
+        self.rules = ddict(Rule)
         self.errors = {}
         # misc
         self.trace = file(dotdynadir / 'trace', 'wb')
 
     def new_fn(self, fn, agg):
-        if fn in self.agg_name:
-            # check for aggregator conflict.
-            if self.agg_name[fn] != agg:
-                raise AggregatorConflict(fn, self.agg_name[fn], agg)
-            return
-        self.agg_name[fn] = agg
+        # check for aggregator conflict.
+        if fn not in self.agg_name:
+            self.agg_name[fn] = agg
+        if self.agg_name[fn] != agg:
+            raise AggregatorConflict(fn, self.agg_name[fn], agg)
 
     def collect_edges(self):
         """
@@ -161,8 +173,8 @@ class Interpreter(object):
             b.sort()
             b = tuple(b)
             edges[item].add((ruleix, b))
-        for init in self.initializers:
-            init(emit=_emit)
+        for r in self.rules.values():
+            r.init(emit=_emit)
 
     def dump_charts(self, out=sys.stdout):
         print >> out
@@ -183,10 +195,14 @@ class Interpreter(object):
         print >> out, 'Errors'
         print >> out, '============'
         for item, (val, es) in self.errors.items():
-            print >> out,  'because %r is %r:' % (item, val)
+            print >> out,  'because %r is %s:' % (item, _repr(val))
             for e in es:
                 print >> out, '   ', e
         print >> out
+
+    def dump_rules(self):
+        for i in sorted(self.rules, key=int):
+            print self.rules[i]
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
@@ -205,6 +221,65 @@ class Interpreter(object):
             term = self.chart[fn].insert(args, None)   # don't know val yet.
         return term
 
+    def retract_item(self, item):
+        """
+        For the moment we only correctly retract leaves.
+
+        If you retract a non-leaf item, you run the risk of it being
+        rederived. In the case of cyclic programs the derivation might be the
+        same or different.
+        """
+
+        # and now, for something truely horrendous -- look up an item by it's
+        # string value!
+        items = {}
+        for c in self.chart.values():
+            for i in c.intern.values():
+                items[str(i)] = i
+        try:
+            item = items[item]
+        except KeyError:
+            print 'item not found.'
+            return
+
+        print item
+
+        while item.value:
+            print item.value
+            self.emit(item, item.value, None, sys.maxint, delete=True)
+            self.go()
+
+    def retract_rule(self, idx):
+        "Retract rule and all of it's edges."
+        assert isinstance(idx, str)
+
+        try:
+            rule = self.rules.pop(idx)
+        except KeyError:
+            print 'Rule %s not found.' % idx
+            return
+
+        # Step 1: remove update handlers
+        print 'removing rule', rule
+        print '  removing updaters'
+        for u in rule.updaters:
+            print '    ', u.__doc__
+            deleted = False
+            for hs in self.updaters.values():
+                for i, h in enumerate(hs):
+                    if u is h:
+                        del hs[i]
+                        assert not u in hs
+                        deleted = True
+            assert deleted, 'should always find handler.'
+        deleted = False
+
+        # Step 2: run initializer in delete mode
+        rule.init(emit=self.delete_emit)
+
+        # Step 3; go!
+        self.go()
+
     def go(self):
         "the main loop"
 
@@ -220,7 +295,7 @@ class Interpreter(object):
             print >> trace, magenta % 'pop   ', item,
 
             was = item.value
-            print >> trace, '(was: %r,' % (was,),
+            print >> trace, '(was: %s,' % (_repr(was),),
 
             try:
                 now = item.aggregator.fold()
@@ -229,7 +304,7 @@ class Interpreter(object):
                 # TODO: Are we sure there is never a reason to requeue this item.
                 continue
 
-            print >> trace, 'now: %r)' % (now,)
+            print >> trace, 'now: %s)' % (_repr(now),)
 
             if was == now:
                 print >> trace, yellow % 'unchanged'
@@ -260,8 +335,6 @@ class Interpreter(object):
         """
         Passes update to relevant handlers.
         """
-
-        # XXX: fix for `?` prefix operator
         assert val is not None
 
         # store emissions, make sure all of them succeed before propagating
@@ -297,18 +370,26 @@ class Interpreter(object):
     def new_updater(self, fn, handler):
         self.updaters[fn].append(handler)
 
+        i = handler.dyna_attrs['RuleIx']
+        rule = self.rules[i]
+        rule.updaters.append(handler)
+
     def new_initializer(self, init):
-        self.initializers.append(init)
+        i = init.dyna_attrs['RuleIx']
+        rule = self.rules[i]
+        assert rule.init is None
+        rule.init = init
+
+    def delete_emit(self, item, val, ruleix, variables):
+        self.emit(item, val, ruleix, variables, delete=True)
 
     def emit(self, item, val, ruleix, variables, delete):
         print >> self.trace, (red % 'delete' if delete else green % 'update'), \
             '%s (val %s; curr: %s)' % (item, val, item.value)
-
         if delete:
             item.aggregator.dec(val, ruleix, variables)
         else:
             item.aggregator.inc(val, ruleix, variables)
-
         self.agenda[item] = 0   # everything is high priority
 
     def repl(self, hist):
@@ -316,17 +397,21 @@ class Interpreter(object):
         repl.REPL(self, hist).cmdloop()
 
     def do(self, filename):
-        "Compile, load, and execute dyna code."
+        """
+        Compile, load, and execute new dyna rules.
 
+        To support the REPL, we try do load these new rules in a transaction --
+        if any rule in the newly loaded code is "bad," we simple reject the
+        addition of all these the new rules.
+
+        A rule is bad if the compiler rejects it or it's initializer fails.
+        """
         assert os.path.exists(filename)
 
         # for debuggging
         with file(filename) as h:
             print >> self.trace, magenta % 'Loading new code'
             print >> self.trace, yellow % h.read()
-
-        # TODO: loading new code should be atomic. if we fail for some reason we
-        # need to revert.
 
         env = {'_initializers': [], '_updaters': [], '_agg_decl': {},
                'chart': self.chart, 'build': self.build, 'peel': peel,
@@ -358,16 +443,14 @@ class Interpreter(object):
             # add new updaters
             for fn, h in env['_updaters']:
                 self.new_updater(fn, h)
-
             # add new initializers
             for h in env['_initializers']:
                 self.new_initializer(h)
-
+            # accept the new parser state
+            self.parser_state = env['parser_state']
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
-
-            self.parser_state = env['parser_state']
 
         return self.go()
 
@@ -405,18 +488,6 @@ def peel(fn, item):
     assert isinstance(item, Term)
     assert item.fn == fn
     return item.args
-
-
-def dynac(f, out):
-    return os.system('%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f))
-
-
-
-def dump(code, filename='/tmp/tmp.dyna'):
-    "Write code to file."
-    with file(filename, 'wb') as f:
-        f.write(code)
-    return filename
 
 
 def main():
