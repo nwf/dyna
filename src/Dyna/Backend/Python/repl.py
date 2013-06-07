@@ -6,6 +6,7 @@ from interpreter import AggregatorConflict
 from config import dotdynadir
 import debug
 
+
 class REPL(cmd.Cmd, object):
 
     def __init__(self, interp, hist):

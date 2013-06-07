@@ -29,6 +29,12 @@ class Term(object):
             return fn
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
 
+    def __getstate__(self):
+        return (self.fn, self.args, self.value, self.aggregator)
+
+    def __setstate__(self, state):
+        (self.fn, self.args, self.value, self.aggregator) = state
+
     __add__ = __sub__ = __mul__ = notimplemented
 
 
@@ -62,7 +68,7 @@ class Chart(object):
 
     def __getitem__(self, s):
         assert len(s) == self.arity + 1, \
-            'item width mismatch: arity %s, item %s' % (self.arity, len(s))
+            'Chart %r: item width mismatch: arity %s, item %s' % (self.name, self.arity, len(s))
 
         args, val = s[:-1], s[-1]
 

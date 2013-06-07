@@ -134,10 +134,12 @@ constants = go
   go ("%",2)     = Just $ PDBS $ infixOp "%"
   go ("+",2)     = Just $ PDBS $ infixOp "+"
 
-  go ("mod",2)   = Just $ PDBS $ call "mod"
+  go ("mod",2)   = Just $ PDBS $ infixOp "%"
   go ("abs",1)   = Just $ PDBS $ call "abs"
   go ("log",1)   = Just $ PDBS $ call "log"
   go ("exp",1)   = Just $ PDBS $ call "exp"
+
+  go ("uniform", _) = Just $ PDBS $ call "uniform"
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
