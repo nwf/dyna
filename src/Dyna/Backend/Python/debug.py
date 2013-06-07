@@ -146,10 +146,6 @@ class Hypergraph(object):
         return t(root)
 
 
-#def show_slice(e, M):
-#    return [(b if bind else ':') for b, bind in zip(e.body, M)]
-
-
 def isvar(x):
     return isinstance(x,str) and (x.isupper() or x.startswith('_$'))
 

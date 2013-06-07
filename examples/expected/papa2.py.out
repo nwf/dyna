@@ -3,11 +3,11 @@ Charts
 ============
 best/0
 =================
-best                           := pair(1,t('S',t('S',t('NP','Papa'),t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))),'.'))
+best                           := pair(1,t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),"."))
 
 bestParse/0
 =================
-bestParse                      := t('S',t('S',t('NP','Papa'),t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))),'.')
+bestParse                      := t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")
 
 bestScore/0
 =================
@@ -15,8 +15,8 @@ bestScore                      := 1
 
 goal/1
 =================
-goal(t('S',t('S',t('NP','Papa'),t('VP',t('V','ate'),t('NP',t('NP',t('Det','the'),t('N','caviar')),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon')))))),'.')) := 1
-goal(t('S',t('S',t('NP','Papa'),t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))),'.')) := 1
+goal(t("S",t("S",t("NP","Papa"),t("VP",t("V","ate"),t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))))),".")) := 1
+goal(t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")) := 1
 
 length/0
 =================
@@ -28,53 +28,53 @@ pair/2
 
 phrase/4
 =================
-phrase('.',7,8,'.')            := 1
-phrase('Det',2,3,t('Det','the')) := 1
-phrase('Det',5,6,t('Det','a')) := 1
-phrase('N',3,4,t('N','caviar')) := 1
-phrase('N',6,7,t('N','spoon')) := 1
-phrase('NP',0,1,t('NP','Papa')) := 1
-phrase('NP',2,4,t('NP',t('Det','the'),t('N','caviar'))) := 1
-phrase('NP',2,7,t('NP',t('NP',t('Det','the'),t('N','caviar')),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))) := 1
-phrase('NP',5,7,t('NP',t('Det','a'),t('N','spoon'))) := 1
-phrase('P',4,5,t('P','with'))  := 1
-phrase('PP',4,7,t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon')))) := 1
-phrase('Papa',0,1,'Papa')      := 1
-phrase('S',0,4,t('S',t('NP','Papa'),t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))))) := 1
-phrase('S',0,7,t('S',t('NP','Papa'),t('VP',t('V','ate'),t('NP',t('NP',t('Det','the'),t('N','caviar')),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))))) := 1
-phrase('S',0,7,t('S',t('NP','Papa'),t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon')))))) := 1
-phrase('S',0,8,t('S',t('S',t('NP','Papa'),t('VP',t('V','ate'),t('NP',t('NP',t('Det','the'),t('N','caviar')),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon')))))),'.')) := 1
-phrase('S',0,8,t('S',t('S',t('NP','Papa'),t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))),'.')) := 1
-phrase('V',1,2,t('V','ate'))   := 1
-phrase('VP',1,4,t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar')))) := 1
-phrase('VP',1,7,t('VP',t('V','ate'),t('NP',t('NP',t('Det','the'),t('N','caviar')),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon')))))) := 1
-phrase('VP',1,7,t('VP',t('VP',t('V','ate'),t('NP',t('Det','the'),t('N','caviar'))),t('PP',t('P','with'),t('NP',t('Det','a'),t('N','spoon'))))) := 1
-phrase('a',5,6,'a')            := 1
-phrase('ate',1,2,'ate')        := 1
-phrase('caviar',3,4,'caviar')  := 1
-phrase('spoon',6,7,'spoon')    := 1
-phrase('the',2,3,'the')        := 1
-phrase('with',4,5,'with')      := 1
+phrase(".",7,8,".")            := 1
+phrase("Det",2,3,t("Det","the")) := 1
+phrase("Det",5,6,t("Det","a")) := 1
+phrase("N",3,4,t("N","caviar")) := 1
+phrase("N",6,7,t("N","spoon")) := 1
+phrase("NP",0,1,t("NP","Papa")) := 1
+phrase("NP",2,4,t("NP",t("Det","the"),t("N","caviar"))) := 1
+phrase("NP",2,7,t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))) := 1
+phrase("NP",5,7,t("NP",t("Det","a"),t("N","spoon"))) := 1
+phrase("P",4,5,t("P","with"))  := 1
+phrase("PP",4,7,t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))) := 1
+phrase("Papa",0,1,"Papa")      := 1
+phrase("S",0,4,t("S",t("NP","Papa"),t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))))) := 1
+phrase("S",0,7,t("S",t("NP","Papa"),t("VP",t("V","ate"),t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))))) := 1
+phrase("S",0,7,t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))))) := 1
+phrase("S",0,8,t("S",t("S",t("NP","Papa"),t("VP",t("V","ate"),t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))))),".")) := 1
+phrase("S",0,8,t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")) := 1
+phrase("V",1,2,t("V","ate"))   := 1
+phrase("VP",1,4,t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar")))) := 1
+phrase("VP",1,7,t("VP",t("V","ate"),t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))))) := 1
+phrase("VP",1,7,t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))) := 1
+phrase("a",5,6,"a")            := 1
+phrase("ate",1,2,"ate")        := 1
+phrase("caviar",3,4,"caviar")  := 1
+phrase("spoon",6,7,"spoon")    := 1
+phrase("the",2,3,"the")        := 1
+phrase("with",4,5,"with")      := 1
 
 rewrite/2
 =================
-rewrite('Det','a')             := 1
-rewrite('Det','the')           := 1
-rewrite('N','caviar')          := 1
-rewrite('N','spoon')           := 1
-rewrite('NP','Papa')           := 1
-rewrite('P','with')            := 1
-rewrite('V','ate')             := 1
+rewrite("Det","a")             := 1
+rewrite("Det","the")           := 1
+rewrite("N","caviar")          := 1
+rewrite("N","spoon")           := 1
+rewrite("NP","Papa")           := 1
+rewrite("P","with")            := 1
+rewrite("V","ate")             := 1
 
 rewrite/3
 =================
-rewrite('NP','Det','N')        := 1
-rewrite('NP','NP','PP')        := 1
-rewrite('PP','P','NP')         := 1
-rewrite('S','NP','VP')         := 1
-rewrite('S','S','.')           := 1
-rewrite('VP','V','NP')         := 1
-rewrite('VP','VP','PP')        := 1
+rewrite("NP","Det","N")        := 1
+rewrite("NP","NP","PP")        := 1
+rewrite("PP","P","NP")         := 1
+rewrite("S","NP","VP")         := 1
+rewrite("S","S",".")           := 1
+rewrite("VP","V","NP")         := 1
+rewrite("VP","VP","PP")        := 1
 
 t/2
 =================
@@ -86,12 +86,12 @@ t/3
 
 word/2
 =================
-word('.',7)                    := True
-word('Papa',0)                 := True
-word('a',5)                    := True
-word('ate',1)                  := True
-word('caviar',3)               := True
-word('spoon',6)                := True
-word('the',2)                  := True
-word('with',4)                 := True
+word(".",7)                    := true
+word("Papa",0)                 := true
+word("a",5)                    := true
+word("ate",1)                  := true
+word("caviar",3)               := true
+word("spoon",6)                := true
+word("the",2)                  := true
+word("with",4)                 := true
 

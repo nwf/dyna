@@ -50,9 +50,9 @@ rows(c)                        := 2
 
 shape/3
 =================
-shape(a,2,2)                   := True
-shape(b,2,3)                   := True
-shape(c,2,3)                   := True
+shape(a,2,2)                   := true
+shape(b,2,3)                   := true
+shape(c,2,3)                   := true
 
 times/4
 =================
