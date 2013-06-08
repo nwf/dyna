@@ -4,11 +4,20 @@
 MISC
 ====
 
+ - TODO: dyna rules for chart display or visualization via viz_chart. Rules will
+   use string formatting or python eval magic.
+
+ - TODO: catch compiler errors (for example, ^C while compiling results in a
+   "Compiler panic!  This is almost assuredly not your fault!...").
+
+ - TODO: dynac should provide routines for building terms. We can hack something
+   together with anf output.
+
  - TODO: faster charts (dynamic argument types? jason's trie data structure)
 
  - TODO: write all files to ~/.dyna
 
- - TODO: `None` does not propagate, eventually it will becase of the `?` prefix
+ - TODO: `None` does not propagate, eventually it will because of the `?` prefix
    operator.
 
  - TODO: (@nwf) String quoting (see example/stringquote.py)
@@ -52,13 +61,23 @@ MISC
 
     - approximate deletion ("buckets"), find the nearest neighbor and delete it.
 
-    - hybrid: maintain streaming sum and the bag check periodically for quality
-      and null.
+    - hybrid: maintain streaming sum parallel to the BAggregator and check
+      periodically for quality and null.
 
     - numeric approximations, stream folding (fails to get null)
 
     - delete the hyperedge: not sure this is perfect because hyperedges aren't
       named with numeric values of variables.
+
+
+JUST FOR FUN
+============
+
+ - overload everything so that values maintain provenance and we can inspect the
+   entire fine-grained circuit.
+
+ - play around with python modules uncertainties (error propagation and
+   gradients), look into tools for dimensional analysis.
 
 
 What is null?
@@ -97,6 +116,7 @@ from utils import ip, red, green, blue, magenta, yellow, \
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
 
+from time import time
 
 class AggregatorConflict(Exception):
     def __init__(self, key, expected, got):
@@ -231,7 +251,8 @@ class Interpreter(object):
         """
 
         # and now, for something truely horrendous -- look up an item by it's
-        # string value!
+        # string value! This could fail because of whitespace or trivial
+        # formatting differences.
         items = {}
         for c in self.chart.values():
             for i in c.intern.values():
@@ -239,48 +260,44 @@ class Interpreter(object):
         try:
             item = items[item]
         except KeyError:
-            print 'item not found.'
+            print 'item not found. This could be because of a trivial formatting differences...'
             return
 
         print item
 
-        while item.value:
-            print item.value
-            self.emit(item, item.value, None, sys.maxint, delete=True)
-            self.go()
+        self.emit(item, item.value, None, sys.maxint, delete=True)
+        self.go()
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
         assert isinstance(idx, str)
-
         try:
             rule = self.rules.pop(idx)
         except KeyError:
             print 'Rule %s not found.' % idx
             return
-
         # Step 1: remove update handlers
-        print 'removing rule', rule
-        print '  removing updaters'
         for u in rule.updaters:
-            print '    ', u.__doc__
-            deleted = False
             for hs in self.updaters.values():
                 for i, h in enumerate(hs):
                     if u is h:
                         del hs[i]
-                        assert not u in hs
-                        deleted = True
-            assert deleted, 'should always find handler.'
-        deleted = False
-
+                        break
+                else:
+                    assert False, "failed to find updater."
         # Step 2: run initializer in delete mode
         rule.init(emit=self.delete_emit)
-
         # Step 3; go!
         self.go()
 
     def go(self):
+        try:
+            self._go()
+        except KeyboardInterrupt:   # TODO: need to be safer in some parts of the code.
+            print '^C'
+            self.dump_charts()
+
+    def _go(self):
         "the main loop"
 
         changed = {}
@@ -390,7 +407,8 @@ class Interpreter(object):
             item.aggregator.dec(val, ruleix, variables)
         else:
             item.aggregator.inc(val, ruleix, variables)
-        self.agenda[item] = 0   # everything is high priority
+#        self.agenda[item] = 0   # everything is high priority
+        self.agenda[item] = time()
 
     def repl(self, hist):
         import repl
@@ -413,9 +431,11 @@ class Interpreter(object):
             print >> self.trace, magenta % 'Loading new code'
             print >> self.trace, yellow % h.read()
 
+        from numpy.random import uniform
+
         env = {'_initializers': [], '_updaters': [], '_agg_decl': {},
                'chart': self.chart, 'build': self.build, 'peel': peel,
-               'parser_state': None}
+               'parser_state': None, 'uniform': uniform}
 
         # load generated code.
         execfile(filename, env)
@@ -501,6 +521,8 @@ def main():
     parser.add_argument('-o', dest='output', help='Output chart.')
     parser.add_argument('--draw', action='store_true',
                         help='Output html page with hypergraph and chart.')
+    parser.add_argument('--postprocess', type=file,
+                        help='run post-processing script.')
 
     argv = parser.parse_args()
 
@@ -545,6 +567,9 @@ def main():
 
     if argv.draw:
         interp.draw()
+
+    if argv.postprocess is not None:
+        execfile(argv.postprocess.name, {'interp': interp})
 
 
 if __name__ == '__main__':
