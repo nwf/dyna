@@ -75,22 +75,21 @@ class Chart(object):
         assert val is not None
 
         # filter set of candidates by each bound argument
-        candidates = None
-        for (ix, x) in zip(self.ix, args):
-            if isinstance(x, slice):
-                continue
-            if candidates is None:
-                # initial candidates determined by first non-bound column
-                candidates = ix[x].copy()
-            else:
-                candidates &= ix[x]
-                if not len(candidates):
-                    # no candidates left
-                    break
+        b = [(ix[x]) for (ix, x) in zip(self.ix, args) if not isinstance(x, slice)]
 
-        if candidates is None:
-            # This happens when all arguments are free.
-            candidates = self.intern.values()
+        if len(b) == 0:
+            # all arguments are free.
+            candidates = self.intern.itervalues()
+
+        elif len(b) == 1:
+            candidates = iter(b[0])
+
+        else:
+            b.sort(key=len)           # start with smaller ones
+            candidates = b[0] & b[1]
+            for ix in b[2:]:
+                candidates &= ix
+            candidates = iter(candidates)
 
         # handle the value column separately because we don't index it yet.
         if isinstance(val, slice):
@@ -102,27 +101,13 @@ class Chart(object):
                 if term.value == val:
                     yield term, term.args + (term.value,)   # TODO: change codegen to avoid addition..
 
-    def lookup(self, args):
-        "find index for these args"
-        assert len(args) == self.arity
-
+    def insert(self, args):        # TODO: rename
         try:
             return self.intern[args]
         except KeyError:
-            return None
-
-    def insert(self, args, val):
-
-        # debugging check: row is not already in chart.
-        assert self.lookup(args) is None, \
-            '%r already in chart with value %r' % (args, val)
-
-        self.intern[args] = term = Term(self.name, args)
-        term.value = val
-        term.aggregator = self.new_aggregator()
-
-        # index new term
-        for i, x in enumerate(args):
-            self.ix[i][x].add(term)
-
-        return term
+            self.intern[args] = term = Term(self.name, args)
+            term.aggregator = self.new_aggregator()
+            # index new term
+            for i, x in enumerate(args):
+                self.ix[i][x].add(term)
+            return term
