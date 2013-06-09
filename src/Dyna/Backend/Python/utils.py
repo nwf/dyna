@@ -1,4 +1,5 @@
-import re, os
+import re
+from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from config import dynahome
 
@@ -11,8 +12,37 @@ black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
+class DynaCompilerError(Exception):
+    pass
+
+
+class AggregatorConflict(Exception):
+    def __init__(self, key, expected, got):
+        msg = "Aggregator conflict %r was %r trying to set to %r." \
+            % (key, expected, got)
+        super(AggregatorConflict, self).__init__(msg)
+
+
+class DynaInitializerException(Exception):
+    def __init__(self, exception, init):
+        msg = '%r in ininitializer for rule\n  %s\n        %s' % \
+            (exception,
+             init.dyna_attrs['Span'],
+             init.dyna_attrs['rule'])
+        super(DynaInitializerException, self).__init__(msg)
+
+
 def dynac(f, out):
-    return os.system('%s/dist/build/dyna/dyna -B python -o "%s" "%s"' % (dynahome, out, f))
+    """
+    Run compiler on file, ``f``, write results to ``out``. Raises
+    ``DynaCompilerError`` on failure.
+    """
+    p = Popen(['%s/dist/build/dyna/dyna' % dynahome,
+               '-B', 'python', '-o', out, f], stdout=PIPE, stderr=PIPE)
+    stdout, stderr = p.communicate()
+    if p.returncode:
+        assert not stdout.strip(), [stdout, stderr]
+        raise DynaCompilerError(stderr)
 
 
 def notimplemented(*_,**__):
@@ -20,6 +50,10 @@ def notimplemented(*_,**__):
 
 
 class ddict(dict):
+    """
+    Default Dict where the default function gets the key as an argument, unlike
+    collections.defaultdict.
+    """
     def __init__(self, f):
         self.f = f
         super(ddict, self).__init__()
@@ -36,7 +70,6 @@ def parse_sexpr(e):
     http://mail.python.org/pipermail/python-list/2005-March/312004.html
     """
     e = re.compile('^\s*;.*?\n', re.M).sub('', e)  # remove comments
-
     es, stack = [], []
     for token in re.split(r'("[^"]*?"|[()])|\s+', e):
         if token == '(':
