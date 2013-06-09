@@ -1,8 +1,8 @@
 import os, sys
 import cmd, readline
-from utils import blue, yellow, green, magenta, ip
+import interpreter
+from utils import blue, yellow, green, magenta, ip, DynaCompilerError, AggregatorConflict
 from chart import _repr
-from interpreter import AggregatorConflict
 from config import dotdynadir
 import debug
 
@@ -29,7 +29,7 @@ class REPL(cmd.Cmd, object):
         self.interp.dump_rules()
 
     def do_retract_rule(self, idx):
-        self.interp.remove_rule(idx)
+        self.interp.retract_rule(idx)
 
     def do_retract_item(self, item):
         self.interp.retract_item(item)
@@ -51,24 +51,12 @@ class REPL(cmd.Cmd, object):
         """
         return line
 
-    def postcmd(self, stop,  line):
+    def postcmd(self, stop, line):
         self.lineno += 1
         return stop
 
     def do_chart(self, _):
-#        if not args:
         self.interp.dump_charts()
-#        else:
-#            unrecognized = set(args.split()) - set(interp.chart.keys())
-#            for f in unrecognized:
-#                print 'unrecognized predicate', f
-#            if unrecognized:
-#                print 'available:\n\t' + '\t'.join(chart.keys())
-#                return
-#            for f in args.split():
-#                print chart[f]
-#                print
-#            interp.dump_errors()
 
     def emptyline(self):
         """Do nothing on empty input line"""
@@ -120,21 +108,29 @@ class REPL(cmd.Cmd, object):
             print "ERROR: Line doesn't end with period."
             return
         try:
-            src = self.interp.dynac_code(line)  # failure.
-
-            changed = self.interp.do(src)
+            src = self.interp.dynac_code(line)   # might raise DynaCompilerError
+            changed = self.interp.do(src)        # throws AggregatorConflict
 
         except AggregatorConflict as e:
             print 'AggregatorConflict:', e
+            print '> new rule(s) were not added to program.'
+
+        except DynaCompilerError as e:
+            print 'DynaCompilerError:'
+            print e
+            print '> new rule(s) were not added to program.'
 
         else:
-            if not changed:
-                return
-            print '============='
-            for x, v in sorted(changed.items()):
-                print '%s := %s' % (x, _repr(v))
-            print
-            self.interp.dump_errors()
+            self._changed(changed)
+
+    def _changed(self, changed):
+        if not changed:
+            return
+        print '============='
+        for x, v in sorted(changed.items()):
+            print '%s := %s' % (x, _repr(v))
+        print
+        self.interp.dump_errors()
 
     def do_draw(self, _):
         self.interp.draw()
