@@ -1,38 +1,109 @@
 #!/usr/bin/env python
 
 """
-MISC
+TODO
 ====
 
- - TODO: dyna rules for chart display or visualization via viz_chart. Rules will
-   use string formatting or python eval magic.
+ - vbench: a script which tracks performace over time (= git commits).
 
- - TODO: catch compiler errors (for example, ^C while compiling results in a
-   "Compiler panic!  This is almost assuredly not your fault!...").
+ - profiler workflow
+
+ - unit tests and code coverage.
+
+ - doc tests for Dyna code.
+
+ - TODO: think about indices as memoized queries
+
+ - let Dyna do some of the work for you. think about using Dyna to maintain
+   rules and update handlers.
+
+
+BIGGER (new features)
+=====================
+
+ - TODO: operator for getattr (this will generate slightly different code becase
+   we don't want to look up by string -- i.e. call the getattr builtin).
+
+
+FASTER
+======
+
+ - TODO: specialize calls to emit, don't build the big dictionaries if the
+   aggregator doesn't use them. Consider generate both version (or an argument
+   to the update handler which will skip the appropriate code paths).
+
+ - TODO: faster charts (dynamic argument types? jason's trie data structure)
+
+ - TODO: teach planner to prefer not to use the value column, because it's not
+   indexed.
 
  - TODO: dynac should provide routines for building terms. We can hack something
    together with anf output.
 
- - TODO: faster charts (dynamic argument types? jason's trie data structure)
+ - TODO: prioritization
+
+ - TODO: BAggregators aren't very efficient.
+
+
+STRONGER (robustness)
+=====================
+
+ - TODO: error handling is a bit of a mess, also, some stuff isn't a proper
+   transaction yet.
+
+ - TODO: catch compiler errors (for example, ^C while compiling results in a
+   "Compiler panic!  This is almost assuredly not your fault!...").
+
+
+USERS
+=====
+
+ - TODO: dyna rules for chart display or visualization via viz_chart. Rules will
+   use string formatting or python eval magic.
+
+ - TODO: serialization, can't pickle the chart because functions aren't
+   picklable -- need to work around this...
+
+ - TODO: user-defined priorities (blocked: back-chaining)
+
+ - TODO: filter / bulk loader; post-processing (e.g. serialization and plotting)
+
+ - Catch typos! Warn the user if they write a predicate that is not defined on
+   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
+   [mode analysis will help with this].
+
+ - If the solver is taking too long print an "apology" with some simple
+   statistics explaining what the solver is doing (e.g. repropagation-rate: does
+   it have a bad prioritization heuristics is it stuck in a cycle; number of
+   items proved: is it counting to infinity?).
+
+
+DEVELOPERS
+==========
+
+ - TODO: visualize execution of algorithm on hypergraph -- recreate nwf's
+   animations from his ICLP talk.
+
+
+BUGS
+====
 
  - TODO: write all files to ~/.dyna
-
- - TODO: `None` does not propagate, eventually it will because of the `?` prefix
-   operator.
 
  - TODO: (@nwf) String quoting (see example/stringquote.py)
 
  - TODO: (@nwf) mode planning failures are slient
 
- - TODO: filter and bulk loader
-
  - TODO: make sure interpreter uses the right exceptions. The codegen catches a
    few things -- I think assertionerror is one them... we should probably do
    whatever this is doing with a custom exception.
 
- - TODO: hooks from introspection, eval, and prioritization.
 
-     What's the default prioritization?
+NOTES
+=====
+
+ - TODO: `None` does not propagate, eventually it will because of the `?` prefix
+   operator.
 
  - TODO: Term values should only be aggregated with ``=`` or ``:=`` maybe even
    ``set=``. We should disallow ``a += &b.``
@@ -45,8 +116,6 @@ MISC
 
      This might not be the case during computation -- this is the same as the
      error problem.
-
- - TODO: doc tests for Dyna code!
 
  - TODO: Numeric precision is an issue with BAggregators.
 
@@ -76,8 +145,13 @@ JUST FOR FUN
  - overload everything so that values maintain provenance and we can inspect the
    entire fine-grained circuit.
 
- - play around with python modules uncertainties (error propagation and
-   gradients), look into tools for dimensional analysis.
+ - play around with cool python modules:
+
+   - uncertainties (error propagation and gradients), look
+
+   - values with units (i.e dimensional analysis).
+
+   - sympy?
 
 
 What is null?
@@ -94,13 +168,6 @@ What is null?
 
  What should `a += null` and `a += null + 1.` do?
 
-
-Warnings/lint checking
-======================
-
- - Catch typos! Warn the user if they write a predicate that is not defined on
-   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
-
 """
 
 from __future__ import division
@@ -112,31 +179,12 @@ import debug
 from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, \
-    notimplemented, parse_attrs, ddict, dynac
+    notimplemented, parse_attrs, ddict, dynac, \
+    DynaCompilerError, DynaInitializerException, AggregatorConflict
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
 
 from time import time
-
-class AggregatorConflict(Exception):
-    def __init__(self, key, expected, got):
-        msg = "Aggregator conflict %r was %r trying to set to %r." \
-            % (key, expected, got)
-        super(AggregatorConflict, self).__init__(msg)
-
-
-class DynaInitializerException(Exception):
-    def __init__(self, exception, init):
-        msg = '%r in ininitializer for rule\n  %s\n        %s' % \
-            (exception,
-             init.dyna_attrs['Span'],
-             init.dyna_attrs['rule'])
-        super(DynaInitializerException, self).__init__(msg)
-
-
-# TODO:
-class DynaCompilerError(Exception):
-    pass
 
 
 class Rule(object):
@@ -216,8 +264,10 @@ class Interpreter(object):
         print >> out, '============'
         for item, (val, es) in self.errors.items():
             print >> out,  'because %r is %s:' % (item, _repr(val))
-            for e in es:
-                print >> out, '   ', e
+            for e, h in es:
+                if h is not None:
+                    r = h.dyna_rule
+                    print >> out, '    %s\n        in rule %s\n            %s' % (e, r.span, r.src)
         print >> out
 
     def dump_rules(self):
@@ -233,13 +283,11 @@ class Interpreter(object):
 
         # FIXME:
         if fn not in self.agg_name:
-            # TODO: if the item has no aggregator (e.g purely structural stuff)
+            # item has no aggregator (e.g purely structural stuff) -- what
+            # happens if we add one later?
             self.new_fn(fn, None)
 
-        term = self.chart[fn].lookup(args)
-        if term is None:
-            term = self.chart[fn].insert(args, None)   # don't know val yet.
-        return term
+        return self.chart[fn].insert(args)
 
     def retract_item(self, item):
         """
@@ -249,7 +297,6 @@ class Interpreter(object):
         rederived. In the case of cyclic programs the derivation might be the
         same or different.
         """
-
         # and now, for something truely horrendous -- look up an item by it's
         # string value! This could fail because of whitespace or trivial
         # formatting differences.
@@ -262,11 +309,8 @@ class Interpreter(object):
         except KeyError:
             print 'item not found. This could be because of a trivial formatting differences...'
             return
-
-        print item
-
         self.emit(item, item.value, None, sys.maxint, delete=True)
-        self.go()
+        return self.go()
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
@@ -288,71 +332,50 @@ class Interpreter(object):
         # Step 2: run initializer in delete mode
         rule.init(emit=self.delete_emit)
         # Step 3; go!
-        self.go()
+        return self.go()
 
     def go(self):
         try:
-            self._go()
+            return self._go()
         except KeyboardInterrupt:   # TODO: need to be safer in some parts of the code.
             print '^C'
             self.dump_charts()
 
     def _go(self):
         "the main loop"
-
         changed = {}
         agenda = self.agenda
         errors = self.errors
-        trace = self.trace
-
         while agenda:
             item = agenda.pop_smallest()
-
-            print >> trace
-            print >> trace, magenta % 'pop   ', item,
-
             was = item.value
-            print >> trace, '(was: %s,' % (_repr(was),),
-
             try:
                 now = item.aggregator.fold()
-            except (ZeroDivisionError, TypeError) as e:
-                errors[item] = ('failed to aggregate %r' % item.aggregator, [e])
-                # TODO: Are we sure there is never a reason to requeue this item.
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt) as e:
+                errors[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
                 continue
-
-            print >> trace, 'now: %s)' % (_repr(now),)
-
             if was == now:
-                print >> trace, yellow % 'unchanged'
                 continue
-
             was_error = False
-            if item in errors:    # clear the error
+            if item in errors:    # clear error
                 was_error = True
                 del errors[item]
-
             # TODO: handle `was` and `now` at the same time to avoid the two passes.
             # TODO: will need to propagate was=None when we have question mark
             if was is not None and not was_error:
                 # if `was` is marked as an error we know it didn't propagate.
                 # Thus, we can skip the delete-updates.
                 self.update_dispatcher(item, was, delete=True)
-
             item.value = now
-
             if now is not None:
                 self.update_dispatcher(item, now, delete=False)
-
             changed[item] = now
-
         return changed
 
     def update_dispatcher(self, item, val, delete):
         """
         Passes update to relevant handlers.
         """
-        assert val is not None
 
         # store emissions, make sure all of them succeed before propagating
         # changes to aggregators.
@@ -360,36 +383,30 @@ class Interpreter(object):
         t_emit = lambda item, val, ruleix, variables: \
             emittiers.append((item, val, ruleix, variables, delete))
 
-        try:
+        errors = []
 
-            # TODO: do we want to collect all handlers with errors?
-            for handler in self.updaters[item.fn]:
+        for handler in self.updaters[item.fn]:
+            try:
                 handler(item, val, emit=t_emit)
+            except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
+                errors.append((e, handler))
 
-        except (TypeError, ZeroDivisionError) as e:
+        if errors:
+            self.errors[item] = (val, errors)
+            return
 
-            if item not in self.errors:
-                self.errors[item] = (val, [])
-
-            # TODO: don't eagerly format the message.
-            self.errors[item][1].append('%s\n        in rule %s\n            %s' % \
-                                            (e,
-                                             handler.dyna_attrs['Span'],
-                                             handler.dyna_attrs['rule']))
-
-        else:
-            # no exception, accept emissions.
-            for e in emittiers:
-                # an error could happen here, but we assume (by contract) that
-                # this is not possible.
-                self.emit(*e)
+        # no exception, accept emissions.
+        for e in emittiers:
+            # an error could happen here, but we assume (by contract) that
+            # this is not possible.
+            self.emit(*e)
 
     def new_updater(self, fn, handler):
         self.updaters[fn].append(handler)
-
         i = handler.dyna_attrs['RuleIx']
         rule = self.rules[i]
         rule.updaters.append(handler)
+        handler.dyna_rule = rule
 
     def new_initializer(self, init):
         i = init.dyna_attrs['RuleIx']
@@ -401,14 +418,12 @@ class Interpreter(object):
         self.emit(item, val, ruleix, variables, delete=True)
 
     def emit(self, item, val, ruleix, variables, delete):
-        print >> self.trace, (red % 'delete' if delete else green % 'update'), \
-            '%s (val %s; curr: %s)' % (item, val, item.value)
         if delete:
             item.aggregator.dec(val, ruleix, variables)
         else:
             item.aggregator.inc(val, ruleix, variables)
 #        self.agenda[item] = 0   # everything is high priority
-        self.agenda[item] = time()
+        self.agenda[item] = time()  # FIFO
 
     def repl(self, hist):
         import repl
@@ -460,6 +475,10 @@ class Interpreter(object):
             raise DynaInitializerException(e, init)
 
         else:
+
+            # TODO: how do I make this transactional? what it the user hits ^C
+            # in the middle of the following blocK?
+
             # add new updaters
             for fn, h in env['_updaters']:
                 self.new_updater(fn, h)
@@ -478,6 +497,12 @@ class Interpreter(object):
         debug.draw(self)
 
     def dynac_code(self, code):
+        """
+        Compile a string of dyna code.
+
+        raises ``DynaCompilerError``
+        """
+
         dyna = dotdynadir / 'tmp.dyna'
         out = '%s.plan.py' % dyna
 
@@ -485,9 +510,7 @@ class Interpreter(object):
             f.write(self.parser_state)  # include parser state if any.
             f.write(code)
 
-        # TODO: grab stderr store in DynaCompilerError
-        if dynac(dyna, out):   # stop if the compiler failed.
-            raise DynaCompilerError("Failed to compile %r." % dyna)
+        dynac(dyna, out)   # might raise compiler error
 
         return out
 
@@ -500,10 +523,12 @@ def peel(fn, item):
     """
 
     if fn == "true/0" :
-        assert item is True
+#        assert item is True
+        assert bool(item)
         return
     if fn == "false/0" :
-        assert item is False
+#        assert item is False
+        assert not bool(item)
         return
     assert isinstance(item, Term)
     assert item.fn == fn
