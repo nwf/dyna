@@ -1,6 +1,6 @@
 % Try to use the force to lay out a few nodes
 %
-% run with 
+% run with
 %   ./dyna examples/force.dyna --postprocess src/Dyna/Backend/Python/graph.py
 %
 % Kamada-Kawai force directed layout
@@ -8,7 +8,7 @@
 
 % distance between U and V at time T.
 dist(U,V,T) := (x(U,T) - x(V,T))**2 + (y(U,T) - y(V,T))**2
-   for true is (T < niter).   % restrict to niter iterations.
+   for (T < niter).   % restrict to niter iterations.
 
 % all pairs shortest path.
 shortestpath(U,U) min= 0 for node(U).
@@ -17,7 +17,7 @@ shortestpath(U,V) min= shortestpath(U,W) + edge(W,V).
 % "the unit edge length"
 edgelen := 5.0.
 
-f(U,V,T) := true is (U != V), dist(U,V,T) / (shortestpath(U,V) * edgelen) - 1.
+f(U,V,T) := (U != V), dist(U,V,T) / (shortestpath(U,V) * edgelen) - 1.
 
 forceX(V,T) += f(U,V,T) * (x(U,T) - x(V,T)).
 forceY(V,T) += f(U,V,T) * (y(U,T) - y(V,T)).
@@ -59,8 +59,3 @@ x("i",0) += uniform(0,1).  y("i",0) += uniform(0,1).
 x("j",0) += uniform(0,1).  y("j",0) += uniform(0,1).
 
 pos(U,T) := tuple(x(U, T), y(U, T)).
-
-% import pylab aspl
-% for U,V,_ in edge:
-%     pl.plot([x[U], x[V]],
-%             [y[U], y[V]])
