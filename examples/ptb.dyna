@@ -1,0 +1,139 @@
+sentence(0) :=
+    &t("S", &t("NP-SBJ", &t("NNP", "Rolls-Royce"),
+                         &t("@NP-SBJ", &t("NNP", "Motor"),
+                                       &t("@@NP-SBJ", &t("NNPS", "Cars"),
+                                                      &t("NNP", "Inc.")))),
+            &t("@S", &t("VP", &t("VBD", "said"),
+                              &t("SBAR", &t("-NONE-", "0"),
+                                         &t("S", &t("NP-SBJ", &t("PRP", "it")),
+                                                 &t("VP", &t("VBZ", "expects"),
+                                                          &t("S", &t("NP-SBJ", &t("PRP$", "its"),
+                                                                               &t("@NP-SBJ", &t("NNP", "U.S."),
+                                                                                             &t("NNS", "sales"))),
+                                                                  &t("VP", &t("TO", "to"),
+                                                                           &t("VP", &t("VB", "remain"),
+                                                                                    &t("@VP", &t("ADJP-PRD", &t("JJ", "steady")),
+                                                                                              &t("@@VP", &t("PP-LOC-CLR", &t("IN", "at"),
+                                                                                                                          &t("NP", &t("QP", &t("IN", "about"),
+                                                                                                                                            &t("CD", "1,200")),
+                                                                                                                                   &t("NNS", "cars"))),
+                                                                                                         &t("PP-TMP", &t("IN", "in"),
+                                                                                                                      &t("NP", &t("CD", "1990")))))))))))),
+                     &t(".", "."))).
+
+sentence(1) :=
+    &t("S", &t("NP-SBJ", &t("DT", "The"),
+                         &t("@NP-SBJ", &t("NN", "luxury"),
+                                       &t("@@NP-SBJ", &t("NN", "auto"),
+                                                      &t("NN", "maker")))),
+            &t("@S", &t("NP-TMP", &t("JJ", "last"),
+                                  &t("NN", "year")),
+                     &t("VP", &t("VBD", "sold"),
+                              &t("@VP", &t("NP", &t("CD", "1,214"),
+                                                 &t("NNS", "cars")),
+                                        &t("PP-LOC", &t("IN", "in"),
+                                                     &t("NP", &t("DT", "the"),
+                                                              &t("NNP", "U.S."))))))).
+
+sentence(2) :=
+    &t("S", &t("NP-SBJ", &t("NP", &t("NNP", "Howard"),
+                                  &t("NNP", "Mosher")),
+                         &t("@NP-SBJ", &t(",", ","),
+                                       &t("@@NP-SBJ", &t("NP", &t("NP", &t("NN", "president")),
+                                                               &t("@NP", &t("CC", "and"),
+                                                                         &t("NP", &t("JJ", "chief"),
+                                                                                  &t("@NP", &t("NN", "executive"),
+                                                                                            &t("NN", "officer"))))),
+                                                      &t(",", ",")))),
+            &t("@S", &t("VP", &t("VBD", "said"),
+                              &t("SBAR", &t("-NONE-", "0"),
+                                         &t("S", &t("NP-SBJ", &t("PRP", "he")),
+                                                 &t("VP", &t("VBZ", "anticipates"),
+                                                          &t("NP", &t("NP", &t("NN", "growth")),
+                                                                   &t("@NP", &t("PP", &t("IN", "for"),
+                                                                                      &t("NP", &t("DT", "the"),
+                                                                                               &t("@NP", &t("NN", "luxury"),
+                                                                                                         &t("@@NP", &t("NN", "auto"),
+                                                                                                                    &t("NN", "maker"))))),
+                                                                             &t("PP-LOC", &t("PP", &t("IN", "in"),
+                                                                                                   &t("NP", &t("NNP", "Britain"),
+                                                                                                            &t("@NP", &t("CC", "and"),
+                                                                                                                      &t("NNP", "Europe")))),
+                                                                                          &t("@PP-LOC", &t(",", ","),
+                                                                                                        &t("@@PP-LOC", &t("CC", "and"),
+                                                                                                                       &t("PP", &t("IN", "in"),
+                                                                                                                                &t("NP", &t("ADJP", &t("JJ", "Far"),
+                                                                                                                                                    &t("JJ", "Eastern")),
+                                                                                                                                         &t("NNS", "markets")))))))))))),
+                     &t(".", "."))).
+
+%toString(A) :=
+%  needs(A),
+%  A.
+%
+%toString(&t(A)) :=
+%  needs(&t(A)),
+%  A.
+%
+%toString(&t(A,B)) :=
+%  needs(&t(A,B)),
+%  mod("(%s %s)",
+%      tuple(toString(A),
+%            toString(B))).
+%
+%toString(&t(A,B,C)) :=
+%  needs(&t(A,B,C)),
+%  mod("(%s %s %s)",
+%      tuple(toString(A),
+%            toString(B),
+%            toString(C))).
+
+needs(A) |= needs(&t(A,B)).
+needs(B) |= needs(&t(A,B)).
+
+needs(A) |= needs(&t(A,B,C)).
+needs(B) |= needs(&t(A,B,C)).
+needs(C) |= needs(&t(A,B,C)).
+
+%needs(sentence(0)).
+%needs(sentence(1)).
+%needs(sentence(2)).
+
+%zzz(0) := toString(sentence(0)).
+%zzz(1) := toString(sentence(1)).
+%zzz(2) := toString(sentence(2)).
+
+%sym(&t(X,_)) := X.
+%sym(&t(X,_,_)) := X.
+
+% the following rule order is important bc we use :=.
+sym(A) := needs(A), A.
+sym(&t(A,B)) := needs(&t(A,B)), A.
+sym(&t(A,B,C)) := needs(&t(A,B,C)), A.
+
+% rule used to create top-level subtree
+rules(&t(X,Y)) := needs(&t(X,Y)), &r(X, sym(Y)).
+rules(&t(X,Y,Z)) := needs(&t(X,Y,Z)), needs(Z), &r(X, sym(Y), sym(Z)).
+
+% unnormalized
+c(X,Y) += r(X,Y) is rules(&t(X1,Y1)), 1.
+c(X,Y,Z) += r(X,Y,Z) is rules(&t(X1,Y1,Z1)), 1.
+
+% normalizing constants
+n(X) += c(X,Y).
+n(X) += c(X,Y,Z).
+
+% normalize
+p(X,Y) := c(X,Y) / n(X).
+p(X,Y,Z) := c(X,Y,Z) / n(X).
+
+% activate fake backchaining.
+needs(sentence(0)).
+needs(sentence(1)).
+needs(sentence(2)).
+
+% TODO: convert tree structure into word(word, position, sentence).
+
+% TODO: augment CKY rules with sentence index
+
+% TODO: implement constituent recall accuracy measure for two trees
