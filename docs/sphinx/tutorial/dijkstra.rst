@@ -213,6 +213,17 @@ special value :term:`null`, which is the *identity* of every aggregator and
 a *zero* of every expression.  Since we aggregate answers with ``min=``,
 :term:`null` approximates :math:`+\infty`.
 
+Deriving The Graph From Rules
+=============================
+
+There's nothing that mandates that ``edge`` weights be the base case; we
+could also derive ``edge`` facts from other facts, such as position and
+reachability.  An example is available in ``examples/dijkstra-euclid.dyna``
+(or :dynasrc:`here <examples/dijkstra-euclid.dyna>`).
+
+
+.. todo:: This section is mostly a placeholder!
+
 Endnotes
 ========
 
