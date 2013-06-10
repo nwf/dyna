@@ -147,4 +147,15 @@ def rule_source(span, src=None):
 
 
 if __name__ == '__main__':
-    rule_source('examples/papa.dyna:4:1-examples/papa.dyna:4:47')
+    #rule_source('examples/papa.dyna:4:1-examples/papa.dyna:4:47')
+    import sys
+
+    def t(xs):
+        if isinstance(xs, basestring):
+            return '"%s"' % xs
+        else:
+            return '&t(%s)' % ','.join(t(x) for x in xs)
+
+    for i, [x] in enumerate(parse_sexpr(sys.stdin.read())):
+        print 'sentence(%s) := %s.' % (i, t(x))
+        print

@@ -82,22 +82,21 @@ class Hypergraph(object):
                                                                  id=id(e),
                                                                  label=e.label)
 
-                # connect body variables to edge
+                # connect body variables to edge crux
                 for b in e.body:
+#                    print >> f, '"%s" -> "%s" [arrowhead=none];' % (b, id(e))
                     print >> f, '"%s" -> "%s";' % (b, id(e))
 
                 # connect head variables to edge
-                print >> f, '"%s" -> "%s";' % (id(e), e.head)
+#                print >> f, '  "%s" [label="",shape=point];' % (id(e))
+                print >> f, '  "%s" -> "%s";' % (id(e), e.head)
 
             # node styles
             for x in self.nodes:
-#                sty[x].update({'shape': 'circle'})
-                sty[e].update({'shape': 'rectangle'})
                 print >> f, '"%s" [%s]' % (x, ','.join('%s="%s"' % (k,v) for k,v in sty[x].items()))
 
             # edge styles
             for e in self.edges:
-                sty[e].update({'shape': 'rectangle'})
                 print >> f, '"%s" [%s]' % (id(e), ','.join('%s="%s"' % (k,v) for k,v in sty[e].items()))
 
             print >> f, '}'

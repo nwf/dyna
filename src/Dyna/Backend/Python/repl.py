@@ -89,7 +89,7 @@ class REPL(cmd.Cmd, object):
         self.default(query)
 
         try:
-            [(_, (_, results))] = self.interp.chart['out/1'][self.lineno,:]
+            [(_, _, results)] = self.interp.chart['out/1'][self.lineno,:]
         except ValueError:
             print 'No results.'
             return

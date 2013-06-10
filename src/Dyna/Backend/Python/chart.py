@@ -16,6 +16,8 @@ class Term(object):
     def __cmp__(self, other):
         if other is None:
             return 1
+        if not isinstance(other, Term):
+            return 1
         return cmp((self.fn, self.args), (other.fn, other.args))
 
     # default hash and eq suffice because we intern
@@ -95,11 +97,11 @@ class Chart(object):
         if isinstance(val, slice):
             for term in candidates:
                 if term.value is not None:
-                    yield term, term.args + (term.value,)
+                    yield term, term.args, term.value
         else:
             for term in candidates:
                 if term.value == val:
-                    yield term, term.args + (term.value,)   # TODO: change codegen to avoid addition..
+                    yield term, term.args, term.value
 
     def insert(self, args):        # TODO: rename
         try:

@@ -17,12 +17,21 @@ TODO
  - let Dyna do some of the work for you. think about using Dyna to maintain
    rules and update handlers.
 
+ - magic templates transform for backward chaining, for example:
+
+   :- sigmoid(X) := needs(X), 1 / (1 + exp(-X)).
+   :- needs(0.5).
+
 
 BIGGER (new features)
 =====================
 
- - TODO: operator for getattr (this will generate slightly different code becase
-   we don't want to look up by string -- i.e. call the getattr builtin).
+ - TODO: operator for getattr (this will generate slightly different code
+   because we don't want to look up by string -- i.e. call the getattr builtin).
+
+ - hook for python imports?
+
+   :- python: from numpy import exp, sqrt, log
 
 
 FASTER
@@ -38,7 +47,7 @@ FASTER
    indexed.
 
  - TODO: dynac should provide routines for building terms. We can hack something
-   together with anf output.
+   together with anf output, but this will be prety kludgy and inefficient.
 
  - TODO: prioritization
 
@@ -81,7 +90,7 @@ USERS
 DEVELOPERS
 ==========
 
- - TODO: visualize execution of algorithm on hypergraph -- recreate nwf's
+ - TODO: visualize execution of solver on hypergraph -- recreate nwf's
    animations from his ICLP talk.
 
 
@@ -183,7 +192,8 @@ from utils import ip, red, green, blue, magenta, yellow, \
     DynaCompilerError, DynaInitializerException, AggregatorConflict
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
-
+from numpy import log, exp, sqrt
+from numpy.random import uniform
 from time import time
 
 
@@ -213,6 +223,8 @@ class Interpreter(object):
         self.agenda = prioritydict()
         self.parser_state = ''
 
+        self.tape = []
+
         def newchart(fn):
             arity = int(fn.split('/')[-1])
             return Chart(fn, arity, lambda: aggregator(self.agg_name[fn]))
@@ -220,8 +232,6 @@ class Interpreter(object):
         self.chart = ddict(newchart)
         self.rules = ddict(Rule)
         self.errors = {}
-        # misc
-        self.trace = file(dotdynadir / 'trace', 'wb')
 
     def new_fn(self, fn, agg):
         # check for aggregator conflict.
@@ -343,11 +353,17 @@ class Interpreter(object):
 
     def _go(self):
         "the main loop"
+
+        tape = self.tape
+
         changed = {}
         agenda = self.agenda
         errors = self.errors
         while agenda:
             item = agenda.pop_smallest()
+
+            tape.append(item)
+
             was = item.value
             try:
                 now = item.aggregator.fold()
@@ -441,16 +457,16 @@ class Interpreter(object):
         """
         assert os.path.exists(filename)
 
+        # TODO: need a new tracing tool
         # for debuggging
-        with file(filename) as h:
-            print >> self.trace, magenta % 'Loading new code'
-            print >> self.trace, yellow % h.read()
-
-        from numpy.random import uniform
+#        with file(filename) as h:
+#            print >> self.trace, magenta % 'Loading new code'
+#            print >> self.trace, yellow % h.read()
 
         env = {'_initializers': [], '_updaters': [], '_agg_decl': {},
                'chart': self.chart, 'build': self.build, 'peel': peel,
-               'parser_state': None, 'uniform': uniform}
+               'parser_state': None, 'uniform': uniform,
+               'log': log, 'exp': exp, 'sqrt': sqrt}
 
         # load generated code.
         execfile(filename, env)
@@ -541,7 +557,6 @@ def main():
     parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).', nargs='?')
     parser.add_argument('--plan', action='store_true', default=False,
                         help='`source` specifies output of the compiler instead of dyna source code.')
-    parser.add_argument('--trace', default='/tmp/dyna.log')
     parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
     parser.add_argument('-o', dest='output', help='Output chart.')
     parser.add_argument('--draw', action='store_true',
@@ -552,14 +567,6 @@ def main():
     argv = parser.parse_args()
 
     interp = Interpreter()
-
-    if argv.trace == 'stderr':
-        interp.trace = sys.stderr
-    elif argv.trace == 'stdout':
-        interp.trace = sys.stdout
-    else:
-        interp.trace = file(argv.trace, 'wb')
-
 
     if argv.source:
 

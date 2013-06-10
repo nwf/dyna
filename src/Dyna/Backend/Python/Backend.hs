@@ -189,8 +189,11 @@ pslice vs = brackets $
        sepBy "," (map (\x -> if nGround (x^.mv_mi) then pretty (x^.mv_var) else ":") vs)
        <> "," -- add a comma to ensure getitem is always passed a tuple.
 
-piterate vs = parens $
-       sepBy "," (map (\x -> if nGround (x^.mv_mi) then "_" else pretty (x^.mv_var)) vs)
+ground2underscore x = if nGround (x^.mv_mi) then "_" else pretty (x^.mv_var)
+
+piterate vs = if length vs == 0 then "_"
+              else parens $
+       sepBy "," (map ground2underscore vs)
        <> "," -- add a comma to ensure tuple.
 
 
@@ -205,13 +208,13 @@ pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
 pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
                                       <+> pretty val <> ": continue"
 pdope_ (OPPeel vs i f _) = return $
-    --"try:" `above` (indent 4 $
+    "try:" `above` (indent 4 $
            tupledOrUnderscore vs
             <+> equals
                 <+> "peel" <> (parens $ pfas f vs <> comma <> pretty i)
-    --)
+    )
     -- you'll get a "TypeError: 'NoneType' is not iterable."
-    --`above` "except (TypeError, AssertionError): continue"
+    `above` "except (TypeError, AssertionError): continue"
 pdope_ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
@@ -225,7 +228,7 @@ pdope_ (OPIter v vs f Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
 pdope_ (OPIter o m f _ Nothing) = do
       i <- incState
       return $ let mo = m ++ [o] in
-          "for" <+> "d" <> pretty i <> "," <> piterate mo
+          "for" <+> "d" <> pretty i <> "," <> piterate m <> comma <> (ground2underscore o)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon
 
     -- XXX Ought to make i and vs conditional on... doing debugging or the

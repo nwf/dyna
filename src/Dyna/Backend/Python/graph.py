@@ -9,7 +9,7 @@ def g(nodes, edges, t, ax, interp):
     ax.set_ylim(-2,2)
 
     pos = defaultdict(lambda: (0,0))
-    pos.update({node: p for _, (node, _, p) in interp.chart['pos/2'][:,t,:]})
+    pos.update({node: p for _, (node, _), p in interp.chart['pos/2'][:,t,:]})
 
     for u,v in edges:
         if u < v:
@@ -21,10 +21,10 @@ def g(nodes, edges, t, ax, interp):
         ax.text(x,y,s)
 
 def animate(interp):
-    [(_, (niter,))] = interp.chart['niter/0'][:,]
+    [(_, _, niter)] = interp.chart['niter/0'][:,]
 
-    nodes = [name for _, (name, _) in interp.chart['node/1'][:,:]]
-    edges = [(u,v) for _, (u,v,_) in interp.chart['edge/2'][:,:,:]]
+    nodes = [name for _, [name], _ in interp.chart['node/1'][:,:]]
+    edges = [(u,v) for _, [u,v] ,_ in interp.chart['edge/2'][:,:,:]]
 
     fig = pl.figure()
     ax = pl.axes()

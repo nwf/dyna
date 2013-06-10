@@ -15,7 +15,7 @@ shortestpath(U,U) min= 0 for node(U).
 shortestpath(U,V) min= shortestpath(U,W) + edge(W,V).
 
 % "the unit edge length"
-edgelen := 5.0.
+edgelen := 4.0.
 
 f(U,V,T) := (U != V), dist(U,V,T) / (shortestpath(U,V) * edgelen) - 1.
 
