@@ -77,10 +77,9 @@ prop_no_unifyUnaliasedNV = unifProp2 wf no_unifyUnaliasedNV lattice
 
   no_unifyUnaliasedNV n1 n2 =
     fmap fst $ runIdentity
-             $ flip CNA.runSIMCT (CNA.allFreeSIMCtx [v])
+             $ flip CNA.runSIMCT (CNA.ctxFromBindings [(v,n1)])
              $ flip runReaderT (UnifParams True False)
              $ do
-                _ <- FNA.unifyUnaliasedNV n1 v
                 _ <- FNA.unifyUnaliasedNV n2 v
                 FNA.expandV v
    where v = "A"

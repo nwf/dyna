@@ -1,0 +1,29 @@
+% Dijkstra's algorithm for single-source shortest path
+path(start) min= 0.0.
+path(B) min= path(A) + edge(A,B).
+goal min= path(end).
+
+% Euclidean distance on reachable pairs.
+edge(A,B) := ((AX-BX)**(2.0) + (AY-BY)**(2.0))**(0.5)
+             for pair(AX,AY) is pos(A),
+                 pair(BX,BY) is pos(B),
+                 reachable(A,B).
+
+% Assert the position of some places on the map
+pos("origin") := pair(0.0,0.0).
+pos("t1"    ) := pair(1.0,2.0).
+pos("PyTrip") := pair(3.0,4.0).
+pos("t2"    ) := pair(2.0,3.5).
+
+% separately, assert the adjacency graph
+reachable("origin","t1").
+reachable("origin","PyTrip").
+reachable("t1"    ,"PyTrip").
+reachable("PyTrip","t2").
+reachable("t1"    ,"t2").
+
+start := "origin".
+end   := "t2".
+
+% This file is mentioned in the tutorial!
+% XREF:docs/sphinx/tutorial/dijkstra.rst
