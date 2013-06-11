@@ -41,6 +41,8 @@ import qualified Text.PrettyPrint.Free            as PP
 data ParsedDynaProgram = PDP
   { pdp_rules         :: [(RuleIx, DisposTab, Spanned Rule)]
 
+  , pdp_aggrs         :: M.Map DFunctAr DAgg
+
     -- | A rather ugly hack for resumable parsing: this records the set of
     -- pragmas to restore the current PCS.
   , pdp_parser_resume :: forall e . PP.Doc e
@@ -55,6 +57,7 @@ data PCS = PCS
   , _pcs_dt_over   :: DisposTabOver
   , _pcs_dt_cache  :: DisposTab
     -- ^ Cache the disposition table
+  , _pcs_iagg_map  :: M.Map DFunctAr DAgg
   , _pcs_instmap   :: M.Map B.ByteString ([DVar]
                                          ,ParsedInst
                                          ,Span)
@@ -76,16 +79,20 @@ data PCS = PCS
   }
 $(makeLenses ''PCS)
 
+mkdlc :: Maybe (S.Set String) -> PCS -> DLCfg
 mkdlc aggs pcs = DLC (_pcs_ot_cache pcs)
                      (maybe genericAggregators ct aggs)
  where
   ct = fmap BU.fromString . choice . map (try . string) . S.toList
 
-update_pcs_dt = pcs_dt_cache <<~
+update_pcs_dt,
+ update_pcs_ot :: (Applicative m, MonadState PCS m) => m ()
+update_pcs_dt = pcs_dt_cache <~
                 liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
 
-update_pcs_ot = pcs_ot_cache <<~ flip mkEOT True <$> (use pcs_operspec)
+update_pcs_ot = pcs_ot_cache <~ (flip mkEOT True <$> (use pcs_operspec))
 
+dtmk :: String -> DisposTabOver -> DisposTab
 dtmk "dyna"      = disposTab_dyna
 dtmk "prologish" = disposTab_dyna
 dtmk n           = dynacPanic $ "Unknown default disposition table:"
@@ -107,6 +114,8 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_dt_cache  = dtmk (defPCS ^. pcs_dt_mk)
                                      (defPCS ^. pcs_dt_over)
 
+             , _pcs_iagg_map  = M.empty
+
              , _pcs_instmap   = mempty -- XXX
              , _pcs_modemap   = mempty -- XXX
 
@@ -122,13 +131,13 @@ pcsProcPragma (PDispos s f as :~ _) = do
   pcs_dt_over %= dtoMerge (f,length as) (s,as)
   update_pcs_dt
   return ()
-pcsProcPragma (PDisposDefl n :~ s) = do
+pcsProcPragma (PDisposDefl n :~ _) = do
   pcs_dt_mk .= n
   update_pcs_dt
   return ()
-pcsProcPragma (PInst (PNWA n as) pi :~ s) = do
+pcsProcPragma (PInst (PNWA n as) i :~ s) = do
   im <- use pcs_instmap
-  maybe (pcs_instmap %= M.insert n (as,pi,s))
+  maybe (pcs_instmap %= M.insert n (as,i,s))
         -- XXX fix this error message once the new trifecta lands upstream
         -- with its ability to throw Err.
         (\(_,_,s') -> unexpected $ "duplicate definition of inst: "
@@ -153,16 +162,20 @@ pcsProcPragma (p :~ s) = dynacSorry $ "Cannot handle pragma"
                                       PP.<//> "at"
                                       PP.<//> prettySpanLoc s
 
--- XXX
+pragmasFromPCS :: PCS -> PP.Doc e
 pragmasFromPCS (PCS dt_mk dt_over _
+                    _
                     im mm
-                    om _
+                    _ _
                     rix) =
   PP.vcat $ map renderPragma $
        (map (\((k,_),(s,as)) -> PDispos s k as)
           $ M.toList dt_over)
     ++ [PDisposDefl dt_mk]
-    ++ (map (\(n,(as,pi,_)) -> PInst (PNWA n as) pi) $ M.toList im)
+    -- XXX leaving out the item agg map, because that gets refined during
+    -- the program's execution.
+    -- ++ (map (\((f,a),agg) -> PIAggr f a agg) $ M.toList iaggmap)
+    ++ (map (\(n,(as,i,_)) -> PInst (PNWA n as) i) $ M.toList im)
     ++ (map (\(n,(as,pmf,pmt,_)) -> PMode (PNWA n as) pmf pmt) $ M.toList mm)
     ++ [PRuleIx rix]
 
@@ -189,7 +202,7 @@ oneshotDynaParser aggs = (postProcess =<<)
              return $ (rix, dt, r))
      <* optional (dynaWhiteSpace (someSpace))
  where
-  postProcess (rs,pcs) = return $ PDP rs (pragmasFromPCS pcs)
+  postProcess (rs,pcs) = return $ PDP rs (pcs ^. pcs_iagg_map) (pragmasFromPCS pcs)
 
 
 ------------------------------------------------------------------------}}}

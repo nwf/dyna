@@ -36,8 +36,8 @@ procANF (Rule _ h _ _ sp _ crs _) =
                                           <+> "is beyond my abilities."
     Just t  -> t
 
-buildAggMap :: [Rule] -> AggMap
-buildAggMap = go (M.empty)
+buildAggMap :: AggMap -> [Rule] -> AggMap
+buildAggMap = go
  where
   go m []      = m
   go m (ar@(Rule _ _ a _ sp _ _ _):xs) =

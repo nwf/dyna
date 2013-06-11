@@ -34,8 +34,8 @@ import           Dyna.Analysis.Mode
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
+import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
--- import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
@@ -46,6 +46,7 @@ import           Text.PrettyPrint.Free
 ------------------------------------------------------------------------}}}
 -- Supported aggregations                                               {{{
 
+aggrs :: S.Set String
 aggrs = S.fromList
   [ "max=" , "min="
   , "+=" , "*="
@@ -117,7 +118,10 @@ builtins (f,is,o) = case () of
   _ | MA.isJust (constants (f,length is)) -> Left True
   _ -> Left False
 
+infixOp :: Doc e -> a -> [ModedVar] -> Doc e
 infixOp op _ vis = sepBy op $ mpv vis
+
+mpv :: [ModedVar] -> [Doc e]
 mpv = map (pretty . (^.mv_var))
 
 constants :: DFunctAr -> Maybe PyDopeBS
@@ -171,33 +175,40 @@ constants = go
 -- DOpAMine Printout                                                    {{{
 
 -- | Print functor and arity based on argument list
+pfas :: Pretty a => a -> [b] -> Doc e
 pfas f args = dquotes $ pretty f <> "/" <> (pretty $ length args)
 
+pfa :: (Pretty f, Pretty n) => f -> n -> Doc e
 pfa f n = parens $ dquotes $ pretty f <> "/" <> pretty n
 
 -- pf f vs = pretty f <> (tupled $ map pretty vs)
 
+functorIndirect :: Pretty a => Doc e -> a -> [b] -> Doc e
 functorIndirect table f vs = table <> (brackets $ pfas f vs)
 
 -- this comes up because can't assign to ()
-tupledOrUnderscore vs = if length vs > 0
-                         then parens ((sepBy "," $ map pretty vs) <> ",")
-                         else text "_"
+tupledOrUnderscore :: (Pretty a) => [a] -> Doc e
+tupledOrUnderscore [] = text "_"
+tupledOrUnderscore vs = parens ((sepBy "," $ map pretty vs) <> ",")
 
 
+pslice :: [ModedVar] -> Doc e
 pslice vs = brackets $
        sepBy "," (map (\x -> if nGround (x^.mv_mi) then pretty (x^.mv_var) else ":") vs)
        <> "," -- add a comma to ensure getitem is always passed a tuple.
 
+ground2underscore :: ModedVar -> Doc e
 ground2underscore x = if nGround (x^.mv_mi) then "_" else pretty (x^.mv_var)
 
+piterate :: [ModedVar] -> Doc e
 piterate vs = if length vs == 0 then "_"
               else parens $
        sepBy "," (map ground2underscore vs)
        <> "," -- add a comma to ensure tuple.
 
 
-filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
+-- filterGround :: [ModedVar] -> [DVar]
+-- filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
 -- | Render a single dopamine opcode or its surrogate
 pdope_ :: DOpAMine PyDopeBS -> State Int (Doc e)
@@ -221,9 +232,17 @@ pdope_ (OPWrap v vs f) = return $ pretty v
                            <> (parens $ pfas f vs <> comma
                                 <> (sepBy "," $ map pretty vs))
 
-pdope_ (OPIter v vs f Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
+pdope_ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
                                      <+> c v vs
+
+pdope_ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
+           "Unexpected determinism flag (at python code gen):"
+    <+> pretty v
+    <+> pretty vs
+    <+> squotes (pretty f)
+    <+> text (show d)
+    <+> parens (pretty $ c v vs)
 
 pdope_ (OPIter o m f _ Nothing) = do
       i <- incState
@@ -271,7 +290,7 @@ printPlanHeader r c mn = do
        , "'''"]
 
 printInitializer :: Handle -> Rule -> Cost -> Actions PyDopeBS -> IO ()
-printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
+printInitializer fh rule cost dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "@_initializers.append" -- <> (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
                    `above` "def" <+> char '_' <> tupled ["emit"] <> colon
@@ -279,9 +298,12 @@ printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
                    `above` pdope dope
                    <> line
 
+printUpdate :: Handle -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar)
+            -> Actions PyDopeBS -> IO ()
 -- XXX INDIR EVAL
-printUpdate :: Handle -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar) -> Actions PyDopeBS -> IO ()
-printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope = do
+printUpdate _  _    _    _      Nothing      _      _    =
+  dynacPanic "Python backend does not know how to do indirect evaluations"
+printUpdate fh rule cost evalix (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "#" <+> (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <> colon
@@ -301,6 +323,10 @@ driver am um {-qm-} is pr fh = do
   -- Parser resume state
   hPutStrLn fh "parser_state = \"\"\""
   hPutStrLn fh $ show pr
+  -- XXX This is more than a little bit of a hack
+  mapM_ (\((f,a),agg) -> hPutStrLn fh $ show
+                                      $ P.renderPragma (P.PIAggr f a agg))
+        $ M.toList am
   hPutStrLn fh "\"\"\""
   hPutStrLn fh ""
 

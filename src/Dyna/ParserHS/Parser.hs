@@ -117,6 +117,9 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
                 --   Note that the override defintions are
                 --   preserved across this operation!
                 --   (XXX is that what we want?)
+ 
+            | PIAggr B.ByteString Int B.ByteString
+                -- ^ Assert the aggregator for a functor/arity.
 
             | PInst NameWithArgs
                     ParsedInst
@@ -577,12 +580,13 @@ parseUniq = choice [ symbol "clobbered" *> pure UClobbered
 ------------------------------------------------------------------------}}}
 -- Parsing pragma bodies                                                {{{
 
-pragmaBody :: (DeltaParsing m, LookAheadParsing m)
+pragmaBody :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
            => m Pragma
 pragmaBody = choice
-  [ -- try $ symbol "aggr" *> parseAggr          -- XXX alternate syntax for aggr
+  [ 
     symbol "dispos_def" *> parseDisposDefl -- set default dispositions
   , symbol "dispos" *> parseDisposition -- in-place dispositions
+  , symbol "iaggr"  *> parseIAggr       -- alternate syntax for aggr
   , symbol "inst"   *> parseInstDecl    -- instance delcarations
   , symbol "mode"   *> parseMode        -- mode/qmode decls
   , symbol "oper"   *> parseOper        -- new {pre,in,post}fix oper
@@ -607,6 +611,14 @@ pragmaBody = choice
            , symbol "dyna"
            , pure "dyna"
            ]
+
+  parseIAggr = do
+    f <- parseFunctor
+    _ <- char '/'
+    n <- token decimal
+    when (n > fromIntegral (maxBound :: Int)) $ unexpected "huge number"
+    a <- join $ asks dlc_aggrs
+    return (PIAggr f (fromIntegral n) a)
 
   -- XXX Does not handle <= or >= forms yet, which we need for mode
   -- polymorphism.
@@ -689,6 +701,12 @@ renderPragma_ (PDispos s f as) = "dispos" PP.<+> rs s
 
   ra ADQuote   = "&"
   ra ADEval    = "*"
+
+renderPragma_ (PIAggr f a ag)  = "iaggr" PP.<+> renderFunctor f
+                                         PP.<> PP.char '/'
+                                         PP.<> PP.pretty a
+                                         PP.<+> PP.pretty ag
+                                         PP.<+> PP.empty
 
 renderPragma_ (PInst n i) = "inst" PP.<+> renderPNWA n
                                    PP.<+> renderInst i
