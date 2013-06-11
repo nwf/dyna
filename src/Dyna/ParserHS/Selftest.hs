@@ -183,11 +183,14 @@ case_tyAnnot = e @=? (term fintx)
 ------------------------------------------------------------------------}}}
 -- Aggregators                                                          {{{
 
+okAggrs :: [B.ByteString]
+okAggrs = ["+=", "*=", ".=", "min=", "max=", "?=", ":-", "max+=" ]
+
 test_aggregators :: [TF.Test]
 test_aggregators = hUnitTestToTests $ TestList
   [ TestLabel "generic valid" $ TestList $
       map (\x -> (BU.toString x) ~: x ~=? unsafeParse testGenericAggr x)
-        ["+=", "*=", ".=", "min=", "max=", "?=", ":-", "max+=" ]
+          okAggrs
   , TestLabel "generic invalid" $ TestList $
       map (\x -> TestLabel (BU.toString x) $ TestCase
                                            $ checkParseFail_ testGenericAggr x)
@@ -219,7 +222,7 @@ progrules = unsafeParse (many (spanned (testRule defDLC)) <* eof)
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
 oneshotRules = xlate . unsafeParse (oneshotDynaParser Nothing)
  where
-  xlate (PDP rs _) = map (\(i,_,sr) -> (i,sr)) rs
+  xlate (PDP rs _ _) = map (\(i,_,sr) -> (i,sr)) rs
 
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progrule sr)
@@ -438,6 +441,8 @@ arbPragma :: Gen Pragma
 arbPragma = oneof
   [ PDispos <$> arbSD <*> arbAtom <*> listOf arbAD
   , PDisposDefl <$> elements ["dyna", "prologish"]
+  , PIAggr <$> arbAtom <*> (getPositive <$> arbitrary) <*> (elements okAggrs)
+  , PRuleIx <$> (getPositive <$> arbitrary)
   ]
  where
   arbSD = elements [SDInherit, SDEval, SDQuote]

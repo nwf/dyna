@@ -298,7 +298,7 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
+    P.PDP rs iaggmap pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
 
     dump DumpParsed $
          (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
@@ -310,7 +310,7 @@ processFile fileName = bracket openOut hClose go
 
     hPutDoc stderr $ vcat $ MA.mapMaybe maybeWarnANF anfWarns
 
-    aggm <- return $! buildAggMap frs
+    aggm <- return $! buildAggMap iaggmap frs
 
     dump DumpAgg (M.foldlWithKey (\d f a -> d `above`
                                     (pretty f <+> colon <+> pretty a))
