@@ -197,6 +197,8 @@ import os, sys
 from collections import defaultdict
 from argparse import ArgumentParser
 
+from hashlib import sha1
+
 import debug
 from chart import Chart, Term, _repr
 from defn import aggregator
@@ -525,8 +527,15 @@ class Interpreter(object):
 
         raises ``DynaCompilerError``
         """
+        x = sha1()
+        x.update(self.parser_state)
+        x.update(code)
 
-        dyna = dotdynadir / 'tmp.dyna'
+        dyna = dotdynadir / 'tmp' / ('%s.dyna' % x.hexdigest())
+
+        # make necessary directories
+        dyna.dirname().mkdir_p()
+
         out = '%s.plan.py' % dyna
 
         with file(dyna, 'wb') as f:
