@@ -41,12 +41,15 @@ buildAggMap = go
  where
   go m []      = m
   go m (ar@(Rule _ _ a _ sp _ _ _):xs) =
-    let d = procANF ar
+    let d@(f,n) = procANF ar
     in case mapUpsert d a m of
          Left a' -> dynacUserErr $     "Conflicting aggregators; rule"
-                                   <+> prettySpanLoc sp <+> "uses" <+> (pretty a)
+                                   <+> prettySpanLoc sp <//> "uses"
+                                   <+> squotes (pretty a)
+                                   <+> "for" <+> pretty f <> char '/' <> pretty n
                                    <+> "but I had been lead to expect"
-                                   <+> pretty a'
+                                   <+> squotes (pretty a')
+                                   <>  dot
          Right m' -> go m' xs
 
 ------------------------------------------------------------------------}}}
