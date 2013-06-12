@@ -4,6 +4,8 @@
 TODO
 ====
 
+ - AggregatorConflict should now always be raised by Dyna compiler.
+
  - vbench: a script which tracks performace over time (= git commits).
 
  - profiler workflow
@@ -203,8 +205,16 @@ from utils import ip, red, green, blue, magenta, yellow, \
     DynaCompilerError, DynaInitializerException, AggregatorConflict
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
-from numpy import log, exp, sqrt
-from numpy.random import uniform
+
+try:
+    from numpy import log, exp, sqrt
+    from numpy.random import uniform
+except ImportError:                       # XXX: should probably issue a warning.
+    from math import log, exp, sqrt
+    from random import random as _random
+    def uniform(a=0, b=1):
+        return _random() * (b - a) + a
+
 from time import time
 
 
