@@ -1,7 +1,7 @@
-import os, sys
+import os
 import cmd, readline
 import interpreter
-from utils import blue, yellow, green, magenta, ip, DynaCompilerError, AggregatorConflict, DynaInitializerException
+from utils import blue, yellow, green, magenta, ip, DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
 import debug
@@ -30,8 +30,8 @@ class REPL(cmd.Cmd, object):
     def do_retract_rule(self, idx):
         self.interp.retract_rule(int(idx))
 
-    def do_retract_item(self, item):
-        self.interp.retract_item(item)
+#    def do_retract_item(self, item):
+#       self.interp.retract_item(item)
 
     def do_exit(self, _):
         readline.write_history_file(self.hist)
@@ -100,9 +100,9 @@ class REPL(cmd.Cmd, object):
             return
         try:
             src = self.interp.dynac_code(line)   # might raise DynaCompilerError
-            changed = self.interp.do(src)        # throws AggregatorConflict
+            changed = self.interp.do(src)
 
-        except (AggregatorConflict, DynaInitializerException, DynaCompilerError) as e:
+        except (DynaInitializerException, DynaCompilerError) as e:
             print type(e).__name__ + ':'
             print e
             print '> new rule(s) were not added to program.'
