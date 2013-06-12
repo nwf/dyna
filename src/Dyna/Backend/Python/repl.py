@@ -112,7 +112,7 @@ class REPL(cmd.Cmd, object):
             changed = self.interp.do(src)        # throws AggregatorConflict
 
         except (AggregatorConflict, DynaInitializerException, DynaCompilerError) as e:
-            print type(e), ':'
+            print type(e).__name__ + ':'
             print e
             print '> new rule(s) were not added to program.'
 
