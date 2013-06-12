@@ -1,57 +1,7 @@
 from collections import defaultdict
 from utils import notimplemented
 
-
-# TODO: codegen should output a derived Term instance for each functor
-class Term(object):
-
-    __slots__ = 'fn args value aggregator'.split()
-
-    def __init__(self, fn, args):
-        self.fn = fn
-        self.args = args
-        self.value = None
-        self.aggregator = None
-
-    def __cmp__(self, other):
-        if other is None:
-            return 1
-        if not isinstance(other, Term):
-            return 1
-        return cmp((self.fn, self.args), (other.fn, other.args))
-
-    # default hash and eq suffice because we intern
-    #def __hash__(self):
-    #def __eq__(self):
-
-    def __repr__(self):
-        "Pretty print a term. Will retrieve the complete (ground) term."
-        fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
-        if not self.args:
-            return fn
-        return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
-
-    def __getstate__(self):
-        return (self.fn, self.args, self.value, self.aggregator)
-
-    def __setstate__(self, state):
-        (self.fn, self.args, self.value, self.aggregator) = state
-
-    __add__ = __sub__ = __mul__ = notimplemented
-
-
-def _repr(x):
-    if x is True:
-        return 'true'
-    elif x is False:
-        return 'false'
-    elif x is None:
-        return 'null'
-    elif isinstance(x, basestring):
-        # dyna doesn't accept single-quoted strings
-        return '"%s"' % x.replace('"', r'\"')
-    else:
-        return repr(x)
+from term import Term, _repr
 
 
 class Chart(object):

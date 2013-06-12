@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+echo -e "
+a += 1.
+b += 1.
+a += 1.
+rules
+chart
+retract_rule 0
+retract_rule 1
+chart" |./dyna > $0.out
+
+colordiff $0.expect $0.out && echo pass
+
+# TODO: add test to make sure that rule retraction will clear errors.
+
+#$ echo -e "retract_rule 0\n retract_rule 3\nretract_rule 6\nrules\nchart" | ./dyna examples/errors.dyna -i

@@ -273,10 +273,13 @@ printPlanHeader r c mn = do
 printInitializer :: Handle -> Rule -> Cost -> Actions PyDopeBS -> IO ()
 printInitializer fh rule@(Rule _ h _ r _ _ ucruxes _) cost dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "@_initializers.append" -- <> (uncurry pfa $ MA.fromJust $ findHeadFA h ucruxes)
-                   `above` "def" <+> char '_' <> tupled ["emit"] <> colon
+                 $ "def" <+> char '_' <> tupled ["emit"] <> colon
                    `above` (indent 4 $ printPlanHeader rule cost Nothing)
                    `above` pdope dope
+                   <> line
+                   <> "_initializers.append((" <> (pretty $ r_index rule) <> ", _" <> "))"
+                   <> line
+                   <> line
                    <> line
 
 -- XXX INDIR EVAL
@@ -288,7 +291,7 @@ printUpdate fh rule@(Rule _ h _ r _ _ _ _) cost evalix (Just (f,a)) (hv,v) dope 
                    `above` (indent 4 $ printPlanHeader rule cost (Just evalix))
                    `above` pdope dope
                    <> line
-                   <> "_updaters.append((" <> (pfa f a) <> ", _))"
+                   <> "_updaters.append((" <> (pfa f a) <> "," <> (pretty $ r_index rule) <> ",_))"
                    <> line
                    <> line
                    <> line
