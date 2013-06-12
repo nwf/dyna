@@ -18,7 +18,6 @@ class REPL(cmd.Cmd, object):
             with file(hist, 'wb') as f:
                 f.write('')
         readline.read_history_file(hist)
-        self.do_trace('off')
         self.lineno = 0
 
     @property
@@ -65,16 +64,8 @@ class REPL(cmd.Cmd, object):
     def do_ip(self, _):
         ip()
 
-    def do_trace(self, args):
-        if args == 'on':
-            self.interp.trace = sys.stdout
-        elif args == 'off':
-            self.interp.trace = file(os.devnull, 'w')
-        else:
-            print 'Did not understand argument %r please use (on or off).' % args
-
     def do_debug(self, line):
-        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
+        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
             f.write(line)
         debug.main(f.name)
 

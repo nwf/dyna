@@ -4,6 +4,8 @@
 TODO
 ====
 
+ - AggregatorConflict should now always be raised by Dyna compiler.
+
  - vbench: a script which tracks performace over time (= git commits).
 
  - profiler workflow
@@ -195,6 +197,8 @@ import os, sys
 from collections import defaultdict
 from argparse import ArgumentParser
 
+from hashlib import sha1
+
 import debug
 from chart import Chart, Term, _repr
 from defn import aggregator
@@ -203,8 +207,16 @@ from utils import ip, red, green, blue, magenta, yellow, \
     DynaCompilerError, DynaInitializerException, AggregatorConflict
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
-from numpy import log, exp, sqrt
-from numpy.random import uniform
+
+try:
+    from numpy import log, exp, sqrt
+    from numpy.random import uniform
+except ImportError:                       # XXX: should probably issue a warning.
+    from math import log, exp, sqrt
+    from random import random as _random
+    def uniform(a=0, b=1):
+        return _random() * (b - a) + a
+
 from time import time
 
 
@@ -515,8 +527,15 @@ class Interpreter(object):
 
         raises ``DynaCompilerError``
         """
+        x = sha1()
+        x.update(self.parser_state)
+        x.update(code)
 
-        dyna = dotdynadir / 'tmp.dyna'
+        dyna = dotdynadir / 'tmp' / ('%s.dyna' % x.hexdigest())
+
+        # make necessary directories
+        dyna.dirname().mkdir_p()
+
         out = '%s.plan.py' % dyna
 
         with file(dyna, 'wb') as f:
