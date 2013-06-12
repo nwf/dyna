@@ -27,6 +27,7 @@ clean:
 	rm -rf examples/*.dyna.*.plan  \
            examples/*.dyna.*.out \
            examples/*.dyna.d
+	rm -rf test/*/*.out
 	rm -f tags TAGS
 veryclean: clean
 	rm -rf dist

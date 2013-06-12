@@ -4,4 +4,4 @@ echo -e "
 a += 1.
 a." |./dyna > $0.out
 
-colordiff $0.expect $0.out && echo pass
+diff $0.expect $0.out && echo pass

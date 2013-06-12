@@ -4,6 +4,7 @@
 
 -- Header material                                                      {{{
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Dyna.Backend.Python.Selftest where
 
 import           Control.Exception (throw)
@@ -14,7 +15,9 @@ import           System.Exit (ExitCode(..))
 import           System.IO
 import           System.IO.Error
 import           System.Process
-import qualified Test.Framework                      as TF
+import           Test.Framework                      as TF
+import           Test.Framework.Providers.Program
+import           Test.Framework.TH
 import           Test.Golden
 
 ------------------------------------------------------------------------}}}
@@ -68,22 +71,24 @@ mkExample name =
           , "examples/"          ++ name ++ ".dyna.py.out"
           , "examples/expected/" ++ name ++ ".py.out")
 
-goldens :: TF.Test
-goldens = TF.testGroup "Python Backend End-To-End"
-                -- Sorted roughly by likelihood that all subsequent examples
-                -- will be broken. ;)
-          $ map mkExample [ "simple", "fib-limit", "dijkstra"
-                          , "papa2", "matrixops"
-                          ]
+-- Sorted roughly by likelihood that all subsequent examples
+-- will be broken. ;)
+test_End_To_End :: [Test]
+test_End_To_End = map mkExample
+  [ "simple", "fib-limit", "dijkstra", "papa2", "matrixops" ]
+
+test_REPL :: [Test]
+test_REPL = map (\n -> testProgramRuns n ("./test/repl/"++n) [])
+  [ "aggregator-conflict", "retract-rule" ]
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{
 
 selftest :: TF.Test
-selftest = goldens
+selftest = $(testGroupGenerator)
 
 main :: IO ()
-main = TF.defaultMain [selftest]
+main = $(defaultMainGenerator)
 
 -- If you're running from within GHCi and just want to do something quickly,
 -- try

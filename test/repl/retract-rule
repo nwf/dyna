@@ -10,7 +10,7 @@ retract_rule 0
 retract_rule 1
 chart" |./dyna > $0.out
 
-colordiff $0.expect $0.out && echo pass
+diff $0.expect $0.out && echo pass
 
 # TODO: add test to make sure that rule retraction will clear errors.
 

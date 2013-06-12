@@ -14,9 +14,10 @@ Homepage:       http://www.dyna.org/
 Category:       Compilers/Interpreters
 Synopsis:       Interpreter for the Dyna language
 Description:    A weighted logic programming language for dynamic
-                programming and natural language processing. Features
-                include memoization, both forward- and backward-chaining,
-                and namespace modularity.
+                programming and natural language processing.
+                
+                -- Features include memoization, both forward- and
+                -- backward-chaining, and namespace modularity.
 
 source-repository head
     type: git
@@ -156,10 +157,11 @@ Test-suite dyna-selftests
                         tagged >= 0.4.4,
                         template-haskell,
                         test-framework >=0.6,
+                        test-framework-golden >= 1.1,
                         test-framework-hunit >=0.2,
+                        test-framework-program >= 1.1,
                         test-framework-quickcheck2 >=0.3,
                         test-framework-th >=0.2,
-                        test-framework-golden >= 1.1,
                         transformers >= 0.3,
                         trifecta >= 1.0,
                         unordered-containers>=0.2,

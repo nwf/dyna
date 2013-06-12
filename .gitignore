@@ -1,6 +1,7 @@
 *.hi
 *.o
 *.pyc
+*.swp
 
 dist/
 examples/*.d
@@ -10,3 +11,7 @@ examples/*.plan.py
 examples/*.out
 
 docs/sphinx/_build
+
+test/*/*.out
+
+libpeerconnection.log
