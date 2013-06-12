@@ -8,6 +8,13 @@ TODO
 
  - profiler workflow
 
+   kcachegrind
+     $ (PYTHONPATH=src/Dyna/Backend/Python/ pycachegrind src/Dyna/Backend/Python/interpreter.py examples/papa.dyna)
+
+   cProfile + snakeviz
+     $ python -m cProfile -o prof src/Dyna/Backend/Python/interpreter.py examples/force.dyna >/dev/null && snakeviz prof
+
+
  - unit tests and code coverage.
 
  - doc tests for Dyna code.
@@ -52,6 +59,8 @@ FASTER
  - TODO: prioritization
 
  - TODO: BAggregators aren't very efficient.
+
+ - interning with integers instead of deduplicated instances of Term.
 
 
 STRONGER (robustness)
@@ -106,6 +115,8 @@ BUGS
  - TODO: make sure interpreter uses the right exceptions. The codegen catches a
    few things -- I think assertionerror is one them... we should probably do
    whatever this is doing with a custom exception.
+
+ - TODO: some items only learn their aggregators late in life...
 
 
 NOTES
@@ -204,10 +215,10 @@ class Rule(object):
         self.updaters = []
     @property
     def span(self):
-        return self.init.dyna_attrs['Span']
+        return parse_attrs(self.init)['Span']
     @property
     def src(self):
-        return self.init.dyna_attrs['rule']
+        return parse_attrs(self.init)['rule']
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.idx, self.src)
 
@@ -222,8 +233,6 @@ class Interpreter(object):
         # data structures
         self.agenda = prioritydict()
         self.parser_state = ''
-
-        self.tape = []
 
         def newchart(fn):
             arity = int(fn.split('/')[-1])
@@ -281,8 +290,8 @@ class Interpreter(object):
         print >> out
 
     def dump_rules(self):
-        for i in sorted(self.rules, key=int):
-            print self.rules[i]
+        for i in sorted(self.rules):
+            print '%3s: %s' % (i, self.rules[i].src)
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
@@ -324,7 +333,6 @@ class Interpreter(object):
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
-        assert isinstance(idx, str)
         try:
             rule = self.rules.pop(idx)
         except KeyError:
@@ -353,17 +361,11 @@ class Interpreter(object):
 
     def _go(self):
         "the main loop"
-
-        tape = self.tape
-
         changed = {}
         agenda = self.agenda
         errors = self.errors
         while agenda:
             item = agenda.pop_smallest()
-
-            tape.append(item)
-
             was = item.value
             try:
                 now = item.aggregator.fold()
@@ -417,18 +419,17 @@ class Interpreter(object):
             # this is not possible.
             self.emit(*e)
 
-    def new_updater(self, fn, handler):
+    def new_updater(self, fn, ruleix, handler):
         self.updaters[fn].append(handler)
-        i = handler.dyna_attrs['RuleIx']
-        rule = self.rules[i]
+        rule = self.rules[ruleix]
         rule.updaters.append(handler)
-        handler.dyna_rule = rule
+        handler.rule = rule
 
-    def new_initializer(self, init):
-        i = init.dyna_attrs['RuleIx']
-        rule = self.rules[i]
+    def new_initializer(self, ruleix, init):
+        rule = self.rules[ruleix]
         assert rule.init is None
         rule.init = init
+        init.rule = rule
 
     def delete_emit(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
@@ -477,14 +478,10 @@ class Interpreter(object):
 
         for k, v in env['_agg_decl'].items():
             self.new_fn(k, v)
-        for fn, h in env['_updaters']:
-            h.dyna_attrs = parse_attrs(h)
-        for h in env['_initializers']:
-            h.dyna_attrs = parse_attrs(h)
 
         try:
             # only run new initializers
-            for init in env['_initializers']:
+            for _, init in env['_initializers']:
                 init(emit=_emit)
 
         except (TypeError, ZeroDivisionError) as e:
@@ -496,11 +493,11 @@ class Interpreter(object):
             # in the middle of the following blocK?
 
             # add new updaters
-            for fn, h in env['_updaters']:
-                self.new_updater(fn, h)
+            for fn, r, h in env['_updaters']:
+                self.new_updater(fn, r, h)
             # add new initializers
-            for h in env['_initializers']:
-                self.new_initializer(h)
+            for r, h in env['_initializers']:
+                self.new_initializer(r, h)
             # accept the new parser state
             self.parser_state = env['parser_state']
             # process emits
@@ -564,44 +561,84 @@ def main():
     parser.add_argument('--postprocess', type=file,
                         help='run post-processing script.')
 
-    argv = parser.parse_args()
+    parser.add_argument('--profile', action='store_true',
+                        help='run profiler.')
+
+    args = parser.parse_args()
 
     interp = Interpreter()
 
-    if argv.source:
+    if args.profile:
+        # When profiling, its common practice to disable the garbage collector.
+        import gc
+        gc.disable()
 
-        if not os.path.exists(argv.source):
-            print 'File %r does not exist.' % argv.source
+        # However, it's worth noting that the garbage collector is a real part
+        # of the runtime. Some implementation details will change how often it
+        # runs. For example, when we call emit with the variable binding
+        # dictionary this increases refcounts to a bunch of variables. For some
+        # reason the garbage collector overhead is lowered in this
+        # situation. Giving in a counterintuitive result.
+
+        import cProfile
+
+        cmd = 'interp.do(plan)'
+        plan = '%s.plan.py' % args.source
+
+        dynac(args.source, plan)
+
+        p = cProfile.Profile()
+
+        # redirect stdout
+        #sys.stdout = file(args.source + '.stdout', 'wb')
+
+        p.runctx(cmd, globals(), locals())
+        p.dump_stats('prof')
+
+        interp.dump_charts()
+
+        # call graph
+        os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
+        os.system('snakeviz prof &')
+
+        return
+
+
+    if args.source:
+
+        if not os.path.exists(args.source):
+            print 'File %r does not exist.' % args.source
             return
 
-        if argv.plan:
-            plan = argv.source
+        if args.plan:
+            plan = args.source
         else:
-            plan = "%s.plan.py" % argv.source
-            dynac(argv.source, plan)
+            plan = "%s.plan.py" % args.source
+            dynac(args.source, plan)
 
         interp.do(plan)
 
-        if argv.output:
-            if argv.output == "-":
+        if args.output:
+            if args.output == "-":
                 interp.dump_charts(sys.stdout)
             else:
-                with file(argv.output, 'wb') as f:
+                with file(args.output, 'wb') as f:
                     interp.dump_charts(f)
         else:
             interp.dump_charts()
 
-        if argv.interactive:
-            interp.repl(hist = argv.source + '.hist')
+        if args.interactive:
+            interp.repl(hist = args.source + '.hist')
 
     else:
         interp.repl(hist = '/tmp/dyna.hist')
 
-    if argv.draw:
+    if args.draw:
         interp.draw()
 
-    if argv.postprocess is not None:
-        execfile(argv.postprocess.name, {'interp': interp})
+    if args.postprocess is not None:
+        # TODO: import and call main method instead.
+        execfile(args.postprocess.name, {'interp': interp})
 
 
 if __name__ == '__main__':

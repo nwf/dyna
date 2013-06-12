@@ -30,7 +30,7 @@ def animate(interp):
     ax = pl.axes()
 
     print 'creating animation..'
-    anim = FuncAnimation(fig, lambda t: g(nodes, edges, t % niter, ax, interp), frames=niter*3)
+    anim = FuncAnimation(fig, lambda t: g(nodes, edges, t % niter, ax, interp), frames=niter)
     print 'saving...'
     anim.save('examples/force.dyna.mp4', fps=30, extra_args=['-vcodec', 'libx264'])
     print 'wrote examples/force.dyna.mp4'

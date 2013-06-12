@@ -1,0 +1,6 @@
+:- :- =============
+a := 1
+
+:- AggregatorConflict: Aggregator conflict 'a/0' was '+=' trying to set to '|='.
+> new rule(s) were not added to program.
+:- exit
