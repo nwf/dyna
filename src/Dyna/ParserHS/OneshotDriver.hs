@@ -127,6 +127,7 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
 
 -- | Update the PCS to reflect a new pragma
 pcsProcPragma :: (Parsing m, MonadState PCS m) => Spanned Pragma -> m ()
+
 pcsProcPragma (PDispos s f as :~ _) = do
   pcs_dt_over %= dtoMerge (f,length as) (s,as)
   update_pcs_dt
@@ -135,6 +136,9 @@ pcsProcPragma (PDisposDefl n :~ _) = do
   pcs_dt_mk .= n
   update_pcs_dt
   return ()
+
+pcsProcPragma (PIAggr f n a :~ _) = pcs_iagg_map . at (f,n) .= Just a
+
 pcsProcPragma (PInst (PNWA n as) i :~ s) = do
   im <- use pcs_instmap
   maybe (pcs_instmap %= M.insert n (as,i,s))
@@ -157,10 +161,13 @@ pcsProcPragma (PMode (PNWA n as) pmf pmt :~ s) = do
       $ M.lookup n mm
 pcsProcPragma (PRuleIx r :~ _) = pcs_ruleix .= r
 
-pcsProcPragma (p :~ s) = dynacSorry $ "Cannot handle pragma"
-                                      PP.<//> (PP.text $ show p)
-                                      PP.<//> "at"
-                                      PP.<//> prettySpanLoc s
+pcsProcPragma (p@(POperAdd _ _ _) :~ s) = sorryPragma p s
+pcsProcPragma (p@(POperDel _) :~ s) = sorryPragma p s
+
+sorryPragma p s = dynacSorry $ "Cannot handle pragma"
+                             PP.<//> (PP.text $ show p)
+                             PP.<//> "at"
+                             PP.<//> prettySpanLoc s
 
 pragmasFromPCS :: PCS -> PP.Doc e
 pragmasFromPCS (PCS dt_mk dt_over _
