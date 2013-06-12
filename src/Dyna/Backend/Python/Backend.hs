@@ -296,7 +296,7 @@ printInitializer fh rule cost dope = do
                    `above` (indent 4 $ printPlanHeader rule cost Nothing)
                    `above` pdope dope
                    <> line
-                   <> "_initializers.append((" <> (pretty $ r_index rule) <> ", _" <> "))"
+                   <> "initializers.append((" <> (pretty $ r_index rule) <> ", _" <> "))"
                    <> line
                    <> line
                    <> line
@@ -313,7 +313,7 @@ printUpdate fh rule cost evalix (Just (f,a)) (hv,v) dope = do
                    `above` (indent 4 $ printPlanHeader rule cost (Just evalix))
                    `above` pdope dope
                    <> line
-                   <> "_updaters.append((" <> (pfa f a) <> "," <> (pretty $ r_index rule) <> ",_))"
+                   <> "updaters.append((" <> (pfa f a) <> "," <> (pretty $ r_index rule) <> ",_))"
                    <> line
                    <> line
                    <> line
@@ -333,9 +333,13 @@ driver am um {-qm-} is pr fh = do
   hPutStrLn fh "\"\"\""
   hPutStrLn fh ""
 
+  hPutStrLn fh $ "agg_decl = {}"
+  hPutStrLn fh $ "updaters = []"
+  hPutStrLn fh $ "initializers = []"
+
   -- Aggregation mapping
   forM_ (M.toList am) $ \((f,a),v) -> do
-     hPutStrLn fh $ show $    "_agg_decl"
+     hPutStrLn fh $ show $    "agg_decl"
                            <> brackets (dquotes $ pretty f <> "/" <> pretty a)
                            <+> equals <+> (dquotes $ pretty v)
 

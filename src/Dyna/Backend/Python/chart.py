@@ -1,17 +1,20 @@
 from collections import defaultdict
 from utils import notimplemented
-
+from defn import aggregator
 from term import Term, _repr
 
 
 class Chart(object):
 
-    def __init__(self, name, arity, new_aggregator):
+    def __init__(self, name, arity, agg_name):
         self.name = name
         self.arity = arity
         self.intern = {}   # args -> term
         self.ix = [defaultdict(set) for _ in xrange(arity)]
-        self.new_aggregator = new_aggregator
+        self.agg_name = agg_name
+
+    def new_aggregator(self):
+        return aggregator(self.agg_name)
 
     def __repr__(self):
         rows = [term for term in self.intern.values() if term.value is not None]

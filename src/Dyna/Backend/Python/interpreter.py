@@ -193,7 +193,7 @@ What is null?
 """
 
 from __future__ import division
-import os, sys
+import os, sys, imp
 from collections import defaultdict
 from argparse import ArgumentParser
 
@@ -204,7 +204,7 @@ from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, \
     notimplemented, parse_attrs, ddict, dynac, \
-    DynaCompilerError, DynaInitializerException, AggregatorConflict
+    DynaCompilerError, DynaInitializerException
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
 
@@ -235,6 +235,18 @@ class Rule(object):
         return 'Rule(%s, %r)' % (self.idx, self.src)
 
 
+# TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
+# state
+class foo(dict):
+    def __init__(self, agg_name):
+        self.agg_name = agg_name
+        super(foo, self).__init__()
+    def __missing__(self, fn):
+        arity = int(fn.split('/')[-1])
+        self[fn] = c = Chart(fn, arity, self.agg_name[fn])
+        return c
+
+
 class Interpreter(object):
 
     def __init__(self):
@@ -246,20 +258,31 @@ class Interpreter(object):
         self.agenda = prioritydict()
         self.parser_state = ''
 
-        def newchart(fn):
-            arity = int(fn.split('/')[-1])
-            return Chart(fn, arity, lambda: aggregator(self.agg_name[fn]))
-
-        self.chart = ddict(newchart)
+        self.chart = foo(self.agg_name)
         self.rules = ddict(Rule)
         self.errors = {}
+
+#    def __getstate__(self):
+#        return ((self.chart,
+#                 self.agenda,
+#                 self.agenda,
+#                 self.errors,
+#                 self.agg_name,
+#                 self.parser_state),
+#                '\n'.join(self.rules[i].src for i in sorted(self.rules)))
+
+#    def __setstate__(self, state):
+#        ((self.chart, self.agenda, self.agenda, self.errors, self.agg_name, self.parser_state), code) = state
+#        self.edges = defaultdict(set)
+#        self.updaters = defaultdict(list)
+#        self.rules = ddict(Rule)
+#        self.do(self.dynac_code(code))
 
     def new_fn(self, fn, agg):
         # check for aggregator conflict.
         if fn not in self.agg_name:
             self.agg_name[fn] = agg
-        if self.agg_name[fn] != agg:
-            raise AggregatorConflict(fn, self.agg_name[fn], agg)
+        assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
     def collect_edges(self):
         """
@@ -304,6 +327,27 @@ class Interpreter(object):
     def dump_rules(self):
         for i in sorted(self.rules):
             print '%3s: %s' % (i, self.rules[i].src)
+#
+#    def query(self, q):
+#        if q.endswith('.'):
+#            print "Queries don't end with a dot."
+#            return
+#
+#        query = 'out("%s") dict= %s.' % (q, q)
+#
+#        src = self.dynac_code(query)   # might raise DynaCompilerError
+#        self.do(src)
+#
+#        try:
+#            [(_, _, results)] = self.chart['out/1'][q,:]
+#        except ValueError:
+#            print 'No results.'
+#            return
+#
+#        for val, bindings in results:
+#            print '   ', val, 'when', bindings
+#        print
+
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
@@ -320,28 +364,28 @@ class Interpreter(object):
 
         return self.chart[fn].insert(args)
 
-    def retract_item(self, item):
-        """
-        For the moment we only correctly retract leaves.
-
-        If you retract a non-leaf item, you run the risk of it being
-        rederived. In the case of cyclic programs the derivation might be the
-        same or different.
-        """
-        # and now, for something truely horrendous -- look up an item by it's
-        # string value! This could fail because of whitespace or trivial
-        # formatting differences.
-        items = {}
-        for c in self.chart.values():
-            for i in c.intern.values():
-                items[str(i)] = i
-        try:
-            item = items[item]
-        except KeyError:
-            print 'item not found. This could be because of a trivial formatting differences...'
-            return
-        self.emit(item, item.value, None, sys.maxint, delete=True)
-        return self.go()
+#    def retract_item(self, item):
+#        """
+#        For the moment we only correctly retract leaves.
+#
+#        If you retract a non-leaf item, you run the risk of it being
+#        rederived. In the case of cyclic programs the derivation might be the
+#        same or different.
+#        """
+#        # and now, for something truely horrendous -- look up an item by it's
+#        # string value! This could fail because of whitespace or trivial
+#        # formatting differences.
+#        items = {}
+#        for c in self.chart.values():
+#            for i in c.intern.values():
+#                items[str(i)] = i
+#        try:
+#            item = items[item]
+#        except KeyError:
+#            print 'item not found. This could be because of a trivial formatting differences...'
+#            return
+#        self.emit(item, item.value, None, sys.maxint, delete=True)
+#        return self.go()
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
@@ -381,7 +425,7 @@ class Interpreter(object):
             was = item.value
             try:
                 now = item.aggregator.fold()
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt) as e:
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
                 errors[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
                 continue
             if was == now:
@@ -404,7 +448,7 @@ class Interpreter(object):
 
     def update_dispatcher(self, item, val, delete):
         """
-        Passes update to relevant handlers.
+        Passes update to relevant handlers. Catches errors.
         """
 
         # store emissions, make sure all of them succeed before propagating
@@ -454,7 +498,7 @@ class Interpreter(object):
 #        self.agenda[item] = 0   # everything is high priority
         self.agenda[item] = time()  # FIFO
 
-    def repl(self, hist):
+    def repl(self, hist = dotdynadir / 'dyna.hist'):
         import repl
         repl.REPL(self, hist).cmdloop()
 
@@ -476,24 +520,28 @@ class Interpreter(object):
 #            print >> self.trace, magenta % 'Loading new code'
 #            print >> self.trace, yellow % h.read()
 
-        env = {'_initializers': [], '_updaters': [], '_agg_decl': {},
-               'chart': self.chart, 'build': self.build, 'peel': peel,
-               'parser_state': None, 'uniform': uniform,
-               'log': log, 'exp': exp, 'sqrt': sqrt}
 
         # load generated code.
-        execfile(filename, env)
+#        execfile(filename, env)
+
+        env = imp.load_source('module.name', filename)
+
+        for k,v in [('chart', self.chart),
+                    ('build', self.build),
+                    ('peel', peel),
+                    ('uniform', uniform), ('log', log), ('exp', exp), ('sqrt', sqrt)]:
+            setattr(env, k, v)
 
         emits = []
         def _emit(*args):
             emits.append(args)
 
-        for k, v in env['_agg_decl'].items():
+        for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
         try:
             # only run new initializers
-            for _, init in env['_initializers']:
+            for _, init in env.initializers:
                 init(emit=_emit)
 
         except (TypeError, ZeroDivisionError) as e:
@@ -505,13 +553,13 @@ class Interpreter(object):
             # in the middle of the following blocK?
 
             # add new updaters
-            for fn, r, h in env['_updaters']:
+            for fn, r, h in env.updaters:
                 self.new_updater(fn, r, h)
             # add new initializers
-            for r, h in env['_initializers']:
+            for r, h in env.initializers:
                 self.new_initializer(r, h)
             # accept the new parser state
-            self.parser_state = env['parser_state']
+            self.parser_state = env.parser_state
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
@@ -586,7 +634,7 @@ def main():
 
     if args.postprocess is not None:
         try:
-            pp =__import__(args.postprocess)
+            pp = __import__(args.postprocess)
         except ImportError:
             print ('ERROR: No postprocessor named %r' % args.postprocess)
             return
@@ -656,15 +704,21 @@ def main():
             interp.repl(hist = args.source + '.hist')
 
     else:
-        interp.repl(hist = '/tmp/dyna.hist')
+        interp.repl()
 
     if args.draw:
         interp.draw()
 
+#    interp.query('phrase(X,I,K)')
+
+#    import cPickle
+#    out = cPickle.dumps(interp)  # XXX:
+#    interp2 = cPickle.loads(out)  # XXX:
+#    interp2.repl()
+
     if args.postprocess is not None:
         # TODO: import and call main method instead.
         pp.main(interp)
-
 
 
 if __name__ == '__main__':

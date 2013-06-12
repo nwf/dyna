@@ -6,8 +6,6 @@ from collections import Counter
 
 
 class Aggregator(object):
-    def __init__(self, name):
-        self.name = name
     def fold(self):
         raise NotImplementedError
     def inc(self, val, ruleix, variables):
@@ -16,24 +14,16 @@ class Aggregator(object):
         raise NotImplementedError
     def clear(self):
         raise NotImplementedError
-    def __repr__(self):
-        return 'Aggregator(%r)' % (self.name)
 
 
 class BAggregator(Counter, Aggregator):
-    def __init__(self, name, folder):
-        self.folder = folder
-        Aggregator.__init__(self, name)
-        Counter.__init__(self)
-    def fold(self):
-        return self.folder(self)
     def inc(self, val, ruleix, variables):
         self[val] += 1
     def dec(self, val, ruleix, variables):
         self[val] -= 1
     def fromkeys(self, *_):
         assert False, "This method should never be called."
-
+        
 
 class PlusEquals(object):
     __slots__ = 'pos', 'neg'
@@ -80,60 +70,71 @@ class DictEquals(BAggregator):
         self[val, vs] -= 1
 
     def fold(self):
-        return list((x[0], dict(x[1])) for x, cnt in self.iteritems())
+        return list((v, dict(b)) for (v, b), cnt in self.iteritems())
 
 
-def majority_equals(a):
-    [(k,_)] = a.most_common(1)
-    return k
+class majority_equals(BAggregator):
+    def fold(self):
+        [(k,_)] = self.most_common(1)
+        return k
 
-def max_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return max(s)
+class max_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return max(s)
 
-def min_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return min(s)
+class min_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return min(s)
 
-def plus_equals(a):
-    s = [k*m for k, m in a.iteritems() if m != 0]
-    if len(s):
-        return reduce(operator.add, s)
+class plus_equals(BAggregator):
+    def fold(self):
+        s = [k*m for k, m in self.iteritems() if m != 0]
+        if len(s):
+            return reduce(operator.add, s)
 
-def times_equals(a):
-    s = [k**m for k, m in a.iteritems() if m != 0]
-    if len(s):
-        return reduce(operator.mul, s)
+class times_equals(BAggregator):
+    def fold(self):
+        s = [k**m for k, m in self.iteritems() if m != 0]
+        if len(s):
+            return reduce(operator.mul, s)
 
-def and_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return reduce(lambda x,y: x and y, s)
+class and_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return reduce(lambda x,y: x and y, s)
 
-def or_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return reduce(lambda x,y: x or y, s)
+class or_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return reduce(lambda x,y: x or y, s)
 
-def b_and_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return reduce(operator.and_, s)
+class b_and_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.and_, s)
 
-def b_or_equals(a):
-    s = [k for k, m in a.iteritems() if m > 0]
-    if len(s):
-        return reduce(operator.or_, s)
+class b_or_equals(BAggregator):
+    def fold(self):
+        s = [k for k, m in self.iteritems() if m > 0]
+        if len(s):
+            return reduce(operator.or_, s)
 
-def set_equals(a):
-    s = {x for x, m in a.iteritems() if m > 0}
-    if len(s):
-        return s
+class set_equals(BAggregator):
+    def fold(self):
+        s = {x for x, m in self.iteritems() if m > 0}
+        if len(s):
+            return s
 
-def bag_equals(a):
-    return Counter(a)
+class bag_equals(BAggregator):
+    def fold(self):
+        return Counter(self)
 
 
 # map names to functions
@@ -152,7 +153,6 @@ defs = {
     'bag=': bag_equals,
 }
 
-
 def aggregator(name):
     "Create aggregator by ``name``."
 
@@ -160,13 +160,10 @@ def aggregator(name):
         return None
 
     if name == ':=':
-        return ColonEquals(name, folder=None)
-
-#    elif name == '+=':
-#        return PlusEquals()
+        return ColonEquals()
 
     elif name == 'dict=':
-        return DictEquals(name, folder=None)
+        return DictEquals()
 
     else:
-        return BAggregator(name, defs[name])
+        return defs[name]()
