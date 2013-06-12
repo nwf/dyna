@@ -558,13 +558,19 @@ def main():
     parser.add_argument('-o', dest='output', help='Output chart.')
     parser.add_argument('--draw', action='store_true',
                         help='Output html page with hypergraph and chart.')
-    parser.add_argument('--postprocess', type=file,
-                        help='run post-processing script.')
+    parser.add_argument('--postprocess', help='run post-processing script.')
 
     parser.add_argument('--profile', action='store_true',
                         help='run profiler.')
 
     args = parser.parse_args()
+
+    if args.postprocess is not None:
+        try:
+            pp =__import__(args.postprocess)
+        except ImportError:
+            print ('ERROR: No postprocessor named %r' % args.postprocess)
+            return
 
     interp = Interpreter()
 
@@ -638,7 +644,8 @@ def main():
 
     if args.postprocess is not None:
         # TODO: import and call main method instead.
-        execfile(args.postprocess.name, {'interp': interp})
+        pp.main(interp)
+
 
 
 if __name__ == '__main__':

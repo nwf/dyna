@@ -36,4 +36,5 @@ def animate(interp):
     print 'wrote examples/force.dyna.mp4'
 
 
-animate(interp)
+def main(interp):
+    animate(interp)
