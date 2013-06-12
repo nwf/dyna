@@ -27,8 +27,8 @@ class DynaInitializerException(Exception):
     def __init__(self, exception, init):
         msg = '%r in ininitializer for rule\n  %s\n        %s' % \
             (exception,
-             init.dyna_attrs['Span'],
-             init.dyna_attrs['rule'])
+             parse_attrs(init)['Span'],
+             parse_attrs(init)['rule'])
         super(DynaInitializerException, self).__init__(msg)
 
 
