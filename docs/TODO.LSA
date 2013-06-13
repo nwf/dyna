@@ -26,10 +26,6 @@ Abstract unification really ought not unroll recursion quite so eagerly as
 it does. (Probably no time to deal with this; low priority anyway as it only
 impacts speed of compilation)
 
-Liveness and fakeness of unification (after LSA?)
-
-Unification alias tracking (after LSA?)
-
 ----- Backend
 
 ",/2" runtime error if first argument is not true or false
@@ -45,21 +41,13 @@ Prioritization heuristic
 
 Maybe something better for initializers or update API? (Low priority)
 
-DOpAMine improvements for non-ground structure (probably no time!)
-
 ----- Documentation
-
-Forward port shortest path tutorial
-
-Mention ^C in documentation for diverging programs.
 
 Be sure to mention, repeatedly, that this is experimental software and is
 likely to break both early and often.  Explain the difference between panic
 messages and errors.
 
 ----- REPL
-
-Make use of resumable parsing functionality
 
 ----- Whole pipeline
 
@@ -73,6 +61,8 @@ How about... (other things students might want to do)
 	find the K most-frequent bigrams (even from the repl?)
 
 ----- Things that still have bits and bobs pending
+
+Forward port shortest path tutorial
 
 Queries (initializers), new rule insertions (both plans and initializers)
 

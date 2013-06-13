@@ -113,6 +113,7 @@ case $CMD in
         test-framework \
         test-framework-golden \
         test-framework-hunit \
+        test-framework-program \
         test-framework-quickcheck2 \
         test-framework-smallcheck \
         test-framework-th \
