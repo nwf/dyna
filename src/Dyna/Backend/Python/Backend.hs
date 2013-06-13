@@ -68,7 +68,7 @@ aggrs = S.fromList
 newtype PyDopeBS = PDBS (forall e . ModedVar -> [ModedVar] -> Doc e)
 
 nfree, nuniv :: NIX DFunct
-nfree = nHide IFree
+nfree = nHide (IFree False)
 nuniv = nHide (IUniv UShared)
 
 isGround, isFree :: ModedVar -> Bool

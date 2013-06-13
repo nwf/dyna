@@ -33,7 +33,7 @@ fullUniq UClobbered       = "clobbered"
 compactly :: (f -> Doc e)
           -> (a -> Doc e)
           -> InstF f a -> Doc e
-compactly _ _ IFree           = "F"
+compactly _ _ (IFree f)       = "F" <> (if f then "a" else "u")
 compactly _ _ (IAny u)        = "A@" <> compactUniq u
 compactly _ _ (IUniv u)       = "U@" <> compactUniq u
 compactly f a (IBound u bm b) = (semiBraces $ if b then (text "B"):rm else rm)

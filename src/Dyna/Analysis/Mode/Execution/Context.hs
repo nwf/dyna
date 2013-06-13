@@ -34,13 +34,14 @@ module Dyna.Analysis.Mode.Execution.Context (
     -- ** Monad
     SIMCT(..), runSIMCT,
     -- *** And its context
-    SIMCtx(..), emptySIMCtx, allFreeSIMCtx,
+    SIMCtx(..), emptySIMCtx, allFreeSIMCtx, ctxFromBindings,
 
     -- ** Internal helper functions
     e2x, q2y, aliasN, aliasV, aliasX, aliasY, kUpUniq,
 )where
 
 import           Control.Applicative (Applicative)
+import           Control.Arrow (second)
 import           Control.Exception(assert)
 import           Control.Lens
 import           Control.Monad
@@ -200,7 +201,10 @@ emptySIMCtx = SIMCtx 0 IM.empty {- IM.empty -} M.empty
 -- XXX make take S.Set DVar?
 allFreeSIMCtx :: [DVar] -> SIMCtx f
 allFreeSIMCtx fs = SIMCtx 0 IM.empty
-                 $ M.fromList $ map (\x -> (x, VRStruct IFree)) fs
+                 $ M.fromList $ map (\x -> (x, VRStruct $ IFree False)) fs
+
+ctxFromBindings :: [(DVar, NIX f)] -> SIMCtx f
+ctxFromBindings = SIMCtx 0 IM.empty . M.fromList . map (second VRName)
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
 runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)

@@ -86,11 +86,17 @@ iLeqGLBRD_ il ir ml mr m u i1 i2 = do
               then Left  UFNotReach
               else Right io
 {-# INLINABLE iLeqGLBRD_ #-}
+
+-- | Live unifications carry the additional constraints of
+-- 'semidet_clobbered_unify' and that two free variables may not unify if
+-- they are either both unaliased or both already aliased.
 iLeqGLBRL_ il ir ml mr m u i1 i2 = do
     scu <- semidet_clobbered_unify i1 i2
     if scu
      then return (Left UFSemiClob)
-     else iLeqGLBRD_ il ir ml mr m u i1 i2
+     else case (i1,i2) of
+            (IFree a, IFree b) | a == b -> return (Left UFExDomain)
+            _                           -> iLeqGLBRD_ il ir ml mr m u i1 i2
 {-# INLINABLE iLeqGLBRL_ #-}
 
 ------------------------------------------------------------------------}}}

@@ -457,7 +457,10 @@ instName = bsf $ ident instDeclNameStyle
 
 parseInst :: (Monad m, TokenParsing m) => m ParsedInst
 parseInst = choice [ PIVar <$> var
-                   , symbol "free"   *> pure (PIInst IFree)
+                        -- XXX Parse "free" as an aliased free inst since
+                        -- the only thing we do with them are make calls.
+                        -- That's probably not right, going forward.
+                   , symbol "free"   *> pure (PIInst (IFree True))
                    , symbol "any"    *> (PIInst . IAny  <$> optUniq)
                    , symbol "ground" *> (PIInst . IUniv <$> optUniq)
                    , symbol "bound"  *> (optBUniq >>= boundinst)
@@ -585,7 +588,7 @@ renderFunctor f = PP.squotes (PP.pretty f)
 
 renderInst :: ParsedInst -> PP.Doc e
 renderInst (PIVar v)               = PP.pretty v
-renderInst (PIInst IFree)          = "free"
+renderInst (PIInst (IFree _))      = "free"      -- XXX ought not discard arg?
 renderInst (PIInst (IAny u))       = "any" PP.<> PP.parens (IP.fullUniq u)
 renderInst (PIInst (IUniv u))      = "ground" PP.<> PP.parens (IP.fullUniq u)
 renderInst (PIInst (IBound u m b)) =

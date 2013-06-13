@@ -129,7 +129,7 @@ emptySIMCtx = SIMCtx M.empty
 
 -- XXX make take S.Set DVar?
 allFreeSIMCtx :: [DVar] -> SIMCtx f
-allFreeSIMCtx fs = SIMCtx $ M.fromList $ map (\x -> (x, VRStruct IFree)) fs
+allFreeSIMCtx fs = SIMCtx $ M.fromList $ map (\x -> (x, VRStruct $ IFree False)) fs
 
 ctxFromBindings :: [(DVar, NIX f)] -> SIMCtx f
 ctxFromBindings = SIMCtx . M.fromList . map (second VRName)

@@ -81,9 +81,12 @@ data InstF f i =
   -- Rules which bind free variables engage in allocation and
   -- fill in these holes.
   --
-  -- XXX a boolean flag is introduced in §5.4.1, p103; that
-  -- is not yet plumbed through here.
-    IFree
+  -- The boolean flag is introduced in §5.4.1, p103.  If true, it indicates
+  -- that this free variable aliases another (and is represented by a
+  -- pointer to some other location); if false, it indicates that this
+  -- variable is unaliased (and that no dereference is necessary before
+  -- storing back; /i.e./ it is an uninitialized piece of memory).
+    IFree { _inst_free_alias :: !Bool }
 
   -- | A possibly-bound inst.  We have lost track of whether or
   -- not the given variable is free.  Note that this has runtime
@@ -197,7 +200,7 @@ iWellFormed_ :: (Monad m)
              => (Uniq -> i -> m Bool)
              ->  Uniq -> InstF f i
              -> m Bool
-iWellFormed_ _ _  IFree          = return True
+iWellFormed_ _ _ (IFree _)       = return True
 iWellFormed_ _ u (IAny u')       = return $ u <= u'
 iWellFormed_ q u (IBound u' b _) = if u <= u'
                                     then mfmamm (q u') b
@@ -207,8 +210,8 @@ iWellFormed_ _ u (IUniv u')      = return $ u <= u'
 
 -- | Compare with 'IFree' without imposing @Eq i@.
 iIsFree :: InstF f i -> Bool
-iIsFree IFree = True
-iIsFree _     = False
+iIsFree (IFree _) = True
+iIsFree _         = False
 
 -- | The bottom of the 'iLeq' lattice and 'iSub' semi-lattice, representing
 -- the empty set of (non-ground) terms.
@@ -252,9 +255,9 @@ iPopEst q (IBool _ m False) = XXX
 iEq_ :: (Ord f, Monad m)
      => (i -> i' -> m Bool)
      -> InstF f i -> InstF f i' -> m Bool
-iEq_ _ IFree IFree = return $ True
-iEq_ _ _     IFree = return $ False
-iEq_ _ IFree _     = return $ False
+iEq_ _ (IFree a) (IFree b) = return $ a == b
+iEq_ _ _         (IFree _) = return $ False
+iEq_ _ (IFree _) _         = return $ False
 
 iEq_ _ (IAny u) (IAny v) | u == v = return True
 iEq_ _ _        (IAny _)          = return False
@@ -293,13 +296,14 @@ iLeq_ :: (Ord f, Monad m)
       => (i -> InstF f i' -> m Bool)
       -> (i -> i' -> m Bool)
       -> InstF f i -> InstF f i' -> m Bool
-iLeq_ _ _  _            IFree             = return $ True
-iLeq_ _ _ IFree        _                  = return $ False
-iLeq_ _ _ (IAny u)     (IAny u')          = return $ u' <= u
-iLeq_ _ _ (IAny _)     _                  = return $ False
-iLeq_ _ _ (IUniv u)    (IAny u')          = return $ u' <= u
-iLeq_ _ _ (IUniv u)    (IUniv u')         = return $ u' <= u
-iLeq_ _ _ (IUniv _)    _                  = return $ False
+iLeq_ _ _ (IFree True)   (IFree False)      = return $ False
+iLeq_ _ _  _             (IFree _)          = return $ True
+iLeq_ _ _ (IFree _)      _                  = return $ False
+iLeq_ _ _ (IAny u)       (IAny u')          = return $ u' <= u
+iLeq_ _ _ (IAny _)       _                  = return $ False
+iLeq_ _ _ (IUniv u)      (IAny u')          = return $ u' <= u
+iLeq_ _ _ (IUniv u)      (IUniv u')         = return $ u' <= u
+iLeq_ _ _ (IUniv _)      _                  = return $ False
 iLeq_ q _ (IBound u b _) (IAny u')        = andM1 (u' <= u) $
     mfmamm (\x -> q x (IAny u')) b
 iLeq_ q _ (IBound u b _) (IUniv u')       = andM1 (u' <= u) $
@@ -354,8 +358,9 @@ type TyILeqGLB_ f m i i' i'' r =
 -- variables).
 
 iLeqGLB_ :: (Monad m, Ord f) => TyILeqGLB_ f m i i' i'' (m (InstF f i''))
-iLeqGLB_ _ r _ _ _ u IFree      x            = T.mapM (r u) x
-iLeqGLB_ l _ _ _ _ u x          IFree        = T.mapM (l u) x
+iLeqGLB_ _ _ _ _ _ _ (IFree a)  (IFree b)    = return $ IFree (a && b)
+iLeqGLB_ _ r _ _ _ u (IFree _)  x            = T.mapM (r u) x
+iLeqGLB_ l _ _ _ _ u x          (IFree _)    = T.mapM (l u) x
 
 iLeqGLB_ _ _ _ _ _ _ (IAny u)   (IAny u')    = return $ IAny (max u u')
 
@@ -385,9 +390,9 @@ iLeqGLB_ _ _ _ _ q _ (IBound u m b) (IBound u' m' b') = do
 
 -- | Matches partial order with uniqueness (⊑)
 --
--- Matching specifies the intersubstitutability of insts: if @i `iSub` i'@
+-- Matching specifies the intersubstitutability of insts: if @i `iSub` j@
 -- then we may use anything with binding @i@ wherever the predicate would
--- require @i'@.
+-- require @j@.
 --
 -- Note that this is not a full lattice.
 --
@@ -399,10 +404,10 @@ iSub_ :: (Ord f, Monad m)
       -> InstF f i
       -> InstF f i'
       -> m Bool
-iSub_ _ _ IFree          IFree          = return $ True
-iSub_ _ _ x@(IBound _ _ _) IFree | iIsNotReached x = return $ True
-iSub_ _ _ IFree          _              = return $ False
-iSub_ _ _ _              IFree          = return $ False
+iSub_ _ _ (IFree a)      (IFree b)      = return $ a == b
+iSub_ _ _ x@(IBound _ _ _) (IFree _) | iIsNotReached x = return $ True
+iSub_ _ _ (IFree _)      _              = return $ False
+iSub_ _ _ _              (IFree _)      = return $ False
 iSub_ _ _ (IAny u)       (IAny u')      = return $ u <= u'
 iSub_ _ _ (IAny _)       _              = return $ False
 iSub_ _ _ (IUniv u)      (IAny u')      = return $ u <= u'
@@ -433,12 +438,13 @@ iSubGLB_ :: (Ord f, Monad m)
          -> (InstF f i  -> i' -> m i'')
          -> (i -> i' -> m i'')
          -> InstF f i -> InstF f i' -> m (InstF f i'')
-iSubGLB_ _ _ _ IFree      IFree        = return $ IFree
+iSubGLB_ _ _ _ (IFree a)  (IFree b) | a == b = return $ IFree a
+iSubGLB_ _ _ _ (IFree _)  (IFree _)          = return $ iNotReached UClobbered
     -- The 'fromJust' calls here are safe since it is guaranteed by the
     -- above match that iUniq is being called on something that is not
     -- 'IFree' and is therefore within its domain.
-iSubGLB_ _ _ _ IFree      b            = return $ iNotReached (MA.fromJust $ iUniq b)
-iSubGLB_ _ _ _ a          IFree        = return $ iNotReached (MA.fromJust $ iUniq a)
+iSubGLB_ _ _ _ (IFree _)  b            = return $ iNotReached (MA.fromJust $ iUniq b)
+iSubGLB_ _ _ _ a          (IFree _)    = return $ iNotReached (MA.fromJust $ iUniq a)
 
 iSubGLB_ _ _ _ (IAny u)   (IAny u')    = return $ IAny (min u u')
 
@@ -494,11 +500,11 @@ iSubLUB_ :: (Ord f, Monad m, Show i, Show i', Show i'', Show f)
          -> (Uniq -> i' -> m i'')
          -> (i -> i' -> m i'')
          -> InstF f i -> InstF f i' -> m (Maybe (InstF f i''))
-iSubLUB_ _ _ _ _ _ IFree      IFree        = return $ Just IFree
-iSubLUB_ _ _ _ _ _ IFree      b     | iIsNotReached b = return $ Just IFree
-iSubLUB_ _ _ _ _ _ a          IFree | iIsNotReached a = return $ Just IFree
-iSubLUB_ _ _ _ _ _ IFree      _            = return $ Nothing
-iSubLUB_ _ _ _ _ _ _          IFree        = return $ Nothing
+iSubLUB_ _ _ _ _ _ (IFree a)  (IFree b) | a == b = return $ Just $ IFree a
+iSubLUB_ _ _ _ _ _ (IFree f)  b         | iIsNotReached b = return $ Just $ IFree f
+iSubLUB_ _ _ _ _ _ a          (IFree f) | iIsNotReached a = return $ Just $ IFree f
+iSubLUB_ _ _ _ _ _ (IFree _)  _            = return $ Nothing
+iSubLUB_ _ _ _ _ _ _          (IFree _)    = return $ Nothing
                    
 iSubLUB_ _ _ _ _ _ (IAny u)   (IAny u')    = return $ Just $ IAny  (max u u')
 iSubLUB_ _ _ _ _ _ (IAny u')  (IUniv u)    = return $ Just $ IAny  (max u u')

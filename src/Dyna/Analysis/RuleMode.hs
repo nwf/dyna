@@ -143,7 +143,7 @@ fgn :: forall a m k .
         MCVT m DVar ~ VR DFunct (NIX DFunct) k, MCR m DVar)
     => DVar -> m a -> m a -> m a -> m a
 fgn v cf cg cn = do
-  ff <- v `subVN` (nHide IFree)
+  ff <- liftM (iIsFree . nExpose) $ expandV v
   gf <- v `subVN` (nHide $ IUniv UShared)
   case (ff,gf) of
     (True ,True ) -> dynacPanicStr "Variable is both free and ground"

@@ -109,13 +109,13 @@ arbNIX rootU = do
     plies <- mapM (flip arbNIXME igen) uniqs   -- Generate plies or recurse
 
     let m = M.fromList (zip nl plies            -- Make the map
-                        ++ map (\(_,i) -> (i,Right IFree)) spares)
+                        ++ map (\(_,i) -> (i,Right (IFree False))) spares)
     root <- arbInstPly rootU igen               -- The root
     return $ NIX root m
  where
   arbInstPly :: forall i . Uniq -> (Uniq -> Gen i) -> Gen (InstF TestFunct i)
   arbInstPly u n = frequency
-    [ (1,pure IFree)
+    [ (1,IFree  <$> arbitrary)
     , (1,IAny   <$> arbUniq u)
     , (1,IUniv  <$> arbUniq u)
     , (3,do
@@ -144,7 +144,7 @@ arbNIXNWF = do
  where
   arbInstPlyNWF :: forall i . Gen i -> Gen (InstF TestFunct i)
   arbInstPlyNWF n = frequency
-    [ (1,pure IFree)
+    [ (1,IFree  <$> arbitrary)
     , (1,IAny   <$> arbitrary)
     , (1,IUniv  <$> arbitrary)
     , (3,IBound <$> arbitrary

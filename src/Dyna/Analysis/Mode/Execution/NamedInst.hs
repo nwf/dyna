@@ -239,7 +239,7 @@ nNotEmpty_core :: forall f .
                -> NIX f -> Bool
 nNotEmpty_core disj self n0@(NIX i0 m0) = evalState (visit i0) S.empty
  where
-  visit IFree     = return True
+  visit (IFree _) = return True
   visit (IUniv _) = return True
   visit (IAny _)  = return True
   visit (IBound _ m b) = b `disj` (M.foldr (\fas a -> allM (map rec fas) : a) [] m)
@@ -288,7 +288,7 @@ nHide i = uncurry NIX $ runState (T.mapM next i) M.empty
 {-# INLINABLE nHide #-}
 
 nShallow :: (Show f) => InstF f a -> Maybe (NIX f)
-nShallow IFree          = Just $ nHide $ IFree
+nShallow (IFree f)      = Just $ nHide $ IFree f
 nShallow (IAny u)       = Just $ nHide $ (IAny u)
 nShallow (IUniv u)      = Just $ nHide $ (IUniv u)
 nShallow (IBound _ _ _) = Nothing
@@ -594,7 +594,7 @@ mWellFormed (QMode ats vm@(vti,vto) _) =
 -- Cleanup and minimization                                             {{{
 
 nCrawl :: forall f .
-          (forall a . Uniq -> InstF f a) -- ^ Replace free variables
+          (forall a . Bool -> Uniq -> InstF f a) -- ^ Replace free variables
        -> Uniq                             -- ^ Minimum uniqueness
        -> NIX f
        -> NIX f
@@ -603,8 +603,8 @@ nCrawl fv u0 n0@(NIX i0 m) =
  where
   reun = over inst_uniq (max u0)
 
-  refv u IFree = fv u
-  refv _ x     = x
+  refv u (IFree f) = fv f u
+  refv _ x         = x
 
   reall u = reun . refv u
 
@@ -622,7 +622,7 @@ nCrawl fv u0 n0@(NIX i0 m) =
 -- | Prune the internals of a 'NIX'.  This really ought not be needed, but
 -- it's handy for test generation.
 nPrune :: forall f . NIX f -> NIX f
-nPrune = nCrawl (const IFree) UUnique
+nPrune = nCrawl (\f _ -> IFree f) UUnique
 
 ------------------------------------------------------------------------}}}
 -- Pretty-printing                                                      {{{
