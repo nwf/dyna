@@ -4,6 +4,10 @@
 TODO
 ====
 
+ - TODO: `--draw` should be a post-processor
+
+ - TODO: call pre/post-processors from repl.
+
  - AggregatorConflict should now always be raised by Dyna compiler.
 
  - vbench: a script which tracks performace over time (= git commits).
@@ -68,8 +72,9 @@ FASTER
 STRONGER (robustness)
 =====================
 
- - TODO: error handling is a bit of a mess, also, some stuff isn't a proper
-   transaction yet.
+ - TODO: error handling, some stuff isn't a proper transaction yet.
+
+ - Context manager for disabling ^C in certain blocks.
 
  - TODO: catch compiler errors (for example, ^C while compiling results in a
    "Compiler panic!  This is almost assuredly not your fault!...").
@@ -81,8 +86,7 @@ USERS
  - TODO: dyna rules for chart display or visualization via viz_chart. Rules will
    use string formatting or python eval magic.
 
- - TODO: serialization, can't pickle the chart because functions aren't
-   picklable -- need to work around this...
+ - TODO: serialization
 
  - TODO: user-defined priorities (blocked: back-chaining)
 
@@ -251,8 +255,8 @@ class Interpreter(object):
 
     def __init__(self):
         # declarations
-        self.agg_name = {}
-        self.edges = defaultdict(set)
+        self.agg_name = defaultdict(lambda: None)
+        self.edges = defaultdict(set)         # TODO: finding HG should be a post-processor
         self.updaters = defaultdict(list)
         # data structures
         self.agenda = prioritydict()
@@ -280,8 +284,23 @@ class Interpreter(object):
 
     def new_fn(self, fn, agg):
         # check for aggregator conflict.
-        if fn not in self.agg_name:
+        if self.agg_name[fn] is None:
             self.agg_name[fn] = agg
+
+            # if we have a new aggregator and an existing chart we need to shove
+            # a bunch of aggregators into the interned nodes.
+            #
+            # This happens when a new rule (e.g. from the repl) gives something
+            # a value, which didn't have a value before -- i.e. was only used as
+            # structure.
+            if fn in self.chart:
+                c = self.chart[fn]
+                assert c.agg_name is None
+                c.agg_name = agg
+                for item in c.intern.itervalues():
+                    assert c.aggregator is None
+                    item.aggregator = c.new_aggregator()
+
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
     def collect_edges(self):
@@ -536,6 +555,7 @@ class Interpreter(object):
         def _emit(*args):
             emits.append(args)
 
+        # TODO: this should be a transaction.
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
@@ -551,6 +571,9 @@ class Interpreter(object):
 
             # TODO: how do I make this transactional? what it the user hits ^C
             # in the middle of the following blocK?
+            #
+            #   - maybe transaction isn't want I mean. Maybe all I want (for now
+            #     is to avoid ^C.
 
             # add new updaters
             for fn, r, h in env.updaters:

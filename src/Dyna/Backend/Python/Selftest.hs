@@ -79,7 +79,9 @@ test_End_To_End = map mkExample
 
 test_REPL :: [Test]
 test_REPL = map (\n -> testProgramRuns n ("./test/repl/"++n) [])
-  [ "aggregator-conflict", "retract-rule" ]
+  [ "aggregator-conflict"
+  , "retract-rule"
+  , "late-aggregator-assignment" ]
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{
