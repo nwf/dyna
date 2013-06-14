@@ -29,11 +29,11 @@ class Term(object):
             return fn
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
 
-#    def __getstate__(self):
-#        return (self.fn, self.args, self.value, self.aggregator)
+    def __getstate__(self):
+        return (self.fn, self.args, self.value, self.aggregator)
 
-#    def __setstate__(self, state):
-#        (self.fn, self.args, self.value, self.aggregator) = state
+    def __setstate__(self, state):
+        (self.fn, self.args, self.value, self.aggregator) = state
 
     __add__ = __sub__ = __mul__ = notimplemented
 

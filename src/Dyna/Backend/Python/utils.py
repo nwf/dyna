@@ -3,6 +3,8 @@ from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from IPython.core.ultratb import VerboseTB
 from config import dynahome, dotdynadir
+import signal
+from contextlib import contextmanager
 
 
 # interactive IPython shell
@@ -83,6 +85,26 @@ def enable_crash_handler():
     Use our custom exception handler for handling uncaught exceptions.
     """
     sys.excepthook = exception_handler
+
+
+@contextmanager
+def interrupt_after():
+
+    def handler(signum, frame):
+        sys.stderr.write('^C')
+        handler.interrupted = True
+        return signal.SIG_IGN
+
+    handler.interrupted = False
+    signal.signal(signal.SIGINT, handler)
+
+    yield
+
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+
+    if handler.interrupted:
+        raise KeyboardInterrupt
+
 
 
 def notimplemented(*_,**__):

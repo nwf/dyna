@@ -251,11 +251,15 @@ class foo(dict):
         return c
 
 
+def none():
+    return None
+
+
 class Interpreter(object):
 
     def __init__(self):
         # declarations
-        self.agg_name = defaultdict(lambda: None)
+        self.agg_name = defaultdict(none)
         self.edges = defaultdict(set)         # TODO: finding HG should be a post-processor
         self.updaters = defaultdict(list)
         # data structures
@@ -266,21 +270,20 @@ class Interpreter(object):
         self.rules = ddict(Rule)
         self.errors = {}
 
-#    def __getstate__(self):
-#        return ((self.chart,
-#                 self.agenda,
-#                 self.agenda,
-#                 self.errors,
-#                 self.agg_name,
-#                 self.parser_state),
-#                '\n'.join(self.rules[i].src for i in sorted(self.rules)))
+    def __getstate__(self):
+        return ((self.chart,
+                 self.agenda,
+                 self.errors,
+                 self.agg_name,
+                 self.parser_state),
+                '\n'.join(self.rules[i].src for i in sorted(self.rules)))
 
-#    def __setstate__(self, state):
-#        ((self.chart, self.agenda, self.agenda, self.errors, self.agg_name, self.parser_state), code) = state
-#        self.edges = defaultdict(set)
-#        self.updaters = defaultdict(list)
-#        self.rules = ddict(Rule)
-#        self.do(self.dynac_code(code))
+    def __setstate__(self, state):
+        ((self.chart, self.agenda, self.errors, self.agg_name, self.parser_state), code) = state
+        self.edges = defaultdict(set)
+        self.updaters = defaultdict(list)
+        self.rules = ddict(Rule)
+        self.do(self.dynac_code(code), initialize=False)
 
     def new_fn(self, fn, agg):
         # check for aggregator conflict.
@@ -346,7 +349,7 @@ class Interpreter(object):
     def dump_rules(self):
         for i in sorted(self.rules):
             print '%3s: %s' % (i, self.rules[i].src)
-#
+
 #    def query(self, q):
 #        if q.endswith('.'):
 #            print "Queries don't end with a dot."
@@ -366,7 +369,6 @@ class Interpreter(object):
 #        for val, bindings in results:
 #            print '   ', val, 'when', bindings
 #        print
-
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
@@ -415,13 +417,10 @@ class Interpreter(object):
             return
         # Step 1: remove update handlers
         for u in rule.updaters:
-            for hs in self.updaters.values():
-                for i, h in enumerate(hs):
-                    if u is h:
-                        del hs[i]
-                        break
-                else:
-                    assert False, "failed to find updater."
+            for xs in self.updaters.values():
+                if u in xs:
+                    xs.remove(u)
+                    assert u not in xs, 'Several occurrences of u in xs'
         # Step 2: run initializer in delete mode
         rule.init(emit=self.delete_emit)
         # Step 3; go!
@@ -430,7 +429,7 @@ class Interpreter(object):
     def go(self):
         try:
             return self._go()
-        except KeyboardInterrupt:   # TODO: need to be safer in some parts of the code.
+        except KeyboardInterrupt:
             print '^C'
             self.dump_charts()
 
@@ -521,7 +520,7 @@ class Interpreter(object):
         import repl
         repl.REPL(self, hist).cmdloop()
 
-    def do(self, filename):
+    def do(self, filename, initialize=True):
         """
         Compile, load, and execute new dyna rules.
 
@@ -532,16 +531,6 @@ class Interpreter(object):
         A rule is bad if the compiler rejects it or it's initializer fails.
         """
         assert os.path.exists(filename)
-
-        # TODO: need a new tracing tool
-        # for debuggging
-#        with file(filename) as h:
-#            print >> self.trace, magenta % 'Loading new code'
-#            print >> self.trace, yellow % h.read()
-
-
-        # load generated code.
-#        execfile(filename, env)
 
         env = imp.load_source('module.name', filename)
 
@@ -560,9 +549,10 @@ class Interpreter(object):
             self.new_fn(k, v)
 
         try:
-            # only run new initializers
-            for _, init in env.initializers:
-                init(emit=_emit)
+            if initialize:
+                # only run new initializers
+                for _, init in env.initializers:
+                    init(emit=_emit)
 
         except (TypeError, ZeroDivisionError) as e:
             raise DynaInitializerException(e, init)
@@ -603,9 +593,7 @@ class Interpreter(object):
         x.update(code)
 
         dyna = dotdynadir / 'tmp' / ('%s.dyna' % x.hexdigest())
-
-        # make necessary directories
-        dyna.dirname().mkdir_p()
+        dyna.dirname().mkdir_p()  # make necessary directories
 
         out = '%s.plan.py' % dyna
 
@@ -648,18 +636,18 @@ def main():
     parser.add_argument('-o', dest='output', help='Output chart.')
     parser.add_argument('--draw', action='store_true',
                         help='Output html page with hypergraph and chart.')
-    parser.add_argument('--postprocess', help='run post-processing script.')
+    parser.add_argument('--post-process', help='run post-processing script.')
 
     parser.add_argument('--profile', action='store_true',
                         help='run profiler.')
 
     args = parser.parse_args()
 
-    if args.postprocess is not None:
+    if args.post_process is not None:
         try:
-            pp = __import__(args.postprocess)
+            pp = __import__(args.post_process)
         except ImportError:
-            print ('ERROR: No postprocessor named %r' % args.postprocess)
+            print ('ERROR: No postprocessor named %r' % args.post_process)
             return
 
     interp = Interpreter()
@@ -679,26 +667,20 @@ def main():
         # reason the garbage collector overhead is lowered in this
         # situation. Giving in a counterintuitive result.
 
-        import cProfile
+        from cProfile import Profile
 
-        cmd = 'interp.do(plan)'
         plan = '%s.plan.py' % args.source
-
         dynac(args.source, plan)
 
-        p = cProfile.Profile()
-
-        # redirect stdout
-        #sys.stdout = file(args.source + '.stdout', 'wb')
-
-        p.runctx(cmd, globals(), locals())
+        p = Profile()
+        p.runctx('interp.do(plan)', globals(), locals())
         p.dump_stats('prof')
 
         interp.dump_charts()
 
         # call graph
         os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
-        os.system('snakeviz prof &')
+        os.system('pkill snakeviz; snakeviz prof &')
 
         return
 
@@ -735,15 +717,7 @@ def main():
     if args.draw:
         interp.draw()
 
-#    interp.query('phrase(X,I,K)')
-
-#    import cPickle
-#    out = cPickle.dumps(interp)  # XXX:
-#    interp2 = cPickle.loads(out)  # XXX:
-#    interp2.repl()
-
-    if args.postprocess is not None:
-        # TODO: import and call main method instead.
+    if args.post_process is not None:
         pp.main(interp)
 
 
