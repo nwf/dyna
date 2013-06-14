@@ -200,8 +200,6 @@ def symbol(name):
 
 if __name__ == '__main__':
 
-    from utils import ip
-
     [f,g,h] = map(symbol, ['f','g','h'])
     vs = [X,Y,Z] = map(symbol, ['X','Y','Z'])
 
@@ -228,9 +226,7 @@ if __name__ == '__main__':
     test(f(X, Y), f("cat", 123))
     test(f(X), f(X))
     test(f(X), f(Y))
-
-    # TODO: this fails:
-    #test("", "")
+    test("abc", "abc")
 
     Z.value = 3
     Y.value = Z
