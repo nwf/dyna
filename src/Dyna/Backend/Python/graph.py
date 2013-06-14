@@ -1,40 +1,55 @@
+"""
+Postprocessor for animated visualization of basic elements such as lines and
+text.
+
+We look for the following patterns in the dynabase
+
+         visual element
+               v
+    frame(T, &text(String, tuple(X, Y))).
+          ^
+       time index
+
+Frames should have value true. The example above places a text element reading
+`String` at position `(X,Y)` in a frame at time `T`. This element can be
+specified by dyna rule.
+"""
+
 import pylab as pl
 from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 
-def g(nodes, edges, t, ax, interp):
-    ax.cla()
-    ax.set_title(t)
-    ax.set_xlim(-2,2)
-    ax.set_ylim(-2,2)
+def main(interp):
 
-    pos = defaultdict(lambda: (0,0))
-    pos.update({node: p for _, (node, _), p in interp.chart['pos/2'][:,t,:]})
+    frame = defaultdict(list)
+    for _, [t, item], val in interp.chart['frame/2'][:,:,:]:
+        if val:
+            frame[t].append(item)
 
-    for u,v in edges:
-        if u < v:
-            (a,b), (c,d) = pos[u], pos[v]
-            ax.plot([a,c], [b,d])
+    nframes = max(frame)
 
-    for s in nodes:
-        x,y = pos[s]
-        ax.text(x,y,s)
-
-def animate(interp):
-    [(_, _, niter)] = interp.chart['niter/0'][:,]
-
-    nodes = [name for _, [name], _ in interp.chart['node/1'][:,:]]
-    edges = [(u,v) for _, [u,v] ,_ in interp.chart['edge/2'][:,:,:]]
+    def draw_frame(t):
+        ax.cla()
+        ax.set_title(t)
+        ax.set_xlim(-2,2)   # TODO: this isn't right...
+        ax.set_ylim(-2,2)
+        if t not in frame:
+            print 'frame', t, 'missing.'
+        for item in frame[t]:
+            if item.fn == 'line/2':
+                [(a,b), (c,d)] = item.args
+                ax.plot([a,c], [b,d], color='b', alpha=0.5)
+            elif item.fn == 'text/2':
+                (s,(x,y)) = item.args
+                ax.text(x,y,s)
+            else:
+                print 'dont know how to render', item
 
     fig = pl.figure()
     ax = pl.axes()
 
     print 'creating animation..'
-    anim = FuncAnimation(fig, lambda t: g(nodes, edges, t % niter, ax, interp), frames=niter)
+    anim = FuncAnimation(fig, draw_frame, frames=nframes)
     print 'saving...'
     anim.save('examples/force.dyna.mp4', fps=30, extra_args=['-vcodec', 'libx264'])
     print 'wrote examples/force.dyna.mp4'
-
-
-def main(interp):
-    animate(interp)

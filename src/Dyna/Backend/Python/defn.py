@@ -17,6 +17,8 @@ class Aggregator(object):
 
 
 class BAggregator(Counter, Aggregator):
+    def __init__(self):   
+        super(BAggregator, self).__init__()
     def inc(self, val, ruleix, variables):
         self[val] += 1
     def dec(self, val, ruleix, variables):

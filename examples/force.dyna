@@ -14,21 +14,35 @@ dist(U,V,T) := (x(U,T) - x(V,T))**2 + (y(U,T) - y(V,T))**2
 shortestpath(U,U) min= 0 for node(U).
 shortestpath(U,V) min= shortestpath(U,W) + edge(W,V).
 
-% "the unit edge length"
-edgelen := 4.0.
-
+% Compute attractive-replusive forces
 f(U,V,T) := (U != V), dist(U,V,T) / (shortestpath(U,V) * edgelen) - 1.
-
 forceX(V,T) += f(U,V,T) * (x(U,T) - x(V,T)).
 forceY(V,T) += f(U,V,T) * (y(U,T) - y(V,T)).
 
+% Constants
 a := 0.15.
-niter := 100.
+niter := 200.
+edgelen := 4.0.   % "the unit edge length"
 
 % should `a` be negative?
 x(U,T) += a * forceX(U,T-1).
 y(U,T) += a * forceY(U,T-1).
 
+% make graph symmetric.
+edge(A,B) := 1 for edge(B,A).
+
+% collect nodes.
+node(U) := true for edge(U,_).
+node(U) := true for edge(_,U).
+
+% pack x and y into a tuple
+pos(U,T) := tuple(x(U, T), y(U, T)).
+
+% visualization
+frame(T, Item) := node(Name), Item is &text(Name, pos(Name, T)).
+frame(T, Item) := edge(U,V), Item is &line(pos(U, T), pos(V, T)).
+
+% declare some edges
 edge("a", "b") := 1.
 edge("a", "c") := 1.
 edge("a", "d") := 1.
@@ -39,12 +53,6 @@ edge("b", "j") := 1.
 edge("e", "f") := 1.
 edge("e", "g") := 1.
 edge("a", "i") := 1.
-
-edge(A,B) := 1 for edge(B,A). % make graph symmetric.
-
-% collect nodes.
-node(U) := true for edge(U,_).
-node(U) := true for edge(_,U).
 
 % randomly initialize node positions.
 x("a",0) += uniform(0,1).  y("a",0) += uniform(0,1).
@@ -57,5 +65,3 @@ x("g",0) += uniform(0,1).  y("g",0) += uniform(0,1).
 x("h",0) += uniform(0,1).  y("h",0) += uniform(0,1).
 x("i",0) += uniform(0,1).  y("i",0) += uniform(0,1).
 x("j",0) += uniform(0,1).  y("j",0) += uniform(0,1).
-
-pos(U,T) := tuple(x(U, T), y(U, T)).

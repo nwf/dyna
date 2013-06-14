@@ -46,23 +46,25 @@ def dynac(f, out):
         raise DynaCompilerError(stderr)
 
 
-def crash_handler():
-    exception_handler(*sys.exc_info())
-
-
 def exception_handler(etype, evalue, tb):
 
     # once for the log file.
     with file(dotdynadir / 'crash.log', 'wb') as crashreport:
-        h = VerboseTB(color_scheme='Linux', call_pdb=False,
+        h = VerboseTB(color_scheme='Linux',
+                      call_pdb=False,
                       ostream=crashreport,
-                      long_header=True, include_vars=True,
+                      long_header=True,
+                      include_vars=True,
                       check_cache=None)
         h(etype, evalue, tb)
 
     # once for the user
-    h = VerboseTB(color_scheme='Linux', call_pdb=False, ostream=None,
-                  tb_offset=0, long_header=False, include_vars=True,
+    h = VerboseTB(color_scheme='Linux',
+                  call_pdb=False,
+                  ostream=None,
+                  tb_offset=0,
+                  long_header=False,
+                  include_vars=False,
                   check_cache=None)
     h(etype, evalue, tb)
 
