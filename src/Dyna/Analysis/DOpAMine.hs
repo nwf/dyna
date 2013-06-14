@@ -12,7 +12,7 @@ import           Control.Lens
 import           Dyna.Analysis.Mode.Det
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Main.Defns
-import           Dyna.Term.Normalized
+-- import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
 import           Dyna.XXX.PPrint
 import           Text.PrettyPrint.Free
@@ -35,10 +35,33 @@ $(makeLenses ''ModedVar)
 -- The 'bscg' parameter is used to hold on to the backend-specific code
 -- generator data in 'OPIter' calls.
 
---              Opcode     Out         In          Ancillary
-data DOpAMine bscg
-              = OPAsgn     DVar        NTV                       -- -+
-              | OPCheq     DVar        DVar                      -- ++
+
+-- For modes here (strictly for human understanding; the actual calls may
+-- be specializations!), we use
+--
+--   "-"  for "out" (i.e. "free >> ground"),
+--   "+"  for "in"  (i.e. "ground >> ground"),
+--   "ao" for "free >> any"
+--   "ai" for "any >> any"
+--   "?"  indicates that the mode is actually annotated in the opcode
+
+--              Opcode     Out         In          Ancillary        Mode
+data DOpAMine bscg =
+              -- = OPAsgn     DVar        NTV                       -- -+
+              -- | OPCheq     DVar        DVar                      -- ++
+
+              -- | Perform a unification.
+              --
+              -- The backend is expected to peer at the modes here and
+              -- perform some inlining of unification whenever possible.
+              --
+              -- The Left case of the Either input is to allow easy
+              -- unification of contants into allocated free variables.
+              --
+              -- The Right case here does not carry a full ModedVar,
+              -- as the mode of the output variable is sufficient (we are
+              -- doing unification, after all), just the input binding state.
+                OPUnif     ModedVar    (Either TBase (DVar,NIX DFunct)) Det
 
               -- | Check that two dvars are not equal.  This is used to
               -- prevent double-counting of hyper-edges when any of their
@@ -52,10 +75,21 @@ data DOpAMine bscg
               -- | Check that the input dvar is an interned representation
               -- of the given functor (and arity as computed from the list
               -- length) and if so, unpack its arguments into those dvars.
+              --
+              -- The output DVars are expected to be unallocated; the input
+              -- must be allocated.
               | OPPeel     [DVar]      DVar        DFunct    Det -- -+
 
-              -- | The reverse of OPPeel
+              -- | The reverse of OPPeel.
+              --
+              -- The ouput DVar is expected to be unallocated; the inputs
+              -- must be allocated.
               | OPWrap     DVar        [DVar]      DFunct        -- -+
+
+
+              -- | Construct the representation of a free variable; that is,
+              -- an 'IAny' that happens to be free.
+              | OPMkFr     DVar                                  -- ao
 
               -- | Perform a query
               | OPIter     ModedVar    [ModedVar]  DFunct        -- ??
@@ -103,11 +137,13 @@ data DOpAMine bscg
 
 detOfDop :: DOpAMine fbs -> Det
 detOfDop x = case x of
-               OPAsgn _ _       -> Det
-               OPCheq _ _       -> DetSemi
+               -- OPAsgn _ _       -> Det
+               -- OPCheq _ _       -> DetSemi
                OPCkne _ _       -> DetSemi
                OPPeel _ _ _ d   -> d
                OPWrap _ _ _     -> Det
+               OPUnif _ _ d     -> d
+               OPMkFr _         -> Det
                OPIndr _ _       -> DetSemi
                OPIter _ _ _ d _ -> d
                OPEmit _ _ _ _   -> Det
@@ -128,28 +164,36 @@ type BackendRenderDopIter bs e =
 renderDOpAMine :: BackendRenderDopIter bs e -> DOpAMine bs -> Doc e
 renderDOpAMine = r
  where
-  r _ (OPAsgn v n)        = text "OPAsgn" <+> pretty v  <+> pretty n
-  r _ (OPCheq a b)        = text "OPCheq" <+> pretty a  <+> pretty b
-  r _ (OPCkne a b)        = text "OPCkne" <+> pretty a  <+> pretty b
-  r _ (OPIndr a b)        = text "OPIndr" <+> pretty a  <+> pretty b
-  r _ (OPPeel vs v f d)   = text "OPPeel" <+> pretty vs
-                                          <+> pretty v
-                                          <+> pretty f
-                                          <+> text (show d)
-  r _ (OPWrap v vs f)     = text "OPWrap" <+> pretty v
-                                          <+> pretty vs <+> pretty f
-  r e (OPIter v vs f d b) = text "OPIter"
-                            <+> pretty v
-                            <+> list (map pretty vs)
-                            <+> squotes (pretty f)
-                            <+> text (show d)
-                            <> maybe empty
-                                     ((space <>) . braces . e v vs f d)
-                                     b
-  r _ (OPEmit h v i vs)   = text "OPEmit"
-                            <+> pretty h
-                            <+> pretty v
-                            <+> pretty i
-                            <+> fillList (map pretty vs)
+  -- r _ (OPAsgn v n)         = text "OPAsgn" <+> pretty v  <+> pretty n
+  -- r _ (OPCheq a b)         = text "OPCheq" <+> pretty a  <+> pretty b
+  r _ (OPUnif a (Left b) d)  = text "OPUnif" <+> pretty a
+                                             <+> text "constant"
+                                             <+> pretty b
+                                             <+> text (show d)
+  r _ (OPUnif a (Right b) d) = text "OPUnif" <+> pretty a
+                                             <+> pretty b
+                                             <+> text (show d)
+  r _ (OPCkne a b)           = text "OPCkne" <+> pretty a  <+> pretty b
+  r _ (OPIndr a b)           = text "OPIndr" <+> pretty a  <+> pretty b
+  r _ (OPPeel vs v f d)      = text "OPPeel" <+> pretty vs
+                                             <+> pretty v
+                                             <+> pretty f
+                                             <+> text (show d)
+  r _ (OPWrap v vs f)        = text "OPWrap" <+> pretty v
+                                             <+> pretty vs <+> pretty f
+  r _ (OPMkFr v)             = text "OPMkFr" <+> pretty v
+  r e (OPIter v vs f d b)    = text "OPIter"
+                               <+> pretty v
+                               <+> list (map pretty vs)
+                               <+> squotes (pretty f)
+                               <+> text (show d)
+                               <> maybe empty
+                                        ((space <>) . braces . e v vs f d)
+                                        b
+  r _ (OPEmit h v i vs)      = text "OPEmit"
+                               <+> pretty h
+                               <+> pretty v
+                               <+> pretty i
+                               <+> fillList (map pretty vs)
 
 ------------------------------------------------------------------------}}}

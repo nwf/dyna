@@ -19,6 +19,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -202,7 +203,7 @@ checkAndReunif x = {- XT.trace "CAR" $-} do
                     err <- leqXX x (VRStruct $ IAny UUnique)
                     if err
                      then unifyXX UUnique x (VRStruct $ IAny UShared)
-                     else throwError UFExDomain
+                     else throwError $ UFExDomain "Would alias"
 
 unifyXX :: (UnifC m f n)
         => Uniq -> VR f n -> VR f n -> m (VR f n)
@@ -281,13 +282,22 @@ unifyUnaliasedNV n0 v0 = do
 unifyVF :: forall m f n .
            (UnifC' m f n
            , MCVT m DVar ~ VR f n, MCR m DVar, MCW m DVar)
-        => (DVar -> m Bool) -> DVar -> f -> [DVar] -> m DVar
-unifyVF lf v f vs = do
+        => Bool
+        -> (DVar -> m Bool)
+        -> DVar
+        -> f
+        -> [Either (NIX f) DVar]
+        -> m DVar
+unifyVF fake lf v f vs = do
   vl   <- lf v
   vy   <- clookup v
-  vys  <- mapM clookup vs
+  vvys :: [Either (NIX f) (DVar,VR f n)]
+       <- mapM (either (return . Left)
+                       (\v_ -> clookup v_ >>= return . Right . (v_,)))
+               vs
 
-  let vvys = zip vs vys
+  let vys :: [VR f n] = map (either VRName snd) vvys
+
 
   -- Perform a fake, dead unification of the variable's old inst and
   -- bound(unique, f(...)).  This gets us just the join on the lattice.
@@ -302,33 +312,44 @@ unifyVF lf v f vs = do
   (u,vys') <- case i'' of
     VRName n'' -> case nExpose n'' of
                     IBound u (M.toList -> [(f',ris)]) False | f == f' -> do
-                         x <- go unifyNX vl vvys u ris
+                         x <- go (\u_ x_  n_ -> unifyXX u_ x_ (VRName n_))
+                                 (\u_ n1_ n2_ -> unifyXX u_ (VRName n1_) (VRName n2_))
+                                 vl vvys u ris
                          return (u,x)
                     _ -> dynacPanicStr "unifyVF impossible NIX result"
     VRStruct (IBound u (M.toList -> [(f',ris)]) False) | f == f' -> do
-                         x <- go unifyXX vl vvys u ris 
+                         x <- go unifyXX
+                                 (\u_ n_  x_ -> unifyXX u_ (VRName n_) x_)
+                                 vl vvys u ris 
                          return (u,x)
     _ -> dynacPanicStr "unifyVF impossible result"
 
   -- Store back into the context
 
-  () <- sequence_ $ zipWith (cassign) vs vys'
+  () <- sequence_ $ zipWithTails (either (\_ _ -> return ()) cassign)
+                                 lenpanic
+                                 lenpanic
+                                 vs vys'
+                                            
   cassign v (VRStruct $ IBound u (M.singleton f vys') False)
 
   return v
  where
-  go :: forall a b m' .
-        (m' ~ ReaderT UnifParams m)
-     => (Uniq -> a -> b -> m' (VR f (NIX f)))
-     -> Bool -> [(DVar,b)] -> Uniq -> [a] -> m [VR f (NIX f)]
-  go uf vl vvys u ris = sequence $ zipWithTails
-                           (\ri (v',oi) -> do
+  go :: forall a a' b gm .
+        (gm ~ ReaderT UnifParams m)
+     => (Uniq -> a -> b -> gm (VR f (NIX f)))
+     => (Uniq -> a' -> b -> gm (VR f (NIX f)))
+     -> Bool -> [Either a' (DVar,a)] -> Uniq -> [b] -> m [VR f (NIX f)]
+  go uf uf' vl vvys u ris = sequence $ zipWithTails goz lenpanic lenpanic ris vvys
+   where
+    goz ri (Left n) = runReaderT (uf' u n ri) (UnifParams vl fake)
+    goz ri (Right (v',oi)) = do
                               l <- lf v'
-                              runReaderT (uf u ri oi >>= checkAndReunif)
-                                         (UnifParams (l && vl) True))
-                           (\_ -> dynacPanicStr "unifyVF length mismatch")
-                           (\_ -> dynacPanicStr "unifyVF length mismatch")
-                           ris vvys
+                              runReaderT (uf u oi ri >>= checkAndReunif)
+                                         (UnifParams (l && vl) True)
+
+  lenpanic = dynacPanicStr "unifyVF length mismatch"
+
 ------------------------------------------------------------------------}}}
 -- Matching                                                             {{{
 
@@ -392,7 +413,7 @@ doCall l r0 as0 (QMode cs0 (rmi,rmo) _) = go (r0:as0) (rmi:map fst cs0)
    sub <- subVN a c
    if sub
     then go as cs
-    else throwError UFExDomain
+    else throwError $ UFExDomain "Inapplicable call mode"
   go _      _      = return False
 
   goUnify []     []     = return True

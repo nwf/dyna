@@ -18,9 +18,26 @@ import           Dyna.Analysis.Mode.Uniq
 -- Unification Failure Flavors                                          {{{
 
 data UnifFail =
-    UFSemiClob -- ^ see 'semidet_clobbered_unify'
-  | UFNotReach -- ^ Some nested unification satisfies 'iNotReached'
-  | UFExDomain -- ^ A partial function was applied outside its domain
+    UFSemiClob
+      -- ^ see 'semidet_clobbered_unify'
+
+  | UFFreeFree Bool
+      -- ^ Unification attempted an impossible free/free unification.
+      --
+      -- The boolean carries the aliasing flag from the error.
+
+  | UFExDomain String
+      -- ^ A partial function was applied outside its domain
+      --
+      -- This one is a little more generic and so should probably
+      -- see only selective use.
+
+  | UFNotReach
+      -- ^ Some nested unification satisfies 'iNotReached'
+      --
+      -- This is only a 'Unification Failure' in the sense that it
+      -- short-circuits the remainder of the computation; in the
+      -- language of the thesis it is a success.
  deriving (Eq,Ord,Show)
 
 ------------------------------------------------------------------------}}}
@@ -95,7 +112,7 @@ iLeqGLBRL_ il ir ml mr m u i1 i2 = do
     if scu
      then return (Left UFSemiClob)
      else case (i1,i2) of
-            (IFree a, IFree b) | a == b -> return (Left UFExDomain)
+            (IFree a, IFree b) | a == b -> return (Left $ UFFreeFree a)
             _                           -> iLeqGLBRD_ il ir ml mr m u i1 i2
 {-# INLINABLE iLeqGLBRL_ #-}
 

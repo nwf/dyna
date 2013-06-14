@@ -125,7 +125,7 @@ prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
     fmap fst $ runIdentity
              $ flip CA.runSIMCT (CA.ctxFromBindings [(vA,n1),(vB,n2)])
              $ do
-                _ <- FA.unifyVF True (const $ return True) vA G [vB]
+                _ <- FA.unifyVF True (const $ return True) vA G [Right vB]
                 FA.expandV vA
    where
      vA = "A"

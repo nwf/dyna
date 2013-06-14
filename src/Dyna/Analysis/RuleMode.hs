@@ -22,8 +22,8 @@ module Dyna.Analysis.RuleMode {- (
     Crux, EvalCrux(..), UnifCrux(..),
 
     Action, Cost, Det(..),
-    BackendPossible, 
- 
+    BackendPossible,
+
     planInitializer, planEachEval, planGroundBackchain,
 
     UpdateEvalMap, combineUpdatePlans,
@@ -55,7 +55,7 @@ import           Dyna.Analysis.Mode
 import           Dyna.Analysis.Mode.Execution.Context
 import           Dyna.Analysis.Mode.Execution.Functions
 import           Dyna.Term.TTerm
-import           Dyna.Term.Normalized
+-- import           Dyna.Term.Normalized
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
 import           Dyna.XXX.MonadContext
@@ -105,7 +105,7 @@ data BackendAction fbs = BAct
 
 -- | Builtin support hook for mode planning.  Options are
 --   to return
--- 
+--
 --   * @Left False@  -- This functor is not built in
 --
 --   * @Left True@   -- There is no plan for this mode
@@ -153,9 +153,10 @@ fgn v cf cg cn = do
 
 possible :: (Monad m)
          => BackendPossible fbs
+         -> (DVar -> Bool)
          -> Crux DVar TBase
          -> SIMCT m DFunct (Actions fbs)
-possible fp cr =
+possible fp lf cr = {- XT.traceShow ("POSS",cr) $ -}
   case cr of
     -- XXX This is going to be such a pile.  We really, really should have
     -- unification crank out a series of DOpAMine opcodes for us, but for
@@ -166,24 +167,89 @@ possible fp cr =
     -- should be done before any case analysis.  Note that we also don't do
     -- any liveness analysis correctly!
 
-    -- Assign or check
-    Right (CAssign o i) ->
-        fgn o (runReaderT (unifyVU o) (UnifParams True False)
-                >> return [ OPAsgn o (NTBase i) ])
-              (let chk = "_chk" in return [ OPAsgn chk (NTBase i), OPCheq chk o])
-              (throwError UFExDomain)
 
-    Right (CEquals o i) ->
-       fgn o (fgn i (throwError UFExDomain)
-                    (runReaderT (unifyVV i o) (UnifParams True False)
-                       >> return [ OPAsgn o (NTVar i) ])
-                    (throwError UFExDomain))
-             (fgn i (runReaderT (unifyVV i o) (UnifParams True False)
-                       >> return [ OPAsgn i (NTVar o) ])
-                    (return [ OPCheq o i ])
-                    (throwError UFExDomain))
-             (throwError UFExDomain)
+    -- Assign to or check against constant
+    Right (CAssign o i) -> do
+      mi_o <- expandV o
+      _ <- runReaderT (unifyVU o) (UnifParams (lf o) False)
+      mo_o <- expandV o
+      return $ [ OPUnif (MV o mi_o mo_o) (Left i) DetSemi ]
 
+    -- Unify two variables
+    Right (CEquals o i) -> do
+      mi_o <- expandV o
+      mi_i <- expandV i
+      _ <- runReaderT (unifyVV o i) (UnifParams (lf i || lf o) False)
+      mo_o <- expandV o
+      return $ [ OPUnif (MV o mi_o mo_o) (Right $ (i,mi_i)) DetSemi ]
+
+    -- Disequality constraints require that both inputs be brought to ground
+    Right (CNotEqu o i) -> do
+      mi_o <- expandV o
+      mi_i <- expandV i
+      if all nGround [mi_o,mi_i]
+       then return [ OPCkne o i ]
+       else throwError $ UFExDomain "CNotEqu req. ground inputs"
+
+    -- Structure building or unbuilding
+    Right (CStruct o is funct) -> do
+      mi_is <- mapM expandV is
+      mi_o  <- expandV o
+      -- XT.traceShow ("POSS CStruct",mi_is,map lf is,mi_o,lf o) $ return ()
+      _ <- unifyVF False (return . lf) o funct (map Right is)
+      -- mo_is <- mapM expandV is
+      mo_o  <- expandV o
+      case (all allocated mi_is, allocated mi_o) of
+            -- Inputs allocated, output not
+        (True ,False) -> return [ OPWrap o is funct ]
+
+            -- Output allocated, some input not
+        (False,True)  -> if all (not . allocated) mi_is
+                          then -- No input allocated; an excellent opportunity
+                               return [ OPPeel is o funct Det ]
+                          else -- XXX
+                               throwError $ UFExDomain "CStruct hybrid case"
+
+            -- Both allocated
+        (True ,True ) -> let tmp = "_tmp"
+                             tmvi = nHide $ IBound UUnique
+                                                   (M.singleton funct mi_is)
+                                                   False
+                         in do
+                             return [ OPWrap tmp is funct,
+                                      OPUnif (MV o mi_o mo_o)
+                                             (Right (tmp,tmvi))
+                                             DetSemi
+                                    ]
+
+            -- XXX?
+        (False,False) -> throwError $ UFExDomain "CStruct too little information"
+
+    -- XXX Indirect evaluation is not yet supported
+    Left (_, CEval _ _) -> dynacPanic "CEval crux in planner"
+
+    -- Evaluation
+    Left (_, CCall o is funct) -> do
+      mi_is <- mapM expandV is
+      mi_o  <- expandV o
+      let mvis = zipWith (\v n -> MV v n mo) is mi_is
+          mvo  = MV o mi_o mo
+      case fp (funct,mvis,mvo) of
+          -- XXX Not a built-in, so we assume that it can be
+          -- iterated in full.
+        Left False      -> do mapM_ bind (o:is)
+                              return [OPIter mvo mvis funct DetNon Nothing]
+
+          -- Builtin called in improper mode; bail on this plan
+        Left True        -> throwError $ UFExDomain "Inapplicable call to primitive"
+
+          -- Builtin called in accessible mode; apply bindings and return
+        Right (BAct a m) -> do forM_ m $ \(v,vn) ->
+                                 runReaderT (unifyUnaliasedNV vn v)
+                                            (UnifParams (lf v) True)
+                               return a
+
+  {-
     -- Structure building or unbuilding
     --
     -- XXX This ought to avail itself of unifyVF but doesn't.
@@ -205,45 +271,18 @@ possible fp cr =
                               (return (nv, Just (nv,v)))
                               (throwError UFExDomain)
 
-    -- Disequality constraints require that both inputs be brought to ground
-    Right (CNotEqu o i) -> fgn o (throwError UFExDomain)
-                                 (fgn i (throwError UFExDomain)
-                                        (return [ OPCkne o i ])
-                                        (throwError UFExDomain))
-                                 (throwError UFExDomain)
-
-    -- XXX Indirect evaluation is not yet supported
-    Left (_, CEval _ _) -> throwError UFExDomain
-
-    -- Evaluation
-    Left (_, CCall vo vis funct) -> do
-      is <- mapM mkMV vis 
-      o  <- mkMV vo
-      case fp (funct,is,o) of
-          -- XXX Not a built-in, so we assume that it can be
-          -- iterated in full.
-        Left False      -> do mapM_ bind (vo:vis)
-                              return [OPIter o is funct DetNon Nothing]
-
-          -- Builtin called in improper mode; bail on this plan
-        Left True        -> throwError UFExDomain
-
-          -- Builtin called in accessible mode; apply bindings and return
-        Right (BAct a m) -> do runReaderT
-                                 (mapM_ (uncurry $ flip unifyUnaliasedNV) m)
-                                 (UnifParams True True) -- XXX Live?
-                               return a
+  -}
  where
      mo = nHide (IUniv UShared)
      unifyVU v = unifyUnaliasedNV mo v
-     mkMV v = do
-       vn <- expandV v
-       return $ MV v vn mo
-
-     ensureBound v = fgn v (throwError UFExDomain)
-                           (return ())
-                           (throwError UFExDomain)
      bind x = runReaderT (unifyVU x) (UnifParams False False)
+
+     allocated n = case nExpose n of
+                     IFree True   -> True
+                     IFree False  -> False
+                     IAny  _      -> True
+                     IUniv _      -> True
+                     IBound _ _ _ -> True
 
 ------------------------------------------------------------------------}}}
 -- Costing Plans                                                        {{{
@@ -260,10 +299,18 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 
   stepCost :: DOpAMine fbs -> Double
   stepCost x = case x of
-    OPAsgn _ _          -> 1
-    OPCheq _ _          -> -1 -- Checks are issued with Assigns, so
-                              -- counter-act the cost to encourage them
-                              -- to be earlier in the plan.
+    -- OPAsgn _ _          -> 1
+    -- OPCheq _ _          -> -1 -- Checks are issued with Assigns, so
+                                 -- counter-act the cost to encourage them
+                                 -- to be earlier in the plan.
+
+    OPUnif _ _ d        ->
+      case d of
+        DetSemi -> 1
+        Det     -> -1
+        _       -> dynacPanic $ "Mysterious unification determinism:"
+                                <+> text (show d)
+
     OPCkne _ _          -> 0
     OPPeel _ _ _ _      -> 0
     OPWrap _ _ _        -> 1  -- Upweight building due to side-effects
@@ -277,7 +324,11 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
                                               filter isFree (o:is))
                                         - 1
                              DetMulti -> 2
-    OPIndr _ _          -> 100
+
+
+    OPMkFr _            -> 1
+
+    OPIndr _ _          -> dynacPanic "Cannot score OPIndr"
     OPEmit _ _ _ _      -> 0
 
   loops = fromIntegral . length . filter isLoop
@@ -298,19 +349,20 @@ data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
                           , pp_plan           :: Actions fbs
                           }
 
-pp_liveVars :: PartialPlan fbs -> S.Set DVar
-pp_liveVars p = allCruxVars (pp_cruxes p)
-
 -- XXX This does not have a way to signal UFNotReached back to its caller.
 -- That is particularly disappointing since any unification producing that
 -- means that there's certainly no plan for the whole rule.
-stepPartialPlan :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
+stepPartialPlan :: (   (DVar -> Bool)
+                    -> Crux DVar TBase
+                    -> SIMCT Identity DFunct (Actions fbs))
                 -- ^ Possible actions
                 -> (PartialPlan fbs -> Actions fbs -> Cost)
                 -- ^ Plan scoring function
+                -> (S.Set (Crux DVar TBase) -> DVar -> Bool)
+                -- ^ Variable liveness function
                 -> PartialPlan fbs
                 -> Either (Cost, Actions fbs) [PartialPlan fbs]
-stepPartialPlan poss score p =
+stepPartialPlan poss score lf p =
   {- XT.trace ("SPP:\n"
              ++ "  " ++ show (pp_cruxes p) ++ "\n"
              ++ show (indent 2 $ pretty $ pp_binds p) ++ "\n"
@@ -335,18 +387,23 @@ stepPartialPlan poss score p =
  where
    step = S.fold (\crux ps ->
                   let pl = pp_plan p
-                      plan = runIdentity $ runSIMCT (poss crux) (pp_binds p)
                       rc' = S.delete crux (pp_cruxes p)
+                      plan = runIdentity $ runSIMCT (poss (lf rc') crux)
+                                                    (pp_binds p)
                   in either (const ps)
                             (\(act,bc') -> PP rc' bc' (score p act) (pl ++ act)
                                            : ps)
                             plan
                 ) []
 
-planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
+planner_ :: (   (DVar -> Bool)
+             -> Crux DVar TBase
+             -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Available steps
          -> (PartialPlan fbs -> Actions fbs -> Cost)
          -- ^ Scoring function
+         -> (S.Set (Crux DVar TBase) -> DVar -> Bool)
+         -- ^ Variable liveness function
          -> S.Set (Crux DVar TBase)
          -- ^ Cruxes to be planned over
          -> Maybe (EvalCrux DVar, DVar, DVar)
@@ -358,7 +415,7 @@ planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -- in the given cruxes)
          -> [(Cost, Actions fbs)]
          -- ^ Plans and their costs
-planner_ st sc cr mic ictx = runAgenda
+planner_ st sc lf cr mic ictx = runAgenda
    $ PP { pp_cruxes = cr
         , pp_binds  = ctx'
         , pp_score  = 0
@@ -374,7 +431,7 @@ planner_ st sc cr mic ictx = runAgenda
 
     go pq = maybe [] go' $ mapMinRepView pq
      where
-      go' (p, pq') = case stepPartialPlan st sc p of
+      go' (p, pq') = case stepPartialPlan st sc lf p of
                        Left df -> df : (go pq')
                        Right ps' -> go (foldr mioaPlan pq' ps')
 
@@ -389,11 +446,13 @@ planner_ st sc cr mic ictx = runAgenda
   (ip,bis) = case mic of
               Nothing -> ([],[])
               Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f DetSemi
-                                                 , OPAsgn o (NTVar ho)]
+                                                 , OPUnif (mkMFV o)
+                                                          (Right $ (ho,nus)) Det]
                                               , o:is)
-              Just (CEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
-                                              , OPAsgn o (NTVar ho)]
-                                            , [o,i] )
+              Just (CEval _ _, _, _) -> dynacPanic "Planner INITPLAN CEval case is too scary to contemplate"
+
+  nus     = nHide $ IUniv UShared
+  mkMFV x = MV x (nHide $ IFree False) nus
 
 -- | Pick the best plan, but stop the planner from going off the rails by
 -- considering at most a constant number of plans.
@@ -424,15 +483,17 @@ planUpdate :: BackendPossible fbs
            -> SIMCtx DVar
            -> Maybe (Cost, Actions fbs)
 planUpdate bp r sc anf mi ictx = fmap (second (finalizePlan r)) $
-  bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
+  bestPlan $ planner_ (possible bp) sc (\cs v -> v `S.member` allCruxVars cs)
+                      anf (Just mi) ictx
 
 planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
 planInitializer bp r = fmap (second (finalizePlan r)) $
   let cruxes = r_cruxes r in
-  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
+  bestPlan $ planner_ (possible bp) simpleCost (\cs v -> v `S.member` allCruxVars cs)
+             cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
--- | Given a particular crux and the remaining evaluation cruxes in a rule, 
+-- | Given a particular crux and the remaining evaluation cruxes in a rule,
 -- find all the \"later\" evaluations which will need special handling and
 -- generate the cruxes necessary to prevent double-counting.
 --
@@ -463,7 +524,7 @@ planInitializer bp r = fmap (second (finalizePlan r)) $
 -- XXX What do we do in the CEval case??  We need to check every evaluation
 -- inside a CEval update?
 handleDoubles :: (Ord a, Ord b)
-              => (Int -> a -> a -> a) 
+              => (Int -> a -> a -> a)
               -> (Int,EvalCrux a)
               -> S.Set (Int, EvalCrux a)
               -> S.Set (UnifCrux a b)
@@ -578,7 +639,7 @@ type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
 --
 combineUpdatePlans :: [(Rule,[( Int,
                                 Maybe (Cost, DVar, DVar, Actions fbs))])]
-                   -> UpdateEvalMap fbs  
+                   -> UpdateEvalMap fbs
 combineUpdatePlans = go (M.empty)
  where
   go m []             = m
@@ -610,7 +671,7 @@ type QueryEvalMap fbs = M.Map (Maybe DFunctAr)
                               [(Rule, Cost, DVar, Action fbs)]
 
 combineQueryPlans :: [(Rule, Maybe (Cost, DVar, Action fbs))]
-                   -> QueryEvalMap fbs  
+                   -> QueryEvalMap fbs
 combineQueryPlans = go (M.empty)
  where
   go m []              = m

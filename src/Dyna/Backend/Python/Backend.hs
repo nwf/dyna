@@ -14,7 +14,7 @@ module Dyna.Backend.Python.Backend (pythonBackend) where
 -- import           Control.Applicative ((<*))
 -- import qualified Control.Arrow              as A
 -- import           Control.Exception
-import           Control.Lens ((^.))
+import           Control.Lens((^.))
 import           Control.Monad
 import           Control.Monad.State
 -- import qualified Data.ByteString            as B
@@ -81,15 +81,9 @@ builtins (f,is,o) = case () of
     -> maybe (Left False) gencall $ constants (f,length is)
         where
          gencall pc = case () of
-                        _ | isFree o ->
+                        _ | isFree o || isGround o ->
                          Right $ BAct [OPIter o is f Det (Just pc)]
                                       [(o^.mv_var, nuniv)]
-                        _ | isGround o ->
-                          let chkv = "_chk"
-                              fchk = MV chkv nfree nuniv
-                          in Right $ BAct [ OPIter fchk is f Det (Just pc)
-                                          , OPCheq chkv (o^.mv_var) ]
-                                          []
                         _ -> Left True
 
   -- XXX These next two branches have nothing specific about Python at all
@@ -120,7 +114,7 @@ builtins (f,is,o) = case () of
   _ -> Left False
 
 infixOp :: Doc e -> a -> [ModedVar] -> Doc e
-infixOp op _ vis = sepBy op $ mpv vis
+infixOp fn _ vis = sepBy fn $ mpv vis
 
 mpv :: [ModedVar] -> [Doc e]
 mpv = map (pretty . (^.mv_var))
@@ -216,12 +210,39 @@ piterate vs = if length vs == 0 then "_"
 -- filterGround :: [ModedVar] -> [DVar]
 -- filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
+pdope_cheq :: Doc e -> Doc e -> Doc e
+pdope_cheq v val =     "if"
+                   <+> parens v
+                   <+> "!="
+                   <+> parens val
+                   <> ": continue"
+
 -- | Render a single dopamine opcode or its surrogate
 pdope_ :: DOpAMine PyDopeBS -> State Int (Doc e)
 pdope_ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
-pdope_ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
-pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
-                                      <+> pretty val <> ": continue"
+
+-- pdope_ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
+-- pdope_ (OPCheq v val) = return $ pdope_cheq (pretty v) (pretty val)
+
+pdope_ (OPUnif a (Left val) _) = return $
+  case nExpose (a^.mv_mi) of
+    IFree False            -> pretty (a^.mv_var) <+> equals <+> pretty val
+    _ | nGround (a^.mv_mi) -> pdope_cheq (pretty $ a^.mv_var) (pretty $ val)
+    _                      -> "unify" <+> tupled [ pretty $ a^.mv_var
+                                                 , pretty val]
+
+pdope_ (OPUnif a (Right (bv,bi)) _) = return $
+  case (nExpose $ a^.mv_mi, nExpose bi) of
+    (IFree True , IFree True ) -> dynacPanic "OPUnif free/free aliasing" 
+    (IFree False, IFree False) -> dynacPanic "OPUnif free/free unallocated" 
+    (IFree False, _)           -> pretty (a^.mv_var)
+                                    <+> equals <+> pretty bv
+    (_, IFree False)           -> pretty bv
+                                    <+> equals <+> pretty (a^.mv_var)
+    _ | all nGround [a^.mv_mi,bi] -> pdope_cheq (pretty $ a^.mv_var) (pretty bv)
+    (_,_)                      -> "unify"
+                                    <> tupled [pretty $ a^.mv_var,pretty bv]
+
 pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
                                       <+> pretty val <> ": continue"
 pdope_ (OPPeel vs i f _) = return $
@@ -238,9 +259,14 @@ pdope_ (OPWrap v vs f) = return $ pretty v
                            <> (parens $ pfas f vs <> comma
                                 <> (sepBy "," $ map pretty vs))
 
-pdope_ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
-                                     <+> equals
-                                     <+> c v vs
+pdope_ (OPMkFr v)      = return $ pretty v <+> equals <+> "mkvar"
+                                                      <+> parens (pretty v)
+
+pdope_ (OPIter v vs _ Det (Just (PDBS c))) =
+  case nExpose $ v^.mv_mi of
+    IFree False -> return $ pretty (v^.mv_var) <+> equals <+> c v vs
+    _           -> return $  "_tmp" <+> equals <+> c v vs <> line
+                          <> pdope_cheq "_tmp" (pretty $ v^.mv_var)
 
 pdope_ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
            "Unexpected determinism flag (at python code gen):"
@@ -356,8 +382,8 @@ driver am um {-qm-} is pr fh = do
   forM_ (M.toList um) $ \(fa, ps) -> do
      hPutStrLn fh ""
      hPutStrLn fh $ "# " ++ show fa
-     forM_ ps $ \(r,n,c,vi,vo,act) -> do
-       printUpdate fh r c n fa (vi,vo) act
+     forM_ ps $ \(r,n,c,vi,vo,a) -> do
+       printUpdate fh r c n fa (vi,vo) a
 
   hPutStrLn fh ""
   hPutStrLn fh $ "# ==Initializers=="
