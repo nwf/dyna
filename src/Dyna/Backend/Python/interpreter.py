@@ -4,11 +4,7 @@
 TODO
 ====
 
- - TODO: `--draw` should be a post-processor
-
- - TODO: call pre/post-processors from repl.
-
- - AggregatorConflict should now always be raised by Dyna compiler.
+ - call pre/post-processors from repl.
 
  - vbench: a script which tracks performace over time (= git commits).
 
@@ -20,12 +16,11 @@ TODO
    cProfile + snakeviz
      $ python -m cProfile -o prof src/Dyna/Backend/Python/interpreter.py examples/force.dyna >/dev/null && snakeviz prof
 
-
  - unit tests and code coverage.
 
  - doc tests for Dyna code.
 
- - TODO: think about indices as memoized queries
+ - think about indices as memoized queries
 
  - let Dyna do some of the work for you. think about using Dyna to maintain
    rules and update handlers.
@@ -35,78 +30,12 @@ TODO
    :- sigmoid(X) := needs(X), 1 / (1 + exp(-X)).
    :- needs(0.5).
 
-
-BIGGER (new features)
-=====================
-
- - TODO: operator for getattr (this will generate slightly different code
-   because we don't want to look up by string -- i.e. call the getattr builtin).
+ - operator for getattr (this will generate slightly different code because we
+   don't want to look up by string -- i.e. call the getattr builtin).
 
  - hook for python imports?
 
    :- python: from numpy import exp, sqrt, log
-
-
-FASTER
-======
-
- - TODO: specialize calls to emit, don't build the big dictionaries if the
-   aggregator doesn't use them. Consider generate both version (or an argument
-   to the update handler which will skip the appropriate code paths).
-
- - TODO: faster charts (dynamic argument types? jason's trie data structure)
-
- - TODO: teach planner to prefer not to use the value column, because it's not
-   indexed.
-
- - TODO: dynac should provide routines for building terms. We can hack something
-   together with anf output, but this will be prety kludgy and inefficient.
-
- - TODO: prioritization
-
- - TODO: BAggregators aren't very efficient.
-
- - interning with integers instead of deduplicated instances of Term.
-
-
-STRONGER (robustness)
-=====================
-
- - TODO: error handling, some stuff isn't a proper transaction yet.
-
- - Context manager for disabling ^C in certain blocks.
-
- - TODO: catch compiler errors (for example, ^C while compiling results in a
-   "Compiler panic!  This is almost assuredly not your fault!...").
-
-
-USERS
-=====
-
- - TODO: dyna rules for chart display or visualization via viz_chart. Rules will
-   use string formatting or python eval magic.
-
- - TODO: serialization
-
- - TODO: user-defined priorities (blocked: back-chaining)
-
- - TODO: filter / bulk loader; post-processing (e.g. serialization and plotting)
-
- - Catch typos! Warn the user if they write a predicate that is not defined on
-   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
-   [mode analysis will help with this].
-
- - If the solver is taking too long print an "apology" with some simple
-   statistics explaining what the solver is doing (e.g. repropagation-rate: does
-   it have a bad prioritization heuristics is it stuck in a cycle; number of
-   items proved: is it counting to infinity?).
-
-
-DEVELOPERS
-==========
-
- - TODO: visualize execution of solver on hypergraph -- recreate nwf's
-   animations from his ICLP talk.
 
 
 BUGS
@@ -122,7 +51,59 @@ BUGS
    few things -- I think assertionerror is one them... we should probably do
    whatever this is doing with a custom exception.
 
- - TODO: some items only learn their aggregators late in life...
+
+FASTER
+======
+
+ - specialize calls to emit, don't build the big dictionaries if the aggregator
+   doesn't use them. Consider generate both version (or an argument to the
+   update handler which will skip the appropriate code paths).
+
+ - faster charts (dynamic argument types? jason's trie data structure)
+
+ - teach planner to prefer not to use the value column, because it's not
+   indexed.
+
+ - Consider indexing value column if plans will need it.
+
+ - dynac should provide routines for building terms. We can hack something
+   together with anf output, but this will be prety kludgy and inefficient.
+
+ - better default prioritization (currently FIFO)
+
+ - BAggregators aren't very efficient.
+
+ - interning with integers instead of deduplicated instances of Term.
+
+
+STRONGER (robustness)
+=====================
+
+ - error handling, some stuff isn't a proper transaction yet.
+
+ - Context manager for disabling ^C in certain blocks.
+
+ - catch compiler errors (for example, ^C while compiling results in a "Compiler
+   panic!  This is almost assuredly not your fault!...").
+
+
+USERS
+=====
+
+ - user-defined priorities (blocked: back-chaining)
+
+ - filter / bulk loader; post-processing (e.g. serialization and plotting)
+
+    - How should we pass arguments to pre/post-processors?
+
+ - Catch typos! Warn the user if they write a predicate that is not defined on
+   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
+   [mode analysis will help with this].
+
+ - If the solver is taking too long, print an "apology" with some simple
+   statistics explaining what the solver is doing (e.g. repropagation-rate: does
+   it have a bad prioritization heuristics is it stuck in a cycle; number of
+   items proved: is it counting to infinity?).
 
 
 NOTES
@@ -168,6 +149,9 @@ NOTES
 JUST FOR FUN
 ============
 
+ - visualize execution of solver on hypergraph -- recreate nwf's animations from
+   his ICLP talk.
+
  - overload everything so that values maintain provenance and we can inspect the
    entire fine-grained circuit.
 
@@ -179,37 +163,22 @@ JUST FOR FUN
 
    - sympy?
 
-
-What is null?
-=============
-
- Consider the following two similar programs
-
-  1) a += b + c.
-
-  2) a += b.
-     a += c.
-
- These programs have different meanings! We can demonstrate by adding evidence.
-
- What should `a += null` and `a += null + 1.` do?
-
 """
 
 from __future__ import division
 import os, sys, imp, argparse
 from collections import defaultdict
-
 from hashlib import sha1
+from time import time
 
-import debug
 from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, \
     notimplemented, parse_attrs, ddict, dynac, enable_crash_handler, \
     DynaCompilerError, DynaInitializerException
 from prioritydict import prioritydict
-from config import dotdynadir, dynahome
+from config import dotdynadir
+
 
 try:
     from numpy import log, exp, sqrt
@@ -219,8 +188,6 @@ except ImportError:                       # XXX: should probably issue a warning
     from random import random as _random
     def uniform(a=0, b=1):
         return _random() * (b - a) + a
-
-from time import time
 
 
 class Rule(object):
@@ -500,9 +467,9 @@ class Interpreter(object):
 #        self.agenda[item] = 0   # everything is high priority
         self.agenda[item] = time()  # FIFO
 
-    def repl(self, hist = dotdynadir / 'dyna.hist'):
+    def repl(self):
         import repl
-        repl.REPL(self, hist).cmdloop()
+        repl.REPL(self, dotdynadir / 'dyna.hist').cmdloop()
 
     def do(self, filename, initialize=True):
         """
@@ -636,36 +603,6 @@ def main():
 
     enable_crash_handler()
 
-    if args.profile:
-        # When profiling, its common practice to disable the garbage collector.
-        import gc
-        gc.disable()
-
-        # However, it's worth noting that the garbage collector is a real part
-        # of the runtime. Some implementation details will change how often it
-        # runs. For example, when we call emit with the variable binding
-        # dictionary this increases refcounts to a bunch of variables. For some
-        # reason the garbage collector overhead is lowered in this
-        # situation. Giving in a counterintuitive result.
-
-        from cProfile import Profile
-
-        plan = '%s.plan.py' % args.source
-        dynac(args.source, plan)
-
-        p = Profile()
-        p.runctx('interp.do(plan)', globals(), locals())
-        p.dump_stats('prof')
-
-        interp.dump_charts()
-
-        # call graph
-        os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
-        os.system('pkill snakeviz; snakeviz prof &')
-
-        return
-
-
     if args.source:
 
         if not os.path.exists(args.source):
@@ -678,14 +615,27 @@ def main():
             plan = "%s.plan.py" % args.source
             dynac(args.source, plan)
 
+        if args.profile:
+            # When profiling, its common practice to disable the garbage collector.
+            import gc
+            gc.disable()
+
+            from cProfile import Profile
+            p = Profile()
+            p.runctx('interp.do(plan)', globals(), locals())
+            p.dump_stats('prof')
+
+            interp.dump_charts()
+
+            os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
+            os.system('pkill snakeviz; snakeviz prof &')
+            return
+
         interp.do(plan)
 
         interp.dump_charts(args.output)
 
-        if args.interactive:
-            interp.repl(hist = args.source + '.hist')
-
-    else:
+    if args.interactive or not args.source:
         interp.repl()
 
     if args.post_process is not None:

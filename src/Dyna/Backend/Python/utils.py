@@ -19,11 +19,11 @@ class DynaCompilerError(Exception):
     pass
 
 
-class AggregatorConflict(Exception):
-    def __init__(self, key, expected, got):
-        msg = "Aggregator conflict %r was %r trying to set to %r." \
-            % (key, expected, got)
-        super(AggregatorConflict, self).__init__(msg)
+#class AggregatorConflict(Exception):
+#    def __init__(self, key, expected, got):
+#        msg = "Aggregator conflict %r was %r trying to set to %r." \
+#            % (key, expected, got)
+#        super(AggregatorConflict, self).__init__(msg)
 
 
 class DynaInitializerException(Exception):
