@@ -1,7 +1,8 @@
-import re
+import re, sys
 from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
-from config import dynahome
+from IPython.core.ultratb import VerboseTB
+from config import dynahome, dotdynadir
 
 
 # interactive IPython shell
@@ -43,6 +44,43 @@ def dynac(f, out):
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
         raise DynaCompilerError(stderr)
+
+
+def crash_handler():
+    exception_handler(*sys.exc_info())
+
+
+def exception_handler(etype, evalue, tb):
+
+    # once for the log file.
+    with file(dotdynadir / 'crash.log', 'wb') as crashreport:
+        h = VerboseTB(color_scheme='Linux', call_pdb=False,
+                      ostream=crashreport,
+                      long_header=True, include_vars=True,
+                      check_cache=None)
+        h(etype, evalue, tb)
+
+    # once for the user
+    h = VerboseTB(color_scheme='Linux', call_pdb=False, ostream=None,
+                  tb_offset=0, long_header=False, include_vars=True,
+                  check_cache=None)
+    h(etype, evalue, tb)
+
+    # TODO: we should package up all relevant state including compiler
+    # version, codegen output, interpreter state (possibly without the
+    # chart -- because it might be too big to email); input to repl.
+    # This should all go into a tarball.
+
+    print 'FATAL ERROR (%s): %s' % (etype.__name__, evalue)
+    print 'Please report this error by emailing bugs@dyna.org. ' \
+        'Please attach the following file %s' % crashreport.name
+
+
+def enable_crash_handler():
+    """
+    Use our custom exception handler for handling uncaught exceptions.
+    """
+    sys.excepthook = exception_handler
 
 
 def notimplemented(*_,**__):
@@ -214,6 +252,6 @@ if __name__ == '__main__':
         btree = t(x)
 
         assert check_binary(btree)
-        print 
+        print
         print 'sentence(%s) :=\n%s.' % (i, pretty(btree, 4).rstrip())
         print

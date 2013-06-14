@@ -1,10 +1,9 @@
-import os
-import cmd, readline
-import interpreter
-from utils import blue, yellow, green, magenta, ip, DynaCompilerError, DynaInitializerException
+import os, cmd, readline
+
+import debug, interpreter
+from utils import DynaCompilerError, DynaInitializerException, ip, crash_handler
 from chart import _repr
 from config import dotdynadir
-import debug
 
 
 class REPL(cmd.Cmd, object):
@@ -126,8 +125,11 @@ class REPL(cmd.Cmd, object):
         try:
             super(REPL, self).cmdloop()
         except KeyboardInterrupt:
+            # Catch Control-C and resume REPL.
             print '^C'
-            self.cmdloop()
-        except Exception as e:
+            self.cmdloop()   
+        except:
+            # report uncatch exception.
+            crash_handler()
+        finally:
             readline.write_history_file(self.hist)
-            raise e

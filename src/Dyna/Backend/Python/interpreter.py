@@ -203,7 +203,7 @@ import debug
 from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, \
-    notimplemented, parse_attrs, ddict, dynac, \
+    notimplemented, parse_attrs, ddict, dynac, enable_crash_handler, \
     DynaCompilerError, DynaInitializerException
 from prioritydict import prioritydict
 from config import dotdynadir, dynahome
@@ -640,6 +640,9 @@ def main():
             return
 
     interp = Interpreter()
+
+    enable_crash_handler()
+
 
     if args.profile:
         # When profiling, its common practice to disable the garbage collector.
