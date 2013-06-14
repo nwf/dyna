@@ -197,9 +197,8 @@ What is null?
 """
 
 from __future__ import division
-import os, sys, imp
+import os, sys, imp, argparse
 from collections import defaultdict
-from argparse import ArgumentParser
 
 from hashlib import sha1
 
@@ -260,7 +259,6 @@ class Interpreter(object):
     def __init__(self):
         # declarations
         self.agg_name = defaultdict(none)
-        self.edges = defaultdict(set)         # TODO: finding HG should be a post-processor
         self.updaters = defaultdict(list)
         # data structures
         self.agenda = prioritydict()
@@ -268,18 +266,18 @@ class Interpreter(object):
 
         self.chart = foo(self.agg_name)
         self.rules = ddict(Rule)
-        self.errors = {}
+        self.error = {}
 
     def __getstate__(self):
         return ((self.chart,
                  self.agenda,
-                 self.errors,
+                 self.error,
                  self.agg_name,
                  self.parser_state),
                 '\n'.join(self.rules[i].src for i in sorted(self.rules)))
 
     def __setstate__(self, state):
-        ((self.chart, self.agenda, self.errors, self.agg_name, self.parser_state), code) = state
+        ((self.chart, self.agenda, self.error, self.agg_name, self.parser_state), code) = state
         self.edges = defaultdict(set)
         self.updaters = defaultdict(list)
         self.rules = ddict(Rule)
@@ -306,20 +304,6 @@ class Interpreter(object):
 
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
-    def collect_edges(self):
-        """
-        Use rule initializers to find all active hyperedges in the current
-        Chart.
-        """
-        edges = self.edges
-        def _emit(item, _, ruleix, variables):
-            b = variables['nodes']
-            b.sort()
-            b = tuple(b)
-            edges[item].add((ruleix, b))
-        for r in self.rules.values():
-            r.init(emit=_emit)
-
     def dump_charts(self, out=sys.stdout):
         print >> out
         print >> out, 'Charts'
@@ -333,12 +317,12 @@ class Interpreter(object):
 
     def dump_errors(self, out=sys.stdout):
         # We only dump the error chart if it's non empty.
-        if not self.errors:
+        if not self.error:
             return
         print >> out
         print >> out, 'Errors'
         print >> out, '============'
-        for item, (val, es) in self.errors.items():
+        for item, (val, es) in self.error.items():
             print >> out,  'because %r is %s:' % (item, _repr(val))
             for e, h in es:
                 if h is not None:
@@ -437,21 +421,21 @@ class Interpreter(object):
         "the main loop"
         changed = {}
         agenda = self.agenda
-        errors = self.errors
+        error = self.error
         while agenda:
             item = agenda.pop_smallest()
             was = item.value
             try:
                 now = item.aggregator.fold()
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
-                errors[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
+                error[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
                 continue
             if was == now:
                 continue
             was_error = False
-            if item in errors:    # clear error
+            if item in error:    # clear error
                 was_error = True
-                del errors[item]
+                del error[item]
             # TODO: handle `was` and `now` at the same time to avoid the two passes.
             # TODO: will need to propagate was=None when we have question mark
             if was is not None and not was_error:
@@ -475,16 +459,16 @@ class Interpreter(object):
         t_emit = lambda item, val, ruleix, variables: \
             emittiers.append((item, val, ruleix, variables, delete))
 
-        errors = []
+        error = []
 
         for handler in self.updaters[item.fn]:
             try:
                 handler(item, val, emit=t_emit)
             except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
-                errors.append((e, handler))
+                error.append((e, handler))
 
-        if errors:
-            self.errors[item] = (val, errors)
+        if error:
+            self.error[item] = (val, error)
             return
 
         # no exception, accept emissions.
@@ -559,7 +543,7 @@ class Interpreter(object):
 
         else:
 
-            # TODO: how do I make this transactional? what it the user hits ^C
+            # TODO: how do I make this transactional? what if the user hits ^C
             # in the middle of the following blocK?
             #
             #   - maybe transaction isn't want I mean. Maybe all I want (for now
@@ -578,9 +562,6 @@ class Interpreter(object):
                 self.emit(*e, delete=False)
 
         return self.go()
-
-    def draw(self):
-        debug.draw(self)
 
     def dynac_code(self, code):
         """
@@ -627,17 +608,18 @@ def peel(fn, item):
 
 
 def main():
-
-    parser = ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source', help='Path to Dyna source file (or plan if --plan=true).', nargs='?')
-    parser.add_argument('--plan', action='store_true', default=False,
+    parser = argparse.ArgumentParser(description="The dyna interpreter!")
+    parser.add_argument('source',
+                        help='Path to Dyna source file (or plan if --plan=true).', nargs='?')
+    parser.add_argument('--plan', action='store_true',
                         help='`source` specifies output of the compiler instead of dyna source code.')
-    parser.add_argument('-i', dest='interactive', action='store_true', help='Fire-up an IPython shell.')
-    parser.add_argument('-o', dest='output', help='Output chart.')
-    parser.add_argument('--draw', action='store_true',
-                        help='Output html page with hypergraph and chart.')
-    parser.add_argument('--post-process', help='run post-processing script.')
-
+    parser.add_argument('-i', dest='interactive', action='store_true',
+                        help='Fire-up an IPython shell.')
+    parser.add_argument('-o', dest='output',
+                        type=argparse.FileType('wb'),
+                        help='Output chart.')
+    parser.add_argument('--post-process',
+                        help='run post-processing script.')
     parser.add_argument('--profile', action='store_true',
                         help='run profiler.')
 
@@ -653,7 +635,6 @@ def main():
     interp = Interpreter()
 
     enable_crash_handler()
-
 
     if args.profile:
         # When profiling, its common practice to disable the garbage collector.
@@ -699,23 +680,13 @@ def main():
 
         interp.do(plan)
 
-        if args.output:
-            if args.output == "-":
-                interp.dump_charts(sys.stdout)
-            else:
-                with file(args.output, 'wb') as f:
-                    interp.dump_charts(f)
-        else:
-            interp.dump_charts()
+        interp.dump_charts(args.output)
 
         if args.interactive:
             interp.repl(hist = args.source + '.hist')
 
     else:
         interp.repl()
-
-    if args.draw:
-        interp.draw()
 
     if args.post_process is not None:
         pp.main(interp)

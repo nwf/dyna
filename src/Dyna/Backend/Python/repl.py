@@ -118,8 +118,9 @@ class REPL(cmd.Cmd, object):
         print
         self.interp.dump_errors()
 
-    def do_draw(self, _):
-        self.interp.draw()
+    def do_draw_circuit(self, _):
+        import draw_circuit
+        draw_circuit.main(self.interp)
 
     def cmdloop(self, _=None):
         try:

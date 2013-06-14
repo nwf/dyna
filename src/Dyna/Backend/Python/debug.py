@@ -398,55 +398,6 @@ Initializer:
         webbrowser.open(html.name)
 
 
-def hypergraph(interpreter):
-    # collect edges
-    interpreter.collect_edges()
-    # create hypergraph object
-    g = Hypergraph()
-    for c in interpreter.chart.values():
-        for x in c.intern.values():
-            for e in interpreter.edges[x]:
-                label, body = e
-                g.edge(str(x), str(label), map(str, body))
-    return g
-
-
-def draw(interpreter):
-    g = hypergraph(interpreter)
-    with file('/tmp/state.html', 'wb') as f:
-        print >> f, """
-        <html>
-        <head>
-        <style>
-        body {
-          background-color: black;
-          color: white;
-        }
-        </style>
-        </head>
-        <body>
-        """
-
-        x = StringIO()
-        interpreter.dump_charts(x)
-
-        print >> f, '<div style="position:absolute;">%s</div>' \
-            % '<h1>Charts</h1>%s' \
-            % '<pre style="width: 500px;">%s</pre>' \
-            % x.getvalue()
-
-        print >> f, """
-        <div style="width: 800px; position:absolute; left: 550px">
-        <h1>Hypergraph</h1>
-        %s
-        </div>
-        """ % g.render('/tmp/hypergraph')
-
-        print >> f, '</body></html>'
-
-    webbrowser.open(f.name)
-
-
 if __name__ == '__main__':
 
     from argparse import ArgumentParser
