@@ -75,7 +75,7 @@ mkExample name =
 -- will be broken. ;)
 test_End_To_End :: [Test]
 test_End_To_End = map mkExample
-  [ "simple", "fib-limit", "dijkstra", "papa2", "matrixops" ]
+  [ "simple", "equalities", "fib-limit", "dijkstra", "papa2", "matrixops" ]
 
 test_REPL :: [Test]
 test_REPL = map (\n -> testProgramRuns n ("./test/repl/"++n) [])

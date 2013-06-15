@@ -62,6 +62,7 @@ defOperSpec = M.fromList
   , ("<=" ,[(4,PFIn AssocNone )            ])
   , ("<"  ,[(4,PFIn AssocNone )            ])
   , ("="  ,[(4,PFIn AssocNone )            ])
+  , ("==" ,[(4,PFIn AssocNone )            ])
   , (">=" ,[(4,PFIn AssocNone )            ])
   , (">"  ,[(4,PFIn AssocNone )            ])
   , ("!=" ,[(4,PFIn AssocNone )            ])
@@ -165,7 +166,8 @@ disposTab_dyna t = DisposTab s a
   -- There are, however, even in this case a few terms we would prefer to
   -- behave structurally by default.
   dt = M.fromList [
-         (("pair" ,2),(SDQuote,[ADEval,ADEval]))
+         (("="    ,2),(SDEval ,[ADQuote,ADQuote]))
+       , (("pair" ,2),(SDQuote,[ADEval ,ADEval ]))
        , (("true" ,0),(SDQuote,[]))
        , (("false",0),(SDQuote,[]))
        ]

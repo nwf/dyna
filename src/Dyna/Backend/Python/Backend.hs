@@ -147,8 +147,7 @@ constants = go
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
-  go ("=",2)     = Just $ PDBS $ infixOp "="
-  -- XXX "==" means something else in Dyna
+  go ("=",2)     = Just $ PDBS $ infixOp "=="
   go ("==",2)    = Just $ PDBS $ infixOp "=="
   go (">=",2)    = Just $ PDBS $ infixOp ">="
   go (">",2)     = Just $ PDBS $ infixOp ">"

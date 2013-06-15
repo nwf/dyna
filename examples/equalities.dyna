@@ -1,0 +1,17 @@
+% Given two items with different names and equal values...
+a += 0.
+b += 0.
+
+% ==
+by_evl_refl  := a == a.     % True
+by_evl_cross := a == b.     % True
+
+% =
+by_syn_refl  := a =  a.     % &a is the same as &a
+by_syn_cross := a =  b.     % ... but not the same as &b.
+
+% is
+by_is_0a     := 0 is a.     % That's right, a evaluates to 0.
+by_is_ab     := a is b.     % b does not evaluate to &a, so this is
+                            % a unification failure and the head
+                            % remains null (not false).
