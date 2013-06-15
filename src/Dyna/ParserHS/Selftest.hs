@@ -21,12 +21,13 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString                     as B
 import qualified Data.ByteString.UTF8                as BU
 -- import           Data.Foldable (toList)
--- import           Data.Monoid (mempty)
+import           Data.Monoid (mempty)
 -- import qualified Data.Sequence                       as S
 import           Data.String
 import           Dyna.Main.Defns
 import           Dyna.ParserHS.Parser
 import           Dyna.ParserHS.OneshotDriver
+import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm (Annotation(..), TBase(..))
 import           Dyna.XXX.TrifectaTest
@@ -164,7 +165,7 @@ case_colonFunctor = e @=? (term pvv)
 
 case_failIncompleteExpr :: Assertion
 case_failIncompleteExpr = checkParseFail (testTerm defDLC) "foo +"
-  "(interactive):1:5: error: expected: \"(\",\nend of input\nfoo +<EOF> \n    ^      "
+  (\s -> take 18 s @=? "(interactive):1:5:")
 
 ------------------------------------------------------------------------}}}
 -- Annotations                                                          {{{
@@ -193,7 +194,10 @@ test_aggregators = hUnitTestToTests $ TestList
           okAggrs
   , TestLabel "generic invalid" $ TestList $
       map (\x -> TestLabel (BU.toString x) $ TestCase
-                                           $ checkParseFail_ testGenericAggr x)
+                                           $ checkParseFail
+                                               testGenericAggr
+                                               x
+                                               (\_ -> return ()))
         [".", ". ", "+=3", "+3=", "+=a", "+a=" ]
   , TestLabel "custom accept" $
       let r = unsafeParse (testRule cdlc) r1
@@ -201,7 +205,9 @@ test_aggregators = hUnitTestToTests $ TestList
                     "+="
                     (TFunctor "b" [] :~ Span (Columns 5 5) (Columns 6 6) r1)
   , TestLabel "custom reject" $ TestCase
-                              $ checkParseFail_ (testRule cdlc) "a *= b."
+                              $ checkParseFail (testRule cdlc)
+                                               "a *= b."
+                                               (\_ -> return ())
   ]
  where
   r1 = "a += b."
@@ -214,10 +220,10 @@ test_aggregators = hUnitTestToTests $ TestList
 -- Rules                                                                {{{
 
 progrule :: ByteString -> Spanned Rule
-progrule = unsafeParse (spanned (testRule defDLC <* eof))
+progrule = unsafeParse (whiteSpace *> spanned (testRule defDLC <* eof))
 
 progrules :: ByteString -> [Spanned Rule]
-progrules = unsafeParse (many (spanned (testRule defDLC)) <* eof)
+progrules = unsafeParse (whiteSpace *> many (spanned (testRule defDLC)) <* eof)
 
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
 oneshotRules = xlate . unsafeParse (oneshotDynaParser Nothing)
@@ -362,12 +368,12 @@ case_rules = e @=? (progrules sr)
         (_tNumeric (Left 2) :~ Span (Columns 22 22) (Columns 24 24) sr)
        :~ s2
       ]
-  s1 = Span (Columns 0 0) (Columns 11 11) sr
-  s2 = Span (Columns 11 11) (Columns 25 25) sr
+  s1 = Span (Columns 0 0) (Columns 12 12) sr
+  s2 = Span (Columns 12 12) (Columns 25 25) sr
   sr = "goal += 1 . laog min= 2 ."
 
-case_rules_ruleix_pragmas :: Assertion
-case_rules_ruleix_pragmas = e @=? (oneshotRules sr)
+case_rules_with_ruleix_pragmas :: Assertion
+case_rules_with_ruleix_pragmas = e @=? (oneshotRules sr)
  where
   e = [ ( 5
         , Rule
@@ -385,11 +391,13 @@ case_rules_ruleix_pragmas = e @=? (oneshotRules sr)
         )
       ]
 
-  s1 = Span (Columns 13 13) (Columns 23 23) sr
+  s1 = Span (Columns 13 13) (Columns 24 24) sr
   s2 = Span (Columns 24 24) (Columns 36 36) sr
   sr = ":- ruleix 5. goal += 1. laog min= 2."
- 
- 
+
+case_just_ruleix_pragma :: Assertion
+case_just_ruleix_pragma = [] @=? (oneshotRules ":-ruleix 5.")
+
 case_rulesWhitespace :: Assertion
 case_rulesWhitespace = e @=? (progrules sr)
  where
@@ -408,8 +416,8 @@ case_rulesWhitespace = e @=? (progrules sr)
   l1 = " += 1 .\n"
   l2 = "%test \n"
   l3 = " goal += 2 ."
-  s1 = Span (Columns 0 0) (Lines 1 7 22 7) l0
-  s2 = Span (Lines 1 7 22 7) (Lines 3 12 42 12) l1
+  s1 = Span (Columns 2 2) (Lines 3 1 31 1) l0
+  s2 = Span (Lines 3 1 31 1) (Lines 3 12 42 12) l3
   sr = B.concat [l0,l1,l2,l3]
 
 case_rulesDotExpr :: Assertion
@@ -430,9 +438,17 @@ case_rulesDotExpr = e @=? (progrules sr)
          (_tNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
         :~ s2
        ]
-  s1 = Span (Columns 0 0) (Columns 16 16) sr
-  s2 = Span (Columns 16 16) (Columns 28 28) sr
+  s1 = Span (Columns 0 0) (Columns 17 17) sr
+  s2 = Span (Columns 17 17) (Columns 28 28) sr
   sr = "goal += foo.bar. goal += 1 ."
+
+case_rule_with_unknown_operator :: Assertion
+case_rule_with_unknown_operator =
+  checkParseFail (testRule dlc)
+                 "goal += 1 ### 2."
+                 (\s -> take 19 s @=? "(interactive):1:11:")
+ where
+  dlc = DLC (mkEOT mempty False) genericAggregators
 
 ------------------------------------------------------------------------}}}
 -- Pragmas                                                              {{{

@@ -23,11 +23,13 @@ import           Control.Monad.State
 import qualified Data.ByteString                  as B
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.Map                         as M
+import           Data.Maybe
 import qualified Data.Set                         as S
 import           Data.Monoid (mempty)
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
 import           Dyna.ParserHS.Parser
+import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
 import           Dyna.XXX.Trifecta (prettySpanLoc)
@@ -188,28 +190,33 @@ pragmasFromPCS (PCS dt_mk dt_over _
 
 nextRule :: (DeltaParsing m, LookAheadParsing m, MonadState PCS m)
          => Maybe (S.Set String)
-         -> m (Spanned Rule)
+         -> m (Maybe (Spanned Rule))
 nextRule aggs = go
  where
   go = do
     (l :~ s) <- gets (mkdlc aggs) >>= parse
     case l of
-      LPragma  p -> pcsProcPragma (p :~ s) >> go
-      LRule r -> return r
+      PLPragma  p -> pcsProcPragma (p :~ s) >> return Nothing
+      PLRule r -> return (Just r)
 
 oneshotDynaParser :: (DeltaParsing m, LookAheadParsing m)
                   => Maybe (S.Set String)
                   -> m ParsedDynaProgram
 oneshotDynaParser aggs = (postProcess =<<)
    $ flip runStateT defPCS
-   $ many (try $ do
-             r <- nextRule aggs
-             rix <- pcs_ruleix <<%= (+1)
-             dt  <- use pcs_dt_cache
-             return $ (rix, dt, r))
-     <* optional (dynaWhiteSpace (someSpace))
+   $  optional (dynaWhiteSpace (someSpace))
+   *> many (try $ do
+             mr <- nextRule aggs
+             case mr of
+               Nothing -> return Nothing
+               (Just r) -> do
+                 rix <- pcs_ruleix <<%= (+1)
+                 dt  <- use pcs_dt_cache
+                 return $ Just (rix, dt, r))
  where
-  postProcess (rs,pcs) = return $ PDP rs (pcs ^. pcs_iagg_map) (pragmasFromPCS pcs)
-
+  postProcess (rs,pcs) = return $
+    PDP (catMaybes rs)
+        (pcs ^. pcs_iagg_map)
+        (pragmasFromPCS pcs)
 
 ------------------------------------------------------------------------}}}

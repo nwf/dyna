@@ -80,7 +80,7 @@ import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
-import qualified Dyna.ParserHS.Parser       as P
+import qualified Dyna.ParserHS.Types        as P
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
 import           Dyna.Term.SurfaceSyntax

@@ -25,9 +25,8 @@
 --      this depends on an upstream fix in Text.Parser.Expression.
 --      But: I am not worried about it since we don't handle gensyms
 --      anywhere else in the pipeline yet)
---
---   Header material                                                      {{{
-{-# LANGUAGE DeriveDataTypeable #-}
+
+-- Header material                                                      {{{
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -40,14 +39,9 @@
 module Dyna.ParserHS.Parser (
     -- * Parser configuration inputs
     EOT, mkEOT, DLCfg(..),
-    -- * Parser output types
-    NameWithArgs(..),
-    -- ** Surface langauge
-    Term(..), Rule(..), dynaWhiteSpace, genericAggregators,
+    dynaWhiteSpace, genericAggregators,
     -- ** Pragmas
-    ParsedInst(..), ParsedModeInst, Pragma(..), renderPragma,
-    -- ** Line
-    Line(..),
+    renderPragma,
     -- * Action
     parse,
     -- * Test harness hooks
@@ -63,7 +57,6 @@ import           Control.Monad.Reader
 import qualified Data.ByteString.UTF8             as BU
 import qualified Data.ByteString                  as B
 import qualified Data.CharSet                     as CS
-import qualified Data.Data                        as D
 import qualified Data.HashSet                     as H
 import qualified Data.Map                         as M
 import           Data.Semigroup ((<>))
@@ -71,7 +64,7 @@ import           Data.Monoid (mempty)
 import           Dyna.Analysis.Mode.Inst
 import qualified Dyna.Analysis.Mode.InstPretty    as IP
 import           Dyna.Analysis.Mode.Uniq
-import           Dyna.Main.Defns
+import           Dyna.ParserHS.Types
 import           Dyna.Term.TTerm (Annotation(..), TBase(..),
                                   DFunct)
 import           Dyna.Term.SurfaceSyntax
@@ -84,84 +77,6 @@ import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
 import qualified Text.PrettyPrint.Free            as PP
 import           Text.Trifecta
-
-------------------------------------------------------------------------}}}
--- Parsed output definitions                                            {{{
-
-data Term = TFunctor B.ByteString
-                     [Spanned Term]
-          | TAnnot   (Annotation (Spanned Term))
-                     (Spanned Term)
-          | TVar     B.ByteString
-          | TBase    TBase
- deriving (D.Data,D.Typeable,Eq,Ord,Show)
-
--- | Rules are not just terms because we want to make it very syntactically
---   explicit about the head being a term (though that's not an expressivity
---   concern -- just use the parenthesized texpr case) so that there is no
---   risk of parsing ambiguity.
-data Rule = Rule (Spanned Term) B.ByteString (Spanned Term)
- deriving (Eq,Show)
-
-data NameWithArgs = PNWA B.ByteString [B.ByteString]
- deriving (Eq,Show)
-
--- | Pragmas that are recognized by the parser
-data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
-                -- ^ Assert the evaluation disposition of a functor
- 
-            | PDisposDefl String
-                -- ^ Specify the default disposition handlers
-                --   for subsequent context.
-                --   
-                --   Note that the override defintions are
-                --   preserved across this operation!
-                --   (XXX is that what we want?)
- 
-            | PIAggr B.ByteString Int B.ByteString
-                -- ^ Assert the aggregator for a functor/arity.
-
-            | PInst NameWithArgs
-                    ParsedInst
-                -- ^ Declare an instantiation state: name and body
-
-            | PMode NameWithArgs
-                    ParsedModeInst
-                    ParsedModeInst
-                -- ^ Declare a mode: name, input, and output
-
-            | POperAdd Fixity Integer B.ByteString
-                -- ^ Add an operator
-
-            | POperDel B.ByteString
-                -- ^ Remove an operator
- 
-            -- | PQMode DFunctAr 
-                -- ^ A query mode declaration
-
-            | PRuleIx RuleIx
-                -- ^ Set the rule index.
-                --
-                -- XXX This is a bit of a hack to allow external drivers to
-                -- feed rules incrementally; those drivers should treat the
-                -- rule index as an opaque token rather than something to be
-                -- interpreted.  Eventually this will go away, when our
-                -- REPLs have captive compilers.
- 
-            {- --- | PMisc Term
-                -- ^ Fall-back parser for :- lines. -}
- deriving (Eq,Show)
-
--- | The type of a parsed inst declaration
-data ParsedInst = PIVar   !B.ByteString
-                | PIInst  !(InstF DFunct ParsedInst)
- deriving (Eq,Show)
-
-type ParsedModeInst = Either NameWithArgs ParsedInst
-
-data Line = LRule (Spanned Rule)
-          | LPragma Pragma
- deriving (Show)
 
 ------------------------------------------------------------------------}}}
 -- Parser input definitions                                             {{{
@@ -381,10 +296,10 @@ var = bsf $ ident dynaVarStyle
 ------------------------------------------------------------------------}}}
 -- Atoms                                                                {{{
 
-parseAtom :: (Monad m, TokenParsing m) => m B.ByteString
+parseAtom :: (Monad m, TokenParsing m) => m DFunct
 parseAtom = (liftA BU.fromString stringLiteralSQ <|> name) <?> "Atom"
 
-parseFunctor :: (Monad m, TokenParsing m) => m B.ByteString
+parseFunctor :: (Monad m, TokenParsing m) => m DFunct
 parseFunctor = highlight Identifier parseAtom <?> "Functor"
 
 ------------------------------------------------------------------------}}}
@@ -400,7 +315,7 @@ term = token $ choice
         [       parens tfexpr
         ,       spanned $ TVar <$> var
 
-        ,       spanned $ mkta <$> (colon *> term) <* whiteSpace <*> term
+        ,       spanned $ mkta <$> (colon *> term) <*> term
 
         , try $ spanned $ TBase . TString  <$> bsf stringLiteral
 
@@ -506,15 +421,13 @@ genericAggregators = token
 
 rule :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
      => m Rule
-rule = do
-  _ <- whiteSpace
+rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
             _    <- try (char '.' <* lookAhead whiteSpace)
             return (Rule h "|=" (TFunctor "true" [] :~ hs))
          , do
-            aggr <- join $ asks dlc_aggrs
-            _    <- whiteSpace
+            aggr <- token $ join $ asks dlc_aggrs
             body <- tfexpr
             _    <- char '.'
             return (Rule h aggr body)
@@ -582,7 +495,7 @@ parseUniq = choice [ symbol "clobbered" *> pure UClobbered
 
 pragmaBody :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
            => m Pragma
-pragmaBody = choice
+pragmaBody = token $ choice
   [ 
     symbol "dispos_def" *> parseDisposDefl -- set default dispositions
   , symbol "dispos" *> parseDisposition -- in-place dispositions
@@ -739,24 +652,22 @@ renderPragma = PP.enclose ":-" PP.dot . renderPragma_
 
 pragma :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
        => m Pragma
-pragma =    symbol ":-"
-         *> whiteSpace
-         *> (pragmaBody
-            -- <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma")
-            )
-         <* whiteSpace
-         <* {- optional -} (char '.')
+pragma = token $
+     symbol ":-"
+  *> (pragmaBody
+      -- <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma")
+     )
+  <* {- optional -} (char '.')
 
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
 
 dline :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
-      => m (Spanned Line)
-dline = whiteSpace
-        *> spanned (choice [ LPragma <$> pragma
-                           , LRule <$> spanned rule
-                           ])
+      => m (Spanned PLine)
+dline = spanned (choice [ PLPragma <$> pragma
+                        , PLRule <$> spanned rule
+                        ])
 
 configureParser :: (DeltaParsing m, LookAheadParsing m)
                 => DynaLanguage m a
@@ -765,7 +676,7 @@ configureParser :: (DeltaParsing m, LookAheadParsing m)
 configureParser p c = runReaderT (unDL p) c
 
 -- | The grand Dyna parser.
-parse :: (DeltaParsing m, LookAheadParsing m) => DLCfg -> m (Spanned Line)
+parse :: (DeltaParsing m, LookAheadParsing m) => DLCfg -> m (Spanned PLine)
 parse = configureParser dline
 
 ------------------------------------------------------------------------}}}

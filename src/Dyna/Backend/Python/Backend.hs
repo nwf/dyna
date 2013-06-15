@@ -34,6 +34,7 @@ import           Dyna.Analysis.Mode
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
+import qualified Dyna.ParserHS.Types        as P
 import qualified Dyna.ParserHS.Parser       as P
 import           Dyna.Term.TTerm
 import           Dyna.XXX.PPrint
