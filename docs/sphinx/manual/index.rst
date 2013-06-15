@@ -7,3 +7,4 @@ User Manual
 .. toctree::
 
    pragmas
+   builtins
