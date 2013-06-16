@@ -27,6 +27,8 @@ import           Test.SmallCheck.Series    as SCS
 ------------------------------------------------------------------------}}}
 -- Misc                                                                 {{{
 
+type NIXBTF = NIX Bool TestFunct
+
 -- XXX Is this in the library anywhere?
 fe :: (Bounded a, Enum a) => [a]
 fe = enumFrom minBound
@@ -113,7 +115,7 @@ arbNIX rootU = do
     root <- arbInstPly rootU igen               -- The root
     return $ NIX root m
  where
-  arbInstPly :: forall i . Uniq -> (Uniq -> Gen i) -> Gen (InstF TestFunct i)
+  arbInstPly :: forall i . Uniq -> (Uniq -> Gen i) -> Gen (InstF Bool TestFunct i)
   arbInstPly u n = frequency
     [ (1,IFree  <$> arbitrary)
     , (1,IAny   <$> arbUniq u)
@@ -127,7 +129,7 @@ arbNIX rootU = do
     ]
   
   arbNIXME :: forall f i . (f ~ TestFunct)
-           => Uniq -> (Uniq -> Gen i) -> Gen (Either (NIX f) (InstF f i))
+           => Uniq -> (Uniq -> Gen i) -> Gen (Either (NIX Bool f) (InstF Bool f i))
   arbNIXME u igen = oneof [Left  <$> sized (\s -> resize (s`div`2) (arbNIX u))
                           ,Right <$> arbInstPly u igen]
 
@@ -142,7 +144,7 @@ arbNIXNWF = do
     root <- arbInstPlyNWF igen                 -- The root
     return $ NIX root m
  where
-  arbInstPlyNWF :: forall i . Gen i -> Gen (InstF TestFunct i)
+  arbInstPlyNWF :: forall i . Gen i -> Gen (InstF Bool TestFunct i)
   arbInstPlyNWF n = frequency
     [ (1,IFree  <$> arbitrary)
     , (1,IAny   <$> arbitrary)
@@ -154,12 +156,12 @@ arbNIXNWF = do
     ]
   
   arbNIXMENWF :: forall f i . (f ~ TestFunct)
-              => Gen i -> Gen (Either (NIX f) (InstF f i))
+              => Gen i -> Gen (Either (NIX Bool f) (InstF Bool f i))
   arbNIXMENWF igen = oneof [Left  <$> sized (\s -> resize (s`div`2) arbitrary)
                         ,Right <$> arbInstPlyNWF igen]
 
 
-instance Arbitrary (NIX TestFunct) where
+instance Arbitrary (NIXBTF) where
   arbitrary = nPrune <$> arbNIX UUnique
 
   shrink n@(NIX r m) = (MA.maybeToList noRecN) ++ subautomata

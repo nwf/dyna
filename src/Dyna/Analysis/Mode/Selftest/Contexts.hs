@@ -33,8 +33,8 @@ import           Test.Framework.TH
 unifProp :: forall t a f .
             (Eq a, Ord f)
          => (t -> Bool)
-         -> (t -> t -> Either a (NIX f))
-         -> (t -> t -> Either a (NIX f))
+         -> (t -> t -> Either a (NIX Bool f))
+         -> (t -> t -> Either a (NIX Bool f))
          -> t
          -> t
          -> Property
@@ -48,8 +48,8 @@ unifProp filt test gold i1 i2 =
 unifProp2 :: forall t a f .
             (Eq a, Ord f)
          => (t -> Bool)
-         -> (t -> t -> Either a (NIX f))
-         -> (t -> t -> Either a (NIX f))
+         -> (t -> t -> Either a (NIX Bool f))
+         -> (t -> t -> Either a (NIX Bool f))
          -> t
          -> t
          -> Property
@@ -68,7 +68,7 @@ unifProp2 filt test gold i1 i2 =
 ------------------------------------------------------------------------}}}
 -- Tests                                                                {{{
 
-prop_no_unifyUnaliasedNV :: NIX TestFunct -> NIX TestFunct -> QCP.Property
+prop_no_unifyUnaliasedNV :: NIXBTF -> NIXBTF -> QCP.Property
 prop_no_unifyUnaliasedNV = unifProp2 wf no_unifyUnaliasedNV lattice
  where
   wf n = nWFN' n && n `nSub` (nHide $ IUniv UClobbered)
@@ -84,7 +84,7 @@ prop_no_unifyUnaliasedNV = unifProp2 wf no_unifyUnaliasedNV lattice
                 FNA.expandV v
    where v = "A"
 
-prop_alias_unifyUnaliasedNV :: NIX TestFunct -> NIX TestFunct -> QCP.Property
+prop_alias_unifyUnaliasedNV :: NIXBTF -> NIXBTF -> QCP.Property
 prop_alias_unifyUnaliasedNV = unifProp nWFN' alias_unifyUnaliasedNV nLeqGLBRL
  where
   alias_unifyUnaliasedNV n1 n2 =
@@ -96,7 +96,7 @@ prop_alias_unifyUnaliasedNV = unifProp nWFN' alias_unifyUnaliasedNV nLeqGLBRL
                 FA.expandV v
    where v = "A"
 
-prop_alias_unify :: NIX TestFunct -> NIX TestFunct -> QCP.Property
+prop_alias_unify :: NIXBTF -> NIXBTF -> QCP.Property
 prop_alias_unify = unifProp nWFN' alias_unify nLeqGLBRL
  where
   alias_unify n1 n2 =
@@ -114,7 +114,7 @@ prop_alias_unify = unifProp nWFN' alias_unify nLeqGLBRL
 -- 
 -- We cannot (easily) test real unifications as unifyVF makes a combination
 -- of dead and live unifications that do not map onto the lattice functions.
-prop_alias_unifyVF :: NIX TestFunct -> NIX TestFunct -> QCP.Property
+prop_alias_unifyVF :: NIXBTF -> NIXBTF -> QCP.Property
 prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
  where
   gold n1 n2 = nLeqGLBRD n1 (nHide $ IBound UUnique

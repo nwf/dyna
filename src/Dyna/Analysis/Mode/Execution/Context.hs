@@ -107,10 +107,13 @@ data KR f n k =
 instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
       => PP.Pretty (KR f n k) where
   pretty (KRName n)   = PP.pretty n
-  pretty (KRStruct e) = IP.compactly PP.pretty (either PP.pretty PP.pretty) e
+  pretty (KRStruct e) = IP.compactly IP.compactFreeFlag
+                                     PP.pretty
+                                     (either PP.pretty PP.pretty)
+                                     e
   pretty (KRKey k)    = PP.pretty k
 
-type KRI f n k = InstF f (Either n k)
+type KRI f n k = InstF Bool f (Either n k)
 
 -- | When the user looks up a key, they expect to get either a name or a ply
 -- of an inst which appropriately recurses ('KRI').  Using this rather than
@@ -126,7 +129,7 @@ data VR f n k =
   -- | Defined named inst (unaliased)
     VRName   n
   -- | Unaliased structure
-  | VRStruct (InstF f (VR f n k))
+  | VRStruct (InstF Bool f (VR f n k))
   -- | Aliased structure
   | VRKey    k
  deriving (Eq,Ord,Show)
@@ -134,7 +137,10 @@ data VR f n k =
 instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
       => PP.Pretty (VR f n k) where
   pretty (VRName n)   = PP.pretty n
-  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+  pretty (VRStruct y) = IP.compactly IP.compactFreeFlag
+                                     PP.pretty
+                                     PP.pretty
+                                     y
   pretty (VRKey k)    = PP.pretty k
 
 -- | Widen from a more restrictive to less restrictive recursion type.
@@ -142,7 +148,7 @@ e2x :: Either n k -> VR f n k
 e2x = either VRName VRKey
 
 -- | A shorthand which is useful in recursive traversals of 'KR's.
-q2y :: InstF f (Either n k) -> InstF f (VR f n k)
+q2y :: InstF Bool f (Either n k) -> InstF Bool f (VR f n k)
 q2y = fmap e2x
 
 ------------------------------------------------------------------------}}}
@@ -152,9 +158,9 @@ q2y = fmap e2x
 
 -- | Simplistic InstMap Context
 data SIMCtx f = SIMCtx { _simctx_next_ki_id :: Int
-                       , _simctx_map_k      :: IM.IntMap  (KR f (NIX f) KI)
+                       , _simctx_map_k      :: IM.IntMap  (KR f (NIX Bool f) KI)
                        -- , _simctx_map_k_refs :: IM.IntMap  [DVar]
-                       , _simctx_map_v      :: M.Map DVar (VR f (NIX f) KI)
+                       , _simctx_map_v      :: M.Map DVar (VR f (NIX Bool f) KI)
                        }
  deriving (Show)
 $(makeLenses ''SIMCtx)
@@ -203,7 +209,7 @@ allFreeSIMCtx :: [DVar] -> SIMCtx f
 allFreeSIMCtx fs = SIMCtx 0 IM.empty
                  $ M.fromList $ map (\x -> (x, VRStruct $ IFree False)) fs
 
-ctxFromBindings :: [(DVar, NIX f)] -> SIMCtx f
+ctxFromBindings :: [(DVar, NIX Bool f)] -> SIMCtx f
 ctxFromBindings = SIMCtx 0 IM.empty . M.fromList . map (second VRName)
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
@@ -227,7 +233,7 @@ key_canon k = do
 
 key_lookup :: (MonadState (SIMCtx f) m, Show f)
            => KI
-           -> m (ENKRI f (NIX f) KI)
+           -> m (ENKRI f (NIX Bool f) KI)
 key_lookup k = do
   ck <- key_canon k
   m <- use simctx_map_k
@@ -243,7 +249,7 @@ key_lookup k = do
   krenkri (KRName n) = Left n
   krenkri (KRStruct i) = Right i
 
-type instance MCVT (SIMCT m f) KI = ENKRI f (NIX f) KI
+type instance MCVT (SIMCT m f) KI = ENKRI f (NIX Bool f) KI
 
 instance (Show f, Monad m) => MCR (SIMCT m f) KI where
   clookup = SIMCT . key_lookup
@@ -332,7 +338,7 @@ aliasY :: forall f n k m .
           (Monad m,
            MCVT m k ~ ENKRI f n k,
            MCN m k{-, MCNC k m -})
-       => InstF f (VR f n k) -> m k
+       => InstF Bool f (VR f n k) -> m k
 aliasY u = T.sequence (fmap (liftM Right . aliasX) u)
             >>= cnew . const . return . Right
 aliasV :: forall f n k m .
@@ -346,7 +352,7 @@ aliasV v = do
   cassign v $ VRKey k
   return k
 
-kUpUniq :: (Ord f, n ~ NIX f, Monad m, MCVT m k ~ ENKRI f n k, MCM m k)
+kUpUniq :: (Ord f, n ~ NIX Bool f, Monad m, MCVT m k ~ ENKRI f n k, MCM m k)
         => Uniq -> k -> m k
 kUpUniq u0 k0 = cmerge go k0 u0 >> return k0
  where
@@ -390,7 +396,7 @@ unalias s k0 = do
 
 user_lookup :: (MonadState (SIMCtx f) m, Show f)
             => DVar
-            -> m (VR f (NIX f) KI)
+            -> m (VR f (NIX Bool f) KI)
 user_lookup v = do
     m <- use simctx_map_v
     let r = maybe (dynacPanicStr $ "User variable context miss: " ++ (show v))
@@ -399,7 +405,7 @@ user_lookup v = do
     -- XT.traceShow ("VL",v,r) $ return ()
     return r
 
-type instance MCVT (SIMCT m f) DVar = VR f (NIX f) KI
+type instance MCVT (SIMCT m f) DVar = VR f (NIX Bool f) KI
 
 instance (Show f, Monad m) => MCR (SIMCT m f) DVar where
   clookup = SIMCT . user_lookup
@@ -496,15 +502,15 @@ instance (MCW (SIMCT m f) k) => MCW (CMTR.ReaderT r (SIMCT m f)) k where
 --
 --   * @N@ -- 'NIX' f
 --
---   * @I@ -- @'InstF' f ('NI' f)@
+--   * @I@ -- @'InstF' Bool f ('NI' f)@
 --
 --   * @K@ -- 'KI'
 --
 --   * @R@ -- 'KR'
 --
---   * @Q@ -- 'KRI' (i.e. @'InstF' f ('Either' ('NI' f) 'KI')@)
+--   * @Q@ -- 'KRI' (i.e. @'InstF' Bool f ('Either' ('NI' f) 'KI')@)
 --
---   * @E@ -- 'ENKRI' (i.e. @'Either' n ('InstF' f ('Either' ('NI' f) 'KI'))@
+--   * @E@ -- 'ENKRI' (i.e. @'Either' n ('InstF' Bool f ('Either' ('NI' f) 'KI'))@
 --
 --   * @J@ -- @'Either' ('NI' f) 'KI'@
 --
@@ -512,7 +518,7 @@ instance (MCW (SIMCT m f) k) => MCW (CMTR.ReaderT r (SIMCT m f)) k where
 --
 --   * @X@ -- 'VR' f 'NI' 'KI'
 --
---   * @Y@ -- @InstF f (VR f 'NI' 'KI')@
+--   * @Y@ -- @InstF Bool f (VR f 'NI' 'KI')@
 
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}

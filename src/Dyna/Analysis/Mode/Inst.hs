@@ -72,7 +72,7 @@ import           Dyna.Analysis.Mode.Uniq
 --
 -- The 'Ord' instance is solely for internal use; for reasoning, use lattice
 -- functions.
-data InstF f i =
+data InstF fr f i =
   -- | An unbound inst.
   --
   -- If you like a machine-core representation-centric view of
@@ -86,7 +86,7 @@ data InstF f i =
   -- pointer to some other location); if false, it indicates that this
   -- variable is unaliased (and that no dereference is necessary before
   -- storing back; /i.e./ it is an uninitialized piece of memory).
-    IFree { _inst_free_alias :: !Bool }
+    IFree { _inst_free_alias :: fr }
 
   -- | A possibly-bound inst.  We have lost track of whether or
   -- not the given variable is free.  Note that this has runtime
@@ -159,7 +159,7 @@ $(makeLensesFor [("_inst_uniq","inst_uniq")
 -- | Traverse all of the recursion points @a@, rather than the @M.Map f [a]@
 -- structure itself.  This provides a more robust interface to term
 -- recursion, but of course loses information about disjunctions.
-inst_recps :: (Applicative a) => (i -> a i') -> InstF f i -> a (InstF f i')
+inst_recps :: (Applicative a) => (i -> a i') -> InstF fr f i -> a (InstF fr f i')
 inst_recps = inst_rec . each . each
 
 ------------------------------------------------------------------------}}}
@@ -169,13 +169,7 @@ inst_recps = inst_rec . each . each
 --
 -- Based on definition 3.2.13, p51 but see prose, p51, \"Note that there is
 -- no uniqueness annotation on the free inst\".
-iUniq :: InstF f i -> Maybe Uniq
-{-
-iUniq IFree          = Nothing
-iUniq (IAny u)       = Just u
-iUniq (IBound u _ _) = Just u
-iUniq (IUniv u)      = Just u
--}
+iUniq :: InstF fr f i -> Maybe Uniq
 iUniq = (^? inst_uniq)
 {-# INLINABLE iUniq #-}
 
@@ -183,7 +177,7 @@ iUniq = (^? inst_uniq)
 -- 3.2.11, p50.
 iWellFormed_ :: (Monad m)
              => (Uniq -> i -> m Bool)
-             ->  Uniq -> InstF f i
+             ->  Uniq -> InstF fr f i
              -> m Bool
 iWellFormed_ _ _ (IFree _)       = return True
 iWellFormed_ _ u (IAny u')       = return $ u <= u'
@@ -194,18 +188,18 @@ iWellFormed_ _ u (IUniv u')      = return $ u <= u'
 {-# INLINABLE iWellFormed_ #-}
 
 -- | Compare with 'IFree' without imposing @Eq i@.
-iIsFree :: InstF f i -> Bool
+iIsFree :: InstF fr f i -> Bool
 iIsFree (IFree _) = True
 iIsFree _         = False
 
 -- | The bottom of the 'iLeq' lattice and 'iSub' semi-lattice, representing
 -- the empty set of (non-ground) terms.
-iNotReached :: Uniq -> InstF f i
+iNotReached :: Uniq -> InstF fr f i
 iNotReached u = IBound u M.empty False
 {-# INLINABLE iNotReached #-}
 
 -- | Indicator function for 'iNotReached'
-iIsNotReached :: InstF f i -> Bool
+iIsNotReached :: InstF fr f i -> Bool
 iIsNotReached (IBound _ m False) = M.null m
 iIsNotReached _                  = False
 {-# INLINABLE iIsNotReached #-}
@@ -213,7 +207,7 @@ iIsNotReached _                  = False
 -- | Is an instantiation ground?
 --
 -- Surrogate for definition 3.2.17, p52
-iGround_ :: (Monad m) => (i -> m Bool) -> InstF f i -> m Bool
+iGround_ :: (Monad m) => (i -> m Bool) -> InstF fr f i -> m Bool
 iGround_ q (IBound UUnique b _) = mfmamm q b
 iGround_ _ (IUniv _) = return True
 iGround_ _ _ = return False
@@ -223,9 +217,9 @@ iGround_ _ _ = return False
 -- Instantiation States: Equality                                       {{{
 
 -- | Equality of two insts
-iEq_ :: (Ord f, Monad m)
+iEq_ :: (Eq fr, Ord f, Monad m)
      => (i -> i' -> m Bool)
-     -> InstF f i -> InstF f i' -> m Bool
+     -> InstF fr f i -> InstF fr f i' -> m Bool
 iEq_ _ (IFree a) (IFree b) = return $ a == b
 iEq_ _ _         (IFree _) = return $ False
 iEq_ _ (IFree _) _         = return $ False
@@ -272,11 +266,11 @@ iEq_ _ (IBound _ _ _) (IBound _ _ _)
 -- 3.1.10, p34).  XXX I do not understand.
 --
 -- Definition 3.2.14, p51 (see also definitions 3.1.4 (p32) and 3.2.5 (p46))
-iLeq_ :: (Ord f, Monad m)
-      => (i -> InstF f i' -> m Bool)
+iLeq_ :: (Ord fr, Ord f, Monad m)
+      => (i -> InstF fr f i' -> m Bool)
       -> (i -> i' -> m Bool)
-      -> InstF f i -> InstF f i' -> m Bool
-iLeq_ _ _ (IFree False)  (IFree True)       = return $ False
+      -> InstF fr f i -> InstF fr f i' -> m Bool
+iLeq_ _ _ (IFree a)      (IFree b)          = return $ a >= b
 iLeq_ _ _  _             (IFree _)          = return $ True
 iLeq_ _ _ (IFree _)      _                  = return $ False
 iLeq_ _ _ (IAny u)       (IAny u')          = return $ u' <= u
@@ -301,15 +295,15 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
 -- Note that not all parameters are free -- @r@ is typically @m' (InstF f
 -- i'')@ for some 'Monad' @m'@ built up in terms of @m@, but the lack of
 -- type lambdas forces us to resort to passing the whole type in.
-type TyILeqGLB_ f m i i' i'' r = 
-            (Uniq -> i  -> m i'')               -- ^ Import left
-         -> (Uniq -> i' -> m i'')               -- ^ Import right
-         -> (Uniq -> InstF f i' -> i  -> m i'') -- ^ Lopsided merge left
-         -> (Uniq -> InstF f i  -> i' -> m i'') -- ^ Lopsided merge right
-         -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
-         -> Uniq                                -- ^ Uniq of outer context
-         -> InstF f i                           -- ^ Left
-         -> InstF f i'                          -- ^ Right
+type TyILeqGLB_ f fr m i i' i'' r = 
+            (Uniq -> i  -> m i'')                  -- ^ Import left
+         -> (Uniq -> i' -> m i'')                  -- ^ Import right
+         -> (Uniq -> InstF fr f i' -> i  -> m i'') -- ^ Lopsided merge left
+         -> (Uniq -> InstF fr f i  -> i' -> m i'') -- ^ Lopsided merge right
+         -> (Uniq -> i -> i' -> m i'')             -- ^ Simultaneous Merge
+         -> Uniq                                   -- ^ Uniq of outer context
+         -> InstF fr f i                           -- ^ Left
+         -> InstF fr f i'                          -- ^ Right
          -> r
 
 
@@ -337,8 +331,9 @@ type TyILeqGLB_ f m i i' i'' r =
 -- tests that are restrictive but safe (such as shallow testing for free
 -- variables).
 
-iLeqGLB_ :: (Monad m, Ord f) => TyILeqGLB_ f m i i' i'' (m (InstF f i''))
-iLeqGLB_ _ _ _ _ _ _ (IFree a)  (IFree b)    = return $ IFree (a || b)
+iLeqGLB_ :: (Monad m, Ord fr, Ord f)
+         => TyILeqGLB_ f fr m i i' i'' (m (InstF fr f i''))
+iLeqGLB_ _ _ _ _ _ _ (IFree a)  (IFree b)    = return $ IFree (a `max` b)
 iLeqGLB_ _ r _ _ _ u (IFree _)  x            = T.mapM (r u) x
 iLeqGLB_ l _ _ _ _ u x          (IFree _)    = T.mapM (l u) x
 
@@ -381,11 +376,11 @@ iLeqGLB_ _ _ _ _ q _ (IBound u m b) (IBound u' m' b') = do
 --
 -- Definition 3.2.15, p51 (see also definitions 3.1.11 (p35) and 3.2.7
 -- (p46))
-iSub_ :: (Ord f, Monad m)
-      => (i -> InstF f i' -> m Bool)
+iSub_ :: (Eq fr, Ord f, Monad m)
+      => (i -> InstF fr f i' -> m Bool)
       -> (i -> i' -> m Bool)
-      -> InstF f i
-      -> InstF f i'
+      -> InstF fr f i
+      -> InstF fr f i'
       -> m Bool
 iSub_ _ _ (IFree a)      (IFree b)      = return $ a == b
 iSub_ _ _ x@(IBound _ _ _) (IFree _) | iIsNotReached x = return $ True
@@ -416,11 +411,11 @@ iSub_ _ q (IBound u m b) (IBound u' m' b') = andM1 (u <= u' && b <= b') $
 -- Note further the lack of \"import\" callbacks: since the only relations
 -- on 'IFree' are with 'IFree' or 'iNotReached', there is no recursion to be
 -- done.
-iSubGLB_ :: (Ord f, Monad m)
-         => (InstF f i' -> i  -> m i'')
-         -> (InstF f i  -> i' -> m i'')
+iSubGLB_ :: (Eq fr, Ord f, Monad m)
+         => (InstF fr f i' -> i  -> m i'')
+         -> (InstF fr f i  -> i' -> m i'')
          -> (i -> i' -> m i'')
-         -> InstF f i -> InstF f i' -> m (InstF f i'')
+         -> InstF fr f i -> InstF fr f i' -> m (InstF fr f i'')
 iSubGLB_ _ _ _ (IFree a)  (IFree b) | a == b = return $ IFree a
 iSubGLB_ _ _ _ (IFree _)  (IFree _)          = return $ iNotReached UClobbered
     -- The 'fromJust' calls here are safe since it is guaranteed by the
@@ -469,13 +464,13 @@ iSubGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
 -- Inst\" callbacks for its lop-sided merge cases.  These callbacks should
 -- abort if they encounter free variables, in keeping with the defintion of
 -- ⊑ .
-iSubLUB_ :: (Ord f, Monad m, Show i, Show i', Show i'', Show f)
+iSubLUB_ :: (Eq fr, Ord f, Monad m, Show i, Show i', Show i'', Show f)
          => (i  -> m Uniq)
          -> (i' -> m Uniq)
          -> (Uniq -> i  -> m i'')
          -> (Uniq -> i' -> m i'')
          -> (i -> i' -> m i'')
-         -> InstF f i -> InstF f i' -> m (Maybe (InstF f i''))
+         -> InstF fr f i -> InstF fr f i' -> m (Maybe (InstF fr f i''))
 iSubLUB_ _ _ _ _ _ (IFree a)  (IFree b) | a == b = return $ Just $ IFree a
 iSubLUB_ _ _ _ _ _ (IFree f)  b         | iIsNotReached b = return $ Just $ IFree f
 iSubLUB_ _ _ _ _ _ a          (IFree f) | iIsNotReached a = return $ Just $ IFree f

@@ -70,7 +70,7 @@ import           Dyna.XXX.MonadContext
 
 type ExpC m f n = (Ord f, Show f,
                    Monad m, Functor m,
-                   n ~ NIX f)
+                   n ~ NIX Bool f)
 
 expandV :: (ExpC m f n, MCVT m DVar ~ VR f n, MCR m DVar)
         => DVar -> m n
@@ -86,7 +86,7 @@ expandV v = clookup v >>= \x -> case x of
 
 type LeqC m f n = (Ord f, Show f,
                    Monad m,
-                   n ~ NIX f)
+                   n ~ NIX Bool f)
 
 leqXX :: (LeqC m f n)
       => VR f n -> VR f n -> m Bool
@@ -96,31 +96,31 @@ leqXX (VRStruct yl) (VRName   nr) = leqYN yl nr
 leqXX (VRName   nl) (VRName   nr) = return $ nLeq nl nr
 
 leqXY :: (LeqC m f n)
-      => VR f n -> InstF f (VR f n) -> m Bool
+      => VR f n -> InstF Bool f (VR f n) -> m Bool
 leqXY (VRName   nl) yr = iLeq_ leqNY leqNX (nExpose nl) yr
 leqXY (VRStruct yl) yr = iLeq_ leqXY leqXX yl yr
 
 leqNX :: (LeqC m f n)
-      => NIX f -> VR f n -> m Bool
+      => NIX Bool f -> VR f n -> m Bool
 leqNX nl (VRName   nr) = return $ nLeq nl nr
 leqNX nl (VRStruct yr) = iLeq_ leqNY leqNX (nExpose nl) yr
 
 leqNY :: (LeqC m f n)
-      => NIX f -> InstF f (VR f n) -> m Bool
+      => NIX Bool f -> InstF Bool f (VR f n) -> m Bool
 leqNY nl (nShallow -> Just nr) = {- XT.trace "LNYS" $-} return $ nLeq nl nr
 leqNY nl ir = {-XT.traceShow ("LNY",nl,ir) $-} iLeq_ leqNY leqNX (nExpose nl) ir
 
 leqYN :: (LeqC m f n)
-      => InstF f (VR f n) -> NIX f -> m Bool
+      => InstF Bool f (VR f n) -> NIX Bool f -> m Bool
 leqYN il nr = iLeq_ leqXI leqXN il (nExpose nr)
 
 leqXI :: (LeqC m f n)
-      => VR f n -> InstF f (NIX f) -> m Bool
+      => VR f n -> InstF Bool f (NIX Bool f) -> m Bool
 leqXI (VRStruct yl) ir = leqYN yl (nHide ir)
 leqXI (VRName   nl) ir = return $ nLeq nl (nHide ir)
 
 leqXN :: (LeqC m f n)
-      => VR f n -> NIX f -> m Bool
+      => VR f n -> NIX Bool f -> m Bool
 leqXN (VRName   nl) nr = return $ nLeq nl nr
 leqXN (VRStruct yl) nr = leqYN yl nr
 
@@ -152,7 +152,7 @@ leqVX vl xr = do
 type UnifC'  m f n = (Ord f, Show f,
                      Monad m,
                      MonadError UnifFail m,
-                     n ~ NIX f)
+                     n ~ NIX Bool f)
 
 -- | Constraints common to all unification functions
 type UnifC  m f n = (UnifC' m f n,
@@ -216,7 +216,7 @@ unifyXX u0 (VRStruct ya) (VRStruct yb) = unifyYY u0 ya yb
 -- other unify functions are all dedicated to type shifting to get back
 -- to this one (or 'unifyNN').
 unifyYY :: (UnifC m f n)
-        => Uniq -> InstF f (VR f n) -> InstF f (VR f n) -> m (VR f n)
+        => Uniq -> InstF Bool f (VR f n) -> InstF Bool f (VR f n) -> m (VR f n)
 unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
   live <- view up_live
   fake <- view up_fake
@@ -230,7 +230,7 @@ unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
    u0 ya yb
 
 unifyXY :: (UnifC m f n)
-        => Uniq -> VR f n -> InstF f (VR f n) -> m (VR f n)
+        => Uniq -> VR f n -> InstF Bool f (VR f n) -> m (VR f n)
 unifyXY u0 (VRStruct ya) yb = {- XT.trace "XY1" $-} unifyYY u0 ya yb
 unifyXY u0 (VRName   nl) (nShallow -> Just nr) = {- XT.trace "XY2" $ -} liftM VRName $ unifyNN u0 nl nr
 unifyXY u0 (VRName   nl) yr = {- XT.trace "XY3" $-} unifyIY u0 (nExpose nl) yr
@@ -241,11 +241,11 @@ unifyNX u n (VRName  n') = liftM VRName $ unifyNN u n n'
 unifyNX u n (VRStruct y) = unifyIY u (nExpose n) y
 
 unifyIY :: (UnifC m f n)
-        => Uniq -> InstF f n -> InstF f (VR f n) -> m (VR f n)
+        => Uniq -> InstF Bool f n -> InstF Bool f (VR f n) -> m (VR f n)
 unifyIY u0 ia yb = unifyYY u0 (fmap VRName ia) yb
 
 -- XXX Should stop earlier than it does
-xUpUniq :: (Ord f, n ~ NIX f) => Uniq -> VR f n -> VR f n
+xUpUniq :: (Ord f, n ~ NIX Bool f) => Uniq -> VR f n -> VR f n
 xUpUniq u (VRName   n) = {- XT.trace "XUU1" $ -} VRName   $ nUpUniq u n
 xUpUniq u (VRStruct y) = {- XT.trace "XUU2" $ -} VRStruct $ over inst_uniq (max u)
                                   $ fmap (xUpUniq u) y
@@ -286,12 +286,12 @@ unifyVF :: forall m f n .
         -> (DVar -> m Bool)
         -> DVar
         -> f
-        -> [Either (NIX f) DVar]
+        -> [Either (NIX Bool f) DVar]
         -> m DVar
 unifyVF fake lf v f vs = do
   vl   <- lf v
   vy   <- clookup v
-  vvys :: [Either (NIX f) (DVar,VR f n)]
+  vvys :: [Either (NIX Bool f) (DVar,VR f n)]
        <- mapM (either (return . Left)
                        (\v_ -> clookup v_ >>= return . Right . (v_,)))
                vs
@@ -337,9 +337,9 @@ unifyVF fake lf v f vs = do
  where
   go :: forall a a' b gm .
         (gm ~ ReaderT UnifParams m)
-     => (Uniq -> a -> b -> gm (VR f (NIX f)))
-     => (Uniq -> a' -> b -> gm (VR f (NIX f)))
-     -> Bool -> [Either a' (DVar,a)] -> Uniq -> [b] -> m [VR f (NIX f)]
+     => (Uniq -> a -> b -> gm (VR f (NIX Bool f)))
+     => (Uniq -> a' -> b -> gm (VR f (NIX Bool f)))
+     -> Bool -> [Either a' (DVar,a)] -> Uniq -> [b] -> m [VR f (NIX Bool f)]
   go uf uf' vl vvys u ris = sequence $ zipWithTails goz lenpanic lenpanic ris vvys
    where
     goz ri (Left n) = runReaderT (uf' u n ri) (UnifParams vl fake)
@@ -356,23 +356,23 @@ unifyVF fake lf v f vs = do
 -- | Constraints common to all subsumption functions
 type SubC  m f n = (Ord f, Show f,
                     Monad m,
-                    n ~ NIX f)
+                    n ~ NIX Bool f)
 
 subNN :: (SubC m f n)
       => n -> n -> m Bool
 subNN a b = {- XT.traceShow ("SNN",a,b) $-} return $ nSub a b
 
 subXI :: (SubC m f n)
-      => VR f n -> InstF f (NIX f) -> m Bool
+      => VR f n -> InstF Bool f (NIX Bool f) -> m Bool
 subXI (VRName   ln) ri = subNN ln (nHide ri)
 subXI (VRStruct ly) ri = subYI ly ri
 
 subYI :: (SubC m f n)
-      => InstF f (VR f n) -> InstF f (NIX f) -> m Bool
+      => InstF Bool f (VR f n) -> InstF Bool f (NIX Bool f) -> m Bool
 subYI l r = iSub_ subXI subXN l r
 
 subXN :: (SubC m f n)
-      => VR f n -> NIX f -> m Bool
+      => VR f n -> NIX Bool f -> m Bool
 subXN (VRName   ln) rn = subNN ln rn
 subXN (VRStruct ly) rn = subYI ly (nExpose rn)
 

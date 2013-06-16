@@ -76,7 +76,7 @@ import           Text.PrettyPrint.Free
 --
 -- Note that we are contractually obligated to keep NIX automata mutually
 -- acyclic (i.e. all cycles must be confied within some NIX automata).
-type NIXM a f = M.Map a (Either (NIX f) (InstF f a))
+type NIXM a fr f = M.Map a (Either (NIX fr f) (InstF fr f a))
 
 -- | A closed, mu-recursive inst.
 --
@@ -88,7 +88,7 @@ type NIXM a f = M.Map a (Either (NIX f) (InstF f a))
 --
 -- The accessors and constructor is exported solely for the selftests'
 -- benefits and SHOULD NOT be used elsewhere in the code!
-data NIX f = forall a . (Ord a,Show a,Show f) =>
+data NIX fr f = forall a . (Ord a,Show a,Show fr,Show f) =>
   NIX
   {
     -- | The top InstF ply in this term.
@@ -98,23 +98,23 @@ data NIX f = forall a . (Ord a,Show a,Show f) =>
     -- operators.  Moreover, it's probably a good idea to use a ply
     -- at the top as it forces NIX to be productive and not just
     -- immediately alias another NIX via its map.
-    nix_root  :: InstF f a
-  , nix_map   :: NIXM a f
+    nix_root  :: InstF fr f a
+  , nix_map   :: NIXM a fr f
   }
 
 -- | Semantic, not structural, equality
-instance (Ord f) => Eq (NIX f) where
+instance (Ord fr, Ord f) => Eq (NIX fr f) where
  n1 == n2 = nEq n1 n2
 
 -- XXX This is hideously ugly, but we can clean it up later
-instance (Show f) => Show (NIX f) where
+instance (Show fr, Show f) => Show (NIX fr f) where
  show (NIX r m) = "(NIX ("++ (show r) ++ ") (" ++ (show m) ++ "))"
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
 -- | Throw exception if ever a NIX is not well formed
-panicwf :: NIX f -> a
+panicwf :: NIX fr f -> a
 panicwf n = dynacPanic (text "NIX not well-formed"
                         `above` indent 2 (pretty n))
 
@@ -135,7 +135,7 @@ tsc l e miss = (uses l $ S.member e)
 
 -- | Either of Maybe of Lookup.  A common pattern found in implementation.
 eml :: (Ord k)
-    => NIX f -- ^ For debugging
+    => NIX fr f -- ^ For debugging
     -> (a -> c)
     -> (b -> c)
     -> M.Map k (Either a b)
@@ -144,7 +144,7 @@ eml :: (Ord k)
 eml n al ar m x = either al ar (ml n m x)
 
 -- | Our particular version of 'fromJust' which panics appropriately.
-ml :: (Ord k) => NIX f -> M.Map k b -> k -> b
+ml :: (Ord k) => NIX fr f -> M.Map k b -> k -> b
 ml n m x = maybe (panicwf n) id (M.lookup x m)
 
 ------------------------------------------------------------------------}}}
@@ -153,7 +153,7 @@ ml n m x = maybe (panicwf n) id (M.lookup x m)
 -- | Check well-formedness of an inst at a given Uniq.  All uniqueness
 -- annotations within the inst are required to be larger (i.e. less unique,
 -- more restrictive).
-nWellFormedUniq :: forall f . (Show f) => Uniq -> NIX f -> Bool
+nWellFormedUniq :: forall fr f . Uniq -> NIX fr f -> Bool
 nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
                                              M.empty
  where
@@ -181,7 +181,7 @@ nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
 -- debugging nontermination of the compiler.  There's nothing that can save
 -- us from an evil NIX which generates additional NIXes on the fly, tho'.
 --
-nWellFormedOC :: (Ord f) => NIX f -> IO ()
+nWellFormedOC :: (Ord f) => NIX fr f -> IO ()
 nWellFormedOC n0 = evalStateT (go n0) H.empty
  where
   mksp x = x `seq` makeStableName x
@@ -201,7 +201,7 @@ nWellFormedOC n0 = evalStateT (go n0) H.empty
             (eml n0 (lift . go) (visit q) m a >> return True)
 
 -- | Is a named inst ground?
-nGround :: forall f . NIX f -> Bool
+nGround :: forall fr f . NIX fr f -> Bool
 nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
  where
   q a = tsc id a $ eml n0 (return . nGround) (iGround_ q) m a
@@ -215,7 +215,7 @@ nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
 -- This is mostly useful for the test harness, not actual reasoning, at
 -- the moment, since we are not sufficiently precise (i.e. we will miss some
 -- empty unification results).
-nSomeNotEmpty :: forall f . NIX f -> Bool
+nSomeNotEmpty :: forall fr f . NIX fr f -> Bool
 nSomeNotEmpty = fix (nNotEmpty_core orAny)
  where orAny b bs = b `orM1` (anyM bs)
 
@@ -223,20 +223,20 @@ nSomeNotEmpty = fix (nNotEmpty_core orAny)
 -- requires that all possible branches of an automata are non-empty, rather
 -- than 'nNotEmpty', which only checks that there is some reachable state in
 -- the automata.
-nAllNotEmpty :: forall f . (Show f) => NIX f -> Bool
+nAllNotEmpty :: forall fr f . (Show f) => NIX fr f -> Bool
 nAllNotEmpty = fix (nNotEmpty_core andAll)
  where andAll b bs = b `andM1` (allM bs)
 
 
 
-nNotEmpty_core :: forall f .
+nNotEmpty_core :: forall fr f .
                   (forall m .
                      (Monad m)
                   => Bool
                   -> [m Bool]
                   -> m Bool)
-               -> (NIX f -> Bool)
-               -> NIX f -> Bool
+               -> (NIX fr f -> Bool)
+               -> NIX fr f -> Bool
 nNotEmpty_core disj self n0@(NIX i0 m0) = evalState (visit i0) S.empty
  where
   visit (IFree _) = return True
@@ -251,7 +251,7 @@ nNotEmpty_core disj self n0@(NIX i0 m0) = evalState (visit i0) S.empty
 --
 -- This would be equivalent to unification with 'IANy' at the given 'Uniq'
 -- level, save that it leaves free variables untouched.
-nUpUniq :: forall f . (Ord f) => Uniq -> NIX f -> NIX f
+nUpUniq :: forall fr f . (Ord f) => Uniq -> NIX fr f -> NIX fr f
 {-
  - XXX The beginnings of a possibly more efficient implementation
 nUpUniq u0 n0@(NIX i0 m) = uncurry NIX $ runState (T.traverse visit i0) m
@@ -272,12 +272,12 @@ nUpUniq u0 n0@(NIX i0 m0) =
 -- 'NIX' elements.
 --
 -- Note that recursive use of this function may well diverge!
-nExpose :: NIX f -> InstF f (NIX f)
+nExpose :: NIX fr f -> InstF fr f (NIX fr f)
 nExpose n@(NIX r m) = fmap (\a -> either id (\i -> NIX i m) (ml n m a)) r
 {-# INLINABLE nExpose #-}
 
 -- | An inefficient \"inverse\" (up to isomorphism) of nExpose.
-nHide :: (Show f) => InstF f (NIX f) -> NIX f
+nHide :: (Show fr, Show f) => InstF fr f (NIX fr f) -> NIX fr f
 nHide i = uncurry NIX $ runState (T.mapM next i) M.empty
  where
   next n = do
@@ -287,17 +287,17 @@ nHide i = uncurry NIX $ runState (T.mapM next i) M.empty
     return n'
 {-# INLINABLE nHide #-}
 
-nShallow :: (Show f) => InstF f a -> Maybe (NIX f)
+nShallow :: (Show fr, Show f) => InstF fr f a -> Maybe (NIX fr f)
 nShallow (IFree f)      = Just $ nHide $ IFree f
 nShallow (IAny u)       = Just $ nHide $ (IAny u)
 nShallow (IUniv u)      = Just $ nHide $ (IUniv u)
 nShallow (IBound _ _ _) = Nothing
 {-# INLINABLE nShallow #-}
 
-nDeep :: (Show f, Monad m, Functor m)
-      => (r -> m (Either (NIX f) (InstF f r)))
-      -> InstF f r
-      -> m (NIX f)
+nDeep :: (Show fr, Show f, Monad m, Functor m)
+      => (r -> m (Either (NIX fr f) (InstF fr f r)))
+      -> InstF fr f r 
+      -> m (NIX fr f)
 nDeep rec root = liftM (\(nr,(_,nm)) -> NIX nr nm) $
   flip runStateT (0 :: Int, M.empty) $ inst_recps rec' root
  where
@@ -313,14 +313,14 @@ nDeep rec root = liftM (\(nr,(_,nm)) -> NIX nr nm) $
 ------------------------------------------------------------------------}}}
 -- Binary predicates                                                    {{{
 
-nCmp :: forall f .
-        (Ord f)
+nCmp :: forall fr f .
+        (Ord fr, Ord f)
      => (forall a b m .
             (Monad m)
-         => (a -> InstF f b -> m Bool)
+         => (a -> InstF fr f b -> m Bool)
          -> (a -> b -> m Bool)
-         -> InstF f a -> InstF f b -> m Bool)
-     -> NIX f -> NIX f -> Bool
+         -> InstF fr f a -> InstF fr f b -> m Bool)
+     -> NIX fr f -> NIX fr f -> Bool
 nCmp q l0@(NIX li0 lm) r0@(NIX ri0 rm) =
   evalState (q qop qip li0 ri0) (S.empty, S.empty)
  where
@@ -341,7 +341,7 @@ nCmp q l0@(NIX li0 lm) r0@(NIX ri0 rm) =
                                     (flip (q qop qip) ri)
                                     lm l
 
-nEq, nLeq, nSub :: (Ord f) => NIX f -> NIX f -> Bool
+nEq, nLeq, nSub :: (Ord fr, Ord f) => NIX fr f -> NIX fr f -> Bool
 nEq  = nCmp (\_ -> iEq_)
 nLeq = nCmp iLeq_
 nSub = nCmp iSub_
@@ -349,29 +349,30 @@ nSub = nCmp iSub_
 ------------------------------------------------------------------------}}}
 -- Binary functions                                                     {{{
 
-data NBinState a b f u = NBS { _nbs_next  :: Int
-                           , _nbs_ctx   :: NIXM Int f
-                           , _nbs_cache_symm :: M.Map (u,a,b) Int
-                           , _nbs_cache_lsml :: M.Map (u,InstF f b,a) Int
-                           , _nbs_cache_lsmr :: M.Map (u,InstF f a,b) Int
-                           }
+data NBinState a b fr f u = NBS
+                          { _nbs_next  :: Int
+                          , _nbs_ctx   :: NIXM Int fr f
+                          , _nbs_cache_symm :: M.Map (u,a,b) Int
+                          , _nbs_cache_lsml :: M.Map (u,InstF fr f b,a) Int
+                          , _nbs_cache_lsmr :: M.Map (u,InstF fr f a,b) Int
+                          }
 $(makeLenses ''NBinState)
 
-iNBS :: NBinState a b f u
+iNBS :: NBinState a b fr f u
 iNBS = NBS 0 M.empty M.empty M.empty M.empty
 
 
-nTBin :: forall f . (Ord f, Show f)
+nTBin :: forall fr f . (Ord fr, Ord f, Show f)
       => (  forall a b c m .
             (Monad m)
          => (Uniq -> a -> m c)
          -> (Uniq -> b -> m c)
-         -> (Uniq -> InstF f b -> a -> m c)
-         -> (Uniq -> InstF f a -> b -> m c)
+         -> (Uniq -> InstF fr f b -> a -> m c)
+         -> (Uniq -> InstF fr f a -> b -> m c)
          -> (Uniq -> a -> b -> m c)
          -> Uniq
-         -> InstF f a -> InstF f b -> m (InstF f c))
-      -> NIX f -> NIX f -> NIX f
+         -> InstF fr f a -> InstF fr f b -> m (InstF fr f c))
+      -> NIX fr f -> NIX fr f -> NIX fr f
 nTBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (tlq li0 ri0) iNBS
  where
   tlq l r = do
@@ -451,24 +452,24 @@ nTBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (tlq li0 ri0) iNBS
       return k
 
 -- | Total lattice functions
-nLeqGLB, nSubGLB :: forall f .
-                    (Ord f, Show f)
-                 => NIX f -> NIX f -> NIX f
+nLeqGLB, nSubGLB :: forall fr f .
+                    (Ord fr, Ord f, Show f)
+                 => NIX fr f -> NIX fr f -> NIX fr f
 nLeqGLB = nTBin iLeqGLB_
 nSubGLB = nTBin (\_ _ fl fr fm _ -> iSubGLB_ (fl UUnique) (fr UUnique) (fm UUnique))
 
-nPBin :: forall e f .
-         (Ord f, Show f)
+nPBin :: forall e fr f .
+         (Ord fr, Ord f, Show f)
       => (  forall a b c m .
             (Monad m, Show a, Show b, Show c)
          => (Uniq -> a -> m c)
          -> (Uniq -> b -> m c)
-         -> (Uniq -> InstF f b -> a -> m c)
-         -> (Uniq -> InstF f a -> b -> m c)
+         -> (Uniq -> InstF fr f b -> a -> m c)
+         -> (Uniq -> InstF fr f a -> b -> m c)
          -> (Uniq -> a -> b -> m c)
          -> Uniq
-         -> InstF f a -> InstF f b -> m (Either e (InstF f c)))
-      -> NIX f -> NIX f -> Either e (NIX f)
+         -> InstF fr f a -> InstF fr f b -> m (Either e (InstF fr f c)))
+      -> NIX fr f -> NIX fr f -> Either e (NIX fr f)
 nPBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (runEitherT (tlq li0 ri0)) iNBS
  where
   tlq l r = do
@@ -555,9 +556,9 @@ nPBin f l0@(NIX li0 lm) r0@(NIX ri0 rm) = evalState (runEitherT (tlq li0 ri0)) i
 
 -- | Partial lattice functions.  These raise unification failures if
 -- the runtime would fail.
-nLeqGLBRD, nLeqGLBRL :: forall f .
-                        (Ord f, Show f)
-                     => NIX f -> NIX f -> Either UnifFail (NIX f)
+nLeqGLBRD, nLeqGLBRL :: forall fr f .
+                        (Ord fr, Ord f, Show f)
+                     => NIX fr f -> NIX fr f -> Either UnifFail (NIX fr f)
 nLeqGLBRD = nPBin iLeqGLBRD_
 nLeqGLBRL = nPBin iLeqGLBRL_
 
@@ -583,7 +584,7 @@ nSubLUB = nPBin (\il ir ll lr m -> iSubLUB_ il ir (ll UClobbered) (lr UClobbered
 -- named insts within the 'QMode'.
 --
 -- See prose, p35.
-mWellFormed :: forall f . (Ord f, Show f) => QMode (NIX f) -> Bool
+mWellFormed :: forall fr f . (Ord fr, Ord f, Show f) => QMode (NIX fr f) -> Bool
 mWellFormed (QMode ats vm@(vti,vto) _) =
   (all (nWellFormedUniq UUnique)
        $ vti:vto:concatMap (\(i,o) -> [i,o]) ats)
@@ -593,11 +594,11 @@ mWellFormed (QMode ats vm@(vti,vto) _) =
 ------------------------------------------------------------------------}}}
 -- Cleanup and minimization                                             {{{
 
-nCrawl :: forall f .
-          (forall a . Bool -> Uniq -> InstF f a) -- ^ Replace free variables
-       -> Uniq                             -- ^ Minimum uniqueness
-       -> NIX f
-       -> NIX f
+nCrawl :: forall fr f .
+          (forall a . fr -> Uniq -> InstF fr f a) -- ^ Replace free variables
+       -> Uniq                                    -- ^ Minimum uniqueness
+       -> NIX fr f
+       -> NIX fr f
 nCrawl fv u0 n0@(NIX i0 m) =
   let i0' = reall u0 i0 in NIX i0' $ execState (T.traverse (evac u0) i0') M.empty
  where
@@ -621,13 +622,13 @@ nCrawl fv u0 n0@(NIX i0 m) =
 
 -- | Prune the internals of a 'NIX'.  This really ought not be needed, but
 -- it's handy for test generation.
-nPrune :: forall f . NIX f -> NIX f
+nPrune :: forall fr f . NIX fr f -> NIX fr f
 nPrune = nCrawl (\f _ -> IFree f) UUnique
 
 ------------------------------------------------------------------------}}}
 -- Pretty-printing                                                      {{{
 
-instance Pretty (NIX f) where
+instance Pretty (NIX fr f) where
  pretty (nPrune -> NIX r m) = align $
    ri r <> if M.null m
             then empty
@@ -641,7 +642,7 @@ instance Pretty (NIX f) where
    -- render map entry
    rme (k,v) = rix k <+> equals <+> either pretty ri v
 
-   ri = IP.compactly (text . show) rix 
+   ri = IP.compactly (text . show) (text . show) rix 
 
 
 

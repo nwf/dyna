@@ -67,7 +67,7 @@ ts = const id
 type ExpC m f n k = (Ord f, Show f, Functor m,
                      Monad m,
                      MCVT m k ~ ENKRI f n k, MCR m k,
-                     n ~ NIX f)
+                     n ~ NIX Bool f)
 
 -- | Deeply extract from the context as per definition 5.3.3, p95
 expandV :: (ExpC m f n k, MCVT m DVar ~ VR f n k, MCR m DVar)
@@ -80,7 +80,7 @@ expandV v = clookup v >>= \x ->
                          >>= either return (expandY . q2y)
 
 -- | Core of 'expandV' used internally
-expandY :: (ExpC m f n k) => InstF f (VR f n k) -> m n
+expandY :: (ExpC m f n k) => InstF Bool f (VR f n k) -> m n
 expandY y = nDeep rec y
  where
   rec (VRName n)    = return (Left n)
@@ -95,7 +95,7 @@ expandY y = nDeep rec y
 type LeqC m f n k = (Ord f, Show f, Show k,
                       Monad m,
                       MCVT m k ~ ENKRI f n k, MCR m k,
-                      n ~ NIX f)
+                      n ~ NIX Bool f)
 
 leqVV :: (LeqC m f n k,
           MCVT m DVar ~ VR f n k, MCR m DVar)
@@ -143,10 +143,10 @@ leqKN kl nr = clookup kl >>= either (flip leqNN nr) (flip leqQN nr)
 leqNK :: (LeqC m f n k) => n -> k -> m Bool
 leqNK nl kr = clookup kr >>= either (leqNN nl) (leqNQ nl)
 
-leqKY :: (LeqC m f n k) => k -> InstF f (VR f n k) -> m Bool
+leqKY :: (LeqC m f n k) => k -> InstF Bool f (VR f n k) -> m Bool
 leqKY kl yr = clookup kl >>= either (flip leqNY yr) (flip leqQY yr)
 
-leqYK :: (LeqC m f n k) => InstF f (VR f n k) -> k -> m Bool
+leqYK :: (LeqC m f n k) => InstF Bool f (VR f n k) -> k -> m Bool
 leqYK yl kr = clookup kr >>= either (leqYN yl) (leqYQ yl)
 
 -- | Split J on right
@@ -178,28 +178,28 @@ leqYK yl kr = clookup kr >>= either (leqYN yl) (leqYQ yl)
 -- 'nShallow', rather than expanding the named inst with 'nExpose'.  Since
 -- the right hand side is not getting smaller in such a case, the latter
 -- strategy would lead divergence.
-leqNY :: (LeqC m f n k) => n -> InstF f (VR f n k) -> m Bool
+leqNY :: (LeqC m f n k) => n -> InstF Bool f (VR f n k) -> m Bool
 leqNY nl (nShallow -> Just nr) = leqNN nl nr
 leqNY nl yr                    = iLeq_ leqNY leqNX (nExpose nl) yr
 
 -- | Induction hypothesis YN
 --
 -- Induction is similarly funny as in 'leqNY'
-leqYN :: (LeqC m f n k) => InstF f (VR f n k) -> n -> m Bool
+leqYN :: (LeqC m f n k) => InstF Bool f (VR f n k) -> n -> m Bool
 leqYN (nShallow -> Just nl) nr = leqNN nl nr
 leqYN yl                    nr = iLeq_ leqXI leqXN yl (nExpose nr)
 
 -- | Induction hypothesis YY
-leqYY :: (LeqC m f n k) => InstF f (VR f n k) -> InstF f (VR f n k) -> m Bool
+leqYY :: (LeqC m f n k) => InstF Bool f (VR f n k) -> InstF Bool f (VR f n k) -> m Bool
 leqYY = iLeq_ leqXY leqXX
 
 -- | Repackage Y as X and invoke generic dispatch.  Despite the growth of
 -- the RHS, this is guaranteed to then step to one of the induction
 -- hypotheses, which will reduce both sides.
-leqXY :: (LeqC m f n k) => VR f n k -> InstF f (VR f n k) -> m Bool
+leqXY :: (LeqC m f n k) => VR f n k -> InstF Bool f (VR f n k) -> m Bool
 leqXY xl yr = leqXX xl (VRStruct yr)
 
-leqXI :: (LeqC m f n k) => VR f n k -> InstF f n -> m Bool
+leqXI :: (LeqC m f n k) => VR f n k -> InstF Bool f n -> m Bool
 leqXI xl ir = leqXX xl (VRName $ nHide ir)
 
 leqXN :: (LeqC m f n k) => VR f n k -> n -> m Bool
@@ -209,27 +209,27 @@ leqXN xl nr = leqXX xl (VRName nr)
 -- leqXQ xl qr = leqXX xl (VRStruct $ q2y qr)
 
 -- | Repackage N as X and invoke generic dispatch.
-leqNX :: (LeqC m f n k) => NIX f -> VR f n k -> m Bool
+leqNX :: (LeqC m f n k) => NIX Bool f -> VR f n k -> m Bool
 leqNX nl xr = leqXX (VRName nl) xr
 
 -- | Repackage Q
-leqNQ :: (LeqC m f n k) => n -> InstF f (Either n k) -> m Bool
+leqNQ :: (LeqC m f n k) => n -> InstF Bool f (Either n k) -> m Bool
 leqNQ nl qr = leqNY nl (q2y qr)
 
-leqQN :: (LeqC m f n k) => InstF f (Either n k) -> n -> m Bool
+leqQN :: (LeqC m f n k) => InstF Bool f (Either n k) -> n -> m Bool
 leqQN ql nr = leqYN (q2y ql) nr
 
-leqQY :: (LeqC m f n k) => InstF f (Either n k) -> InstF f (VR f n k) -> m Bool
+leqQY :: (LeqC m f n k) => InstF Bool f (Either n k) -> InstF Bool f (VR f n k) -> m Bool
 leqQY ql yr = leqYY (q2y ql) yr
 
-leqYQ :: (LeqC m f n k) => InstF f (VR f n k) -> InstF f (Either n k) -> m Bool
+leqYQ :: (LeqC m f n k) => InstF Bool f (VR f n k) -> InstF Bool f (Either n k) -> m Bool
 leqYQ yl qr = leqYY yl (q2y qr)
 
-leqQQ :: (LeqC m f n k) => InstF f (Either n k) -> InstF f (Either n k) -> m Bool
+leqQQ :: (LeqC m f n k) => InstF Bool f (Either n k) -> InstF Bool f (Either n k) -> m Bool
 leqQQ ql qr = leqYY (q2y ql) (q2y qr)
 
 -- | Induction base case NN
-leqNN :: (Ord f, Monad m) => NIX f -> NIX f -> m Bool
+leqNN :: (Ord f, Monad m) => NIX Bool f -> NIX Bool f -> m Bool
 leqNN nl nr = return $ nLeq nl nr
 
 ------------------------------------------------------------------------}}}
@@ -268,26 +268,26 @@ leqMXX (VRKey    kl) (VRStruct yr) = leqMKY kl yr
 leqMKN :: (LeqMC m f n k) => VR f n k -> n -> MaybeT m Bool
 leqMKN kl nr = lift (cmerge unifyQN kl nr) >> return True
 
-leqMKY :: (LeqMC m f n k) => k -> InstF f (VR f n k) -> MaybeT m Bool
+leqMKY :: (LeqMC m f n k) => k -> InstF Bool f (VR f n k) -> MaybeT m Bool
 leqMKY kl yr = lift (cmerge unifyQY kl yr) >> return True
 
 -- | Induction hypothesis NY
-leqMNY :: (LeqMC m f n k) => n -> InstF f (VR f n k) -> MaybeT m Bool
+leqMNY :: (LeqMC m f n k) => n -> InstF Bool f (VR f n k) -> MaybeT m Bool
 leqMNY nl (nShallow -> Just nr) = leqNN nl nr
 leqMNY nl ir = iLeq_ leqMNY leqMNX (nExpose nl) ir
 
 -- | Induction hypothesis YN
-leqMYN :: (LeqMC m f n k) => InstF f (VR f n k) -> n -> MaybeT m Bool
+leqMYN :: (LeqMC m f n k) => InstF Bool f (VR f n k) -> n -> MaybeT m Bool
 leqMYN (nShallow -> Just nl) nr = leqNN nl nr
 leqMYN yl                    nr = iLeq_ leqMXI leqMXN yl (nExpose nr)
 
-leqMXI :: (LeqMC m f n k) => VR f n k -> InstF f n -> MaybeT m Bool
+leqMXI :: (LeqMC m f n k) => VR f n k -> InstF Bool f n -> MaybeT m Bool
 leqMXI xl ir = leqMXX xl (VRName $ nHide ir)
 
 -- | Induction hypothesis YY
 leqMYY :: (LeqMC m f n k)
-       => InstF f (VR f n k)
-       -> InstF f (VR f n k)
+       => InstF Bool f (VR f n k)
+       -> InstF Bool f (VR f n k)
        -> MaybeT m Bool
 leqMYY = iLeq_ leqMXY leqMXX
 
@@ -298,10 +298,10 @@ leqMXN :: (LeqMC m f n k) => VR f n k -> n -> MaybeT m Bool
 leqMXN xl nr = leqMXX xl (VRName nr)
 
 -- | Repackage Y as X
-leqMXY :: (LeqMC m f n k) => VR f n k -> InstF f (VR f n k) -> MaybeT m Bool
+leqMXY :: (LeqMC m f n k) => VR f n k -> InstF Bool f (VR f n k) -> MaybeT m Bool
 leqMXY xl yr = leqMXX xl (VRStruct yr)
 
-leqMQY :: (LeqMC m f n k) => InstF f (Either n k) -> InstF f (VR f n k) -> MaybeT m Bool
+leqMQY :: (LeqMC m f n k) => InstF Bool f (Either n k) -> InstF Bool f (VR f n k) -> MaybeT m Bool
 leqMQY ql yr = leqMYY (q2y ql) yr
 
 -}
@@ -313,7 +313,7 @@ leqMQY ql yr = leqMYY (q2y ql) yr
 type UnifC  m f n = (Ord f, Show f,
                        Monad m, MonadError UnifFail m,
                        MonadReader UnifParams m,
-                       n ~ NIX f)
+                       n ~ NIX Bool f)
 
 -- | Constraints for unification on keyed insts
 type UnifKC m f n k = (Show k,
@@ -449,12 +449,12 @@ selUnif_ l d = do
 -- | Select between two 'NIX' unifications based on unification parameters.
 selUnifN :: (Ord f, Show f,
              Monad m, MonadReader UnifParams m)
-         => m (NIX f -> NIX f -> Either UnifFail (NIX f))
+         => m (NIX Bool f -> NIX Bool f -> Either UnifFail (NIX Bool f))
 selUnifN = selUnif_ nLeqGLBRL nLeqGLBRD
 
 selUnifI :: (Ord f,
              Monad m, MonadReader UnifParams m)
-         => m (TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o))))
+         => m (TyILeqGLB_ f Bool m i i' o (m (Either UnifFail (InstF Bool f o))))
 selUnifI = selUnif_ iLeqGLBRL_ iLeqGLBRD_
 
 -- | Name-on-Variable unification.  This should not be called on names
@@ -484,7 +484,7 @@ unifyUnaliasedNV n0 v0 = do
   naUnifyNX u na (VRStruct ub) =                  naUnifyNY u na ub
 
   -- Induction hypothesis NY
-  naUnifyNY :: Uniq -> n -> InstF f (VR f n k) -> m (VR f n k)
+  naUnifyNY :: Uniq -> n -> InstF Bool f (VR f n k) -> m (VR f n k)
   naUnifyNY u na (nShallow -> Just nb) = liftM VRName $ unifyNN u na nb
   naUnifyNY u na yb                    = liftM VRStruct $
     selUnifI >>= \f ->
@@ -508,19 +508,19 @@ unifyUnaliasedNV n0 v0 = do
 --
 -- See definition 5.3.9, p98 (and 3.2.20, p53 for the unaliased case)
 unifyVF :: forall m m' f n k .
-           (Ord f, Monad m', m ~ SIMCT m' f, n ~ NIX f, Show f,
+           (Ord f, Monad m', m ~ SIMCT m' f, n ~ NIX Bool f, Show f,
             MCVT m k ~ ENKRI f n k,
             MCVT m DVar ~ VR f n k)
         => Bool
         -> (DVar -> m Bool)
         -> DVar
         -> f
-        -> [Either (NIX f) DVar]
+        -> [Either (NIX Bool f) DVar]
         -> m DVar
 unifyVF fake lf v f vs = do
   vl   <- lf v
   vy   <- clookup v
-  vvys :: [Either (NIX f) (DVar,VR f n k)]
+  vvys :: [Either (NIX Bool f) (DVar,VR f n k)]
        <- mapM (either (return . Left)
                        (\v_ -> clookup v_ >>= return . Right . (v_,)))
                vs
@@ -603,7 +603,7 @@ unifyVF fake lf v f vs = do
 -- Matching                                                             {{{
 
 subVN :: forall f k m n .
-         (Ord f, Functor m, Monad m, n ~ NIX f, Show f,
+         (Ord f, Functor m, Monad m, n ~ NIX Bool f, Show f,
           MCVT m k ~ ENKRI f n k, MCR m k,
           MCVT m DVar ~ VR f n k, MCR m DVar)
       => DVar
@@ -642,15 +642,15 @@ subVN vl nr = do
 iCompare :: (Ord f, n ~ NI f)
          => (forall m' .
                 (Monad m')
-             => (n -> InstF f n -> m' Bool)
+             => (n -> InstF Bool f n -> m' Bool)
              -> (n -> n -> m' Bool)
-             -> InstF f n -> InstF f n -> m' Bool)
-         -> InstF f n -> InstF f n -> Bool
+             -> InstF Bool f n -> InstF Bool f n -> m' Bool)
+         -> InstF Bool f n -> InstF Bool f n -> Bool
 iCompare cmp i0 j0 = tieKnotCompare cmp (\qa qb -> cmp qa qb i0 j0)
 
 subNI :: forall f n m .
          (Ord f, Show f, n ~ NI f, Monad m)
-      => n -> InstF f n -> m Bool
+      => n -> InstF Bool f n -> m Bool
 subNI n i = ts ("SNI",n,i) $ do
   ni <- clookup n
   return $ iCompare iSub_ ni i
@@ -664,13 +664,13 @@ subJN j = either subNN subKN j
 subJI :: forall f k m n .
          (Ord f, n ~ NI f, Show f, Show k,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => Either n k -> InstF f n -> m Bool
+      => Either n k -> InstF Bool f n -> m Bool
 subJI j = either subNI subKI j
 
 subQI :: forall f k m n .
          (Ord f, n ~ NI f, Show f, Show k,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => KRI f n k -> InstF f n -> m Bool
+      => KRI f n k -> InstF Bool f n -> m Bool
 subQI q i = ts ("SQI",q,i) $ iSub_ subJI subJN q i
 
 subQN :: forall f k m n .
@@ -692,7 +692,7 @@ subKN k n = ts ("SKN",k,n) $ do
 subKI :: forall f k m n .
          (Ord f, n ~ NI f, Show f, Show k,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => k -> InstF f n -> m Bool
+      => k -> InstF Bool f n -> m Bool
 subKI k i = ts ("SKI",k,i) $ do
   kq <- clookup k
   (either subNI subQI kq) i
@@ -700,14 +700,14 @@ subKI k i = ts ("SKI",k,i) $ do
 subYI :: forall f k m n .
          (Ord f, n ~ NI f, Show f, Show k,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => InstF f (VR f n k) -> InstF f n -> m Bool
+      => InstF Bool f (VR f n k) -> InstF Bool f n -> m Bool
 subYI y i = ts ("SUI",y,i) $ do
   iSub_ subXI subXN y i
 
 subXI :: forall f k m n .
          (Ord f, n ~ NI f, Show f, Show k,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => VR f n k -> InstF f n -> m Bool
+      => VR f n k -> InstF Bool f n -> m Bool
 subXI x i = ts ("SXI",x,i) $ do
   case x of
     VRName   xn -> subNI xn i
@@ -716,7 +716,7 @@ subXI x i = ts ("SXI",x,i) $ do
 
 subXN :: forall f k m n .
          (Ord n, Ord f, Show n, Show f, Show k,
-          MCVT m n ~ InstF f n, MCR m n,
+          MCVT m n ~ InstF Bool f n, MCR m n,
           MCVT m k ~ ENKRI f n k, MCR m k)
       => VR f n k -> n -> m Bool
 subXN x n = ts ("SXN",x,n) $ do
@@ -727,9 +727,9 @@ subXN x n = ts ("SXN",x,n) $ do
 
 subUN :: forall f k m n .
          (Ord n, Ord f, Show n, Show f, Show k,
-          MCVT m n ~ InstF f n, MCR m n,
+          MCVT m n ~ InstF Bool f n, MCR m n,
           MCVT m k ~ ENKRI f n k, MCR m k)
-      => InstF f (VR f n k) -> n -> m Bool
+      => InstF Bool f (VR f n k) -> n -> m Bool
 subUN u n = ts ("SUN",u,n) $ do
   ni <- clookup n
   iSub_ subXI subXN u ni

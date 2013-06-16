@@ -67,7 +67,7 @@ aggrs = S.fromList
 -- generation without having to re-probe the modes.
 newtype PyDopeBS = PDBS (forall e . ModedVar -> [ModedVar] -> Doc e)
 
-nfree, nuniv :: NIX DFunct
+nfree, nuniv :: NIX Bool DFunct
 nfree = nHide (IFree False)
 nuniv = nHide (IUniv UShared)
 

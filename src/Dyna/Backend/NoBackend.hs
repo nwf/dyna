@@ -51,11 +51,11 @@ driver _ _ {-_-} _ _ fh = hPutStrLn fh "No backend selected; stopping."
 -- Primitive operations                                                 {{{
 
 data PrimOp = PO
-            { po_qm :: QMode (NIX DFunct)
+            { po_qm :: QMode (NIX Bool DFunct)
             , po_bs :: forall e . Doc e
             }
 
-primOps :: DFunctAr -> Maybe [QMode (NIX DFunct)] -- XXX ,UMode
+primOps :: DFunctAr -> Maybe [QMode (NIX Bool DFunct)] -- XXX ,UMode
 primOps = go
  where
   go ("-"    ,1) = Just   [miaod 1 Det     ]
@@ -96,7 +96,7 @@ primOps = go
 primPossible :: (DFunct,[ModedVar],ModedVar) -> Either Bool (BackendAction ())
 primPossible (f,mvis,mvo) = maybe (Left False) go $ primOps (f,length mvis)
  where
-  go :: [QMode (NIX DFunct)] -> Either Bool (BackendAction ())
+  go :: [QMode (NIX Bool DFunct)] -> Either Bool (BackendAction ())
   go [] = Left True
   go (x:xs) = -- XT.traceShow ("PRIMPOSS",mvis,mvo,x) $
               if and (zipWithTails nSub p p qim pim)
@@ -118,11 +118,11 @@ primPossible (f,mvis,mvo) = maybe (Left False) go $ primOps (f,length mvis)
 ------------------------------------------------------------------------}}}
 -- Utility constructs                                                   {{{
 
-nuniv, nfree :: NIX DFunct
+nuniv, nfree :: NIX Bool DFunct
 nuniv = nHide (IUniv UShared)
 nfree = nHide (IFree False)
 
-nnIn, nnOut :: (NIX DFunct, NIX DFunct)
+nnIn, nnOut :: (NIX Bool DFunct, NIX Bool DFunct)
 nnIn  = (nuniv, nuniv)
 nnOut = (nfree, nuniv)
 

@@ -457,10 +457,7 @@ instName = bsf $ ident instDeclNameStyle
 
 parseInst :: (Monad m, TokenParsing m) => m ParsedInst
 parseInst = choice [ PIVar <$> var
-                        -- XXX Parse "free" as an aliased free inst since
-                        -- the only thing we do with them are make calls.
-                        -- That's probably not right, going forward.
-                   , symbol "free"   *> pure (PIInst (IFree True))
+                   , symbol "free"   *> pure (PIInst (IFree ()))
                    , symbol "any"    *> (PIInst . IAny  <$> optUniq)
                    , symbol "ground" *> (PIInst . IUniv <$> optUniq)
                    , symbol "bound"  *> (optBUniq >>= boundinst)

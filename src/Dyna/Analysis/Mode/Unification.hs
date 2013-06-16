@@ -21,10 +21,8 @@ data UnifFail =
     UFSemiClob
       -- ^ see 'semidet_clobbered_unify'
 
-  | UFFreeFree Bool
+  | UFFreeFree
       -- ^ Unification attempted an impossible free/free unification.
-      --
-      -- The boolean carries the aliasing flag from the error.
 
   | UFExDomain String
       -- ^ A partial function was applied outside its domain
@@ -86,7 +84,7 @@ $(makeLenses ''UnifParams)
 -- by the insts we are given, which makes this test wider, and therefore the
 -- set of unifications we will accept smaller.
 --
-semidet_clobbered_unify :: (Monad m) => InstF f i -> InstF f i' -> m Bool
+semidet_clobbered_unify :: (Monad m) => InstF fr f i -> InstF fr f i' -> m Bool
 semidet_clobbered_unify i i' = return $
      (not $ iIsFree i)
   && (not $ iIsFree i')
@@ -95,8 +93,9 @@ semidet_clobbered_unify i i' = return $
     -- The above fromJust calls are safe due to the 'iIsFree' guards.
 {-# INLINABLE semidet_clobbered_unify #-}
 
-iLeqGLBRD_,iLeqGLBRL_ :: (Monad m, Ord f)
-                      => TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o)))
+iLeqGLBRD_,iLeqGLBRL_ :: (Monad m, Ord fr, Ord f)
+                      => TyILeqGLB_ f fr m i i' o
+                         (m (Either UnifFail (InstF fr f o)))
 iLeqGLBRD_ il ir ml mr m u i1 i2 = do
     io <- iLeqGLB_ il ir ml mr m u i1 i2
     return $ if iIsNotReached io
@@ -112,7 +111,7 @@ iLeqGLBRL_ il ir ml mr m u i1 i2 = do
     if scu
      then return (Left UFSemiClob)
      else case (i1,i2) of
-            (IFree a, IFree b) | a == b -> return (Left $ UFFreeFree a)
+            (IFree a, IFree b) | a == b -> return (Left UFFreeFree)
             _                           -> iLeqGLBRD_ il ir ml mr m u i1 i2
 {-# INLINABLE iLeqGLBRL_ #-}
 

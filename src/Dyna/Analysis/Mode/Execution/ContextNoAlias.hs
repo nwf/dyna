@@ -69,23 +69,23 @@ data VR f n =
   -- | Defined named inst (unaliased)
     VRName   n
   -- | Unaliased structure
-  | VRStruct (InstF f (VR f n))
+  | VRStruct (InstF Bool f (VR f n))
  deriving (Eq,Ord,Show)
 
 instance (PP.Pretty f, PP.Pretty n) => PP.Pretty (VR f n) where
   pretty (VRName n)   = PP.pretty n
-  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+  pretty (VRStruct y) = IP.compactly IP.compactFreeFlag PP.pretty PP.pretty y
 
 {-
 -- This is used during rule analysis to capture the state of the binding
 -- chart into the generated DOpAMine.
 --
--- XXX Ick.  We should probably try to generate one NIX, not a cluster of
+-- XXX Ick.  We should probably try to generate one NIX Bool, not a cluster of
 -- them, but...  This is going to be replaced with the thesis's more general
 -- 'extract' anyway.
-vrToNIX :: (Show f) => VR f (NIX f) -> NIX f
-vrToNIX (VRName n) = n
-vrToNIX (VRStruct i) = nHide $ fmap vrToNIX i
+vrToNIX Bool :: (Show f) => VR f (NIX Bool f) -> NIX Bool f
+vrToNIX Bool (VRName n) = n
+vrToNIX Bool (VRStruct i) = nHide $ fmap vrToNIX Bool i
 -}
 
 ------------------------------------------------------------------------}}}
@@ -93,7 +93,7 @@ vrToNIX (VRStruct i) = nHide $ fmap vrToNIX i
 -- Context : Basics                                                     {{{
 
 -- | Simplistic InstMap Context
-data SIMCtx f = SIMCtx { _simctx_map_v    :: M.Map DVar (VR f (NIX f))
+data SIMCtx f = SIMCtx { _simctx_map_v    :: M.Map DVar (VR f (NIX Bool f))
                        }
  deriving (Show)
 $(makeLenses ''SIMCtx)
@@ -131,7 +131,7 @@ emptySIMCtx = SIMCtx M.empty
 allFreeSIMCtx :: [DVar] -> SIMCtx f
 allFreeSIMCtx fs = SIMCtx $ M.fromList $ map (\x -> (x, VRStruct $ IFree False)) fs
 
-ctxFromBindings :: [(DVar, NIX f)] -> SIMCtx f
+ctxFromBindings :: [(DVar, NIX Bool f)] -> SIMCtx f
 ctxFromBindings = SIMCtx . M.fromList . map (second VRName)
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
@@ -142,7 +142,7 @@ runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
 
 user_lookup :: (MonadState (SIMCtx f) m, Show f)
             => DVar
-            -> m (VR f (NIX f))
+            -> m (VR f (NIX Bool f))
 user_lookup v = do
     m <- use simctx_map_v
     r <- maybe (error $ "User variable context miss: " ++ (show v))
@@ -151,7 +151,7 @@ user_lookup v = do
     -- XT.traceShow ("VL",v,r) $ return ()
     return r
 
-type instance MCVT (SIMCT m f) DVar = VR f (NIX f)
+type instance MCVT (SIMCT m f) DVar = VR f (NIX Bool f)
 
 instance (Show f, Monad m) => MCR (SIMCT m f) DVar where
   clookup = SIMCT . user_lookup
@@ -204,15 +204,15 @@ instance (MCW (SIMCT m f) k) => MCW (CMTR.ReaderT r (SIMCT m f)) k where
 -- of them.  Despite the proliferation, much of the implementation is
 -- type-directed, so it's not so bad.
 --
---   * @N@ -- 'NIX' f
+--   * @N@ -- 'NIX Bool' f
 --
---   * @I@ -- @'InstF' f ('NIX' f)@
+--   * @I@ -- @'InstF Bool' f ('NIX Bool' f)@
 --
 --   * @V@ -- 'VV'
 --
---   * @X@ -- 'VR' f 'NIX'
+--   * @X@ -- 'VR' f 'NIX Bool'
 --
---   * @Y@ -- @InstF f (VR f 'NIX')@
+--   * @Y@ -- @InstF Bool f (VR f 'NIX Bool')@
 
 ------------------------------------------------------------------------}}}
 ------------------------------------------------------------------------}}}

@@ -98,7 +98,7 @@ data BackendAction fbs = BAct
                           { bact_dop     :: Actions fbs
 
                           -- XXX Does not support aliasing
-                          , bact_outmode :: [(DVar,NIX DFunct)]
+                          , bact_outmode :: [(DVar,NIX Bool DFunct)]
                           }
  deriving (Show)
 
@@ -139,8 +139,8 @@ mapMaybeModeCompat mis mo =
 -- XXX There is nothing good about this.
 fgn :: forall a m k .
        (Monad m, Functor m,
-        MCVT m k    ~ ENKRI DFunct (NIX DFunct) k, MCR m k,
-        MCVT m DVar ~ VR DFunct (NIX DFunct) k, MCR m DVar)
+        MCVT m k    ~ ENKRI DFunct (NIX Bool DFunct) k, MCR m k,
+        MCVT m DVar ~ VR DFunct (NIX Bool DFunct) k, MCR m DVar)
     => DVar -> m a -> m a -> m a -> m a
 fgn v cf cg cn = do
   ff <- liftM (iIsFree . nExpose) $ expandV v

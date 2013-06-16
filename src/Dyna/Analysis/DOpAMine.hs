@@ -22,8 +22,8 @@ import           Text.PrettyPrint.Free
 
 data ModedVar = MV
               { _mv_var :: DVar
-              , _mv_mi  :: NIX DFunct
-              , _mv_mo  :: NIX DFunct
+              , _mv_mi  :: NIX Bool DFunct
+              , _mv_mo  :: NIX Bool DFunct
               }
  deriving (Show)
 $(makeLenses ''ModedVar)
@@ -61,7 +61,7 @@ data DOpAMine bscg =
               -- The Right case here does not carry a full ModedVar,
               -- as the mode of the output variable is sufficient (we are
               -- doing unification, after all), just the input binding state.
-                OPUnif     ModedVar    (Either TBase (DVar,NIX DFunct)) Det
+                OPUnif     ModedVar    (Either TBase (DVar,NIX Bool DFunct)) Det
 
               -- | Check that two dvars are not equal.  This is used to
               -- prevent double-counting of hyper-edges when any of their

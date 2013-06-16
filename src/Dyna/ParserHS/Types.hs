@@ -93,7 +93,7 @@ data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
 
 -- | The type of a parsed inst declaration
 data ParsedInst = PIVar   !B.ByteString
-                | PIInst  !(InstF DFunct ParsedInst)
+                | PIInst  !(InstF () DFunct ParsedInst)
  deriving (Eq,Show)
 
 type ParsedModeInst = Either NameWithArgs ParsedInst
