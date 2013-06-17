@@ -1,3 +1,23 @@
 % CKY-like parsing
-phrase(X,I,K) += phrase(Y,I,K) * rewrite(X,Y).
-phrase(X,I,K) += phrase(Y,I,J) * phrase(Z,J,K) * rewrite(X,Y,Z).
+phrase(X,I,K) min=
+  t(A,B) is phrase(Y,I,K),
+  &t(A + rewrite(X,Y), &e(X, B)).
+
+phrase(X,I,K) min=
+  t(YV,YB) is phrase(Y,I,J),
+  t(ZV,ZB) is phrase(Z,J,K),
+  &t(YV + ZV + rewrite(X,Y,Z),
+     &e(X,YB,ZB)).
+
+phrase(W,I,I+1) min= word(W,I), &t(0.0, W).
+
+% sentence
+% "Papa at the caviar with the spoon ."
+word(  "Papa", 0).
+word(   "ate", 1).
+word(   "the", 2).
+word("caviar", 3).
+word(  "with", 4).
+word(     "a", 5).
+word( "spoon", 6).
+word(     ".", 7).

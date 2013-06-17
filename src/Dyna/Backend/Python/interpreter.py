@@ -4,6 +4,9 @@
 TODO
 ====
 
+ - More info in crash handler. (stack trace, repl transcript, cmd-line args,
+   version control info, and dyna source is enough)
+
  - call pre/post-processors from repl.
 
  - vbench: a script which tracks performace over time (= git commits).
@@ -173,12 +176,13 @@ from time import time
 
 from chart import Chart, Term, _repr
 from defn import aggregator
-from utils import ip, red, green, blue, magenta, yellow, \
-    notimplemented, parse_attrs, ddict, dynac, enable_crash_handler, \
-    DynaCompilerError, DynaInitializerException
+from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
+    ddict, dynac
+
 from prioritydict import prioritydict
 from config import dotdynadir
-
+from errors import notimplemented, enable_crash_handler, \
+    DynaInitializerException, DynaCompilerError
 
 try:
     from numpy import log, exp, sqrt
@@ -188,6 +192,22 @@ except ImportError:                       # XXX: should probably issue a warning
     from random import random as _random
     def uniform(a=0, b=1):
         return _random() * (b - a) + a
+
+import re
+def split(s, delim='\s+'):
+    return re.split(delim, s)
+
+# used as a work around to bring arbitrary python functions into dyna
+def pycall(name, *args):
+    x = eval(name)(*args)
+    if isinstance(x, list):
+        return todynalist(x)
+    return x
+
+def todynalist(x):
+    if not x:
+        return Term('nil/0', ())
+    return Term('cons/2', (x[0], todynalist(x[1:])))
 
 
 class Rule(object):
@@ -245,7 +265,6 @@ class Interpreter(object):
 
     def __setstate__(self, state):
         ((self.chart, self.agenda, self.error, self.agg_name, self.parser_state), code) = state
-        self.edges = defaultdict(set)
         self.updaters = defaultdict(list)
         self.rules = ddict(Rule)
         self.do(self.dynac_code(code), initialize=False)
@@ -488,7 +507,8 @@ class Interpreter(object):
         for k,v in [('chart', self.chart),
                     ('build', self.build),
                     ('peel', peel),
-                    ('uniform', uniform), ('log', log), ('exp', exp), ('sqrt', sqrt)]:
+                    ('uniform', uniform), ('log', log), ('exp', exp), ('sqrt', sqrt),
+                    ('pycall', pycall)]:
             setattr(env, k, v)
 
         emits = []

@@ -1,7 +1,6 @@
 import re, sys
 from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
-from IPython.core.ultratb import VerboseTB
 from config import dynahome, dotdynadir
 import signal
 from contextlib import contextmanager
@@ -15,76 +14,19 @@ black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
-class DynaCompilerError(Exception):
-    pass
-
-
-#class AggregatorConflict(Exception):
-#    def __init__(self, key, expected, got):
-#        msg = "Aggregator conflict %r was %r trying to set to %r." \
-#            % (key, expected, got)
-#        super(AggregatorConflict, self).__init__(msg)
-
-
-class DynaInitializerException(Exception):
-    def __init__(self, exception, init):
-        msg = '%r in ininitializer for rule\n  %s\n        %s' % \
-            (exception,
-             parse_attrs(init)['Span'],
-             parse_attrs(init)['rule'])
-        super(DynaInitializerException, self).__init__(msg)
-
 
 def dynac(f, out):
     """
     Run compiler on file, ``f``, write results to ``out``. Raises
     ``DynaCompilerError`` on failure.
     """
+    from errors import DynaCompilerError
     p = Popen(['%s/dist/build/dyna/dyna' % dynahome,
                '-B', 'python', '-o', out, f], stdout=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
         raise DynaCompilerError(stderr)
-
-
-def exception_handler(etype, evalue, tb):
-
-    # once for the log file.
-    with file(dotdynadir / 'crash.log', 'wb') as crashreport:
-        h = VerboseTB(color_scheme='Linux',
-                      call_pdb=False,
-                      ostream=crashreport,
-                      long_header=True,
-                      include_vars=True,
-                      check_cache=None)
-        h(etype, evalue, tb)
-
-    # once for the user
-    h = VerboseTB(color_scheme='Linux',
-                  call_pdb=False,
-                  ostream=None,
-                  tb_offset=0,
-                  long_header=False,
-                  include_vars=False,
-                  check_cache=None)
-    h(etype, evalue, tb)
-
-    # TODO: we should package up all relevant state including compiler
-    # version, codegen output, interpreter state (possibly without the
-    # chart -- because it might be too big to email); input to repl.
-    # This should all go into a tarball.
-
-    print 'FATAL ERROR (%s): %s' % (etype.__name__, evalue)
-    print 'Please report this error by emailing bugs@dyna.org. ' \
-        'Please attach the following file %s' % crashreport.name
-
-
-def enable_crash_handler():
-    """
-    Use our custom exception handler for handling uncaught exceptions.
-    """
-    sys.excepthook = exception_handler
 
 
 @contextmanager
@@ -104,11 +46,6 @@ def interrupt_after():
 
     if handler.interrupted:
         raise KeyboardInterrupt
-
-
-
-def notimplemented(*_,**__):
-    raise NotImplementedError
 
 
 class ddict(dict):
@@ -206,76 +143,3 @@ def rule_source(span, src=None):
     else:
         [line] = rlines
         return line[bc-1:ec]
-
-
-if __name__ == '__main__':
-    #rule_source('examples/papa.dyna:4:1-examples/papa.dyna:4:47')
-    import sys
-
-    def t(xs):
-        if isinstance(xs, basestring):
-#            return '"%s"' % xs
-            return xs
-        else:
-            assert len(xs) > 1
-            if len(xs) == 2:
-                [sym, a] = map(t, xs)
-#                return '&t(%s)' % ', '.join(t(x) for x in xs)
-                return [sym, a]
-            elif len(xs) == 3:
-                [sym, a, b] = map(t, xs)
-#                return '&t(%s, %s, %s)' % (sym, a, b)
-                return [sym, a, b]
-            else:
-                [sym, a] = t(xs[0]), t(xs[1])
-                rest = t(['@' + xs[0]] + xs[2:])
-#                return '&t(%s, %s, %s)' % (sym, a, rest)
-                return [sym, a, rest]
-
-
-    def check_binary(x):
-        if isinstance(x, basestring):
-            return True
-        elif len(x) in (2, 3):
-            return all(map(check_binary, x))
-        else:
-            return False
-
-    from cStringIO import StringIO
-
-    def pretty(t, initialindent=0):
-        "Pretty print tree as a tabbified s-expression."
-        f = StringIO()
-        out = f.write
-        def pp(t, indent=initialindent, indentme=True):
-            if indentme:
-                out(' '*indent)
-            if isinstance(t, basestring):                    # base case
-                return out('"%s"' % t)
-            if len(t) == 1:
-                if t[0]:
-                    pp('"%s"' % t[0], indent, indentme)
-                return
-            label, children = t[0], t[1:]
-
-            label = '"%s"' % label
-
-            assert isinstance(label, basestring)
-            out('&t(%s, ' % label)
-            n = len(children)
-            for i, child in enumerate(children):
-                pp(child, indent + len(label) + 5, i != 0)   # first child already indented
-                if i != n-1:                                 # no newline after last child
-                    out(',\n')
-            out(')')
-        pp(t)
-        out('\n')
-        return f.getvalue()
-
-    for i, [x] in enumerate(parse_sexpr(sys.stdin.read())):
-        btree = t(x)
-
-        assert check_binary(btree)
-        print
-        print 'sentence(%s) :=\n%s.' % (i, pretty(btree, 4).rstrip())
-        print

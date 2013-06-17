@@ -1,5 +1,4 @@
 from collections import defaultdict
-from utils import notimplemented
 from defn import aggregator
 from term import Term, _repr
 

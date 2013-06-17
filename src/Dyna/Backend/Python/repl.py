@@ -1,7 +1,8 @@
 import os, cmd, readline
 
 import debug, interpreter
-from utils import DynaCompilerError, DynaInitializerException, ip
+from utils import ip
+from errors import DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
 
@@ -131,3 +132,24 @@ class REPL(cmd.Cmd, object):
             self.cmdloop()
         finally:
             readline.write_history_file(self.hist)
+
+    def do_load(self, cmd):
+        try:
+            self._load(cmd)
+        except:
+            from errors import show_traceback
+            show_traceback()
+
+    def _load(self, cmd):
+        import re
+        print 'cmd:', repr(cmd)
+        [(name, module, args)] = re.findall('^([a-z][a-zA-Z_0-9]*) = ([a-z][a-zA-Z_0-9]*)\((.*)\)', cmd)
+
+        m = __import__(module)
+        m.interp = self.interp
+        m.name = name
+
+        exec 'm.main(%s)' % args
+
+        self.interp.go()
+        self.interp.dump_charts()

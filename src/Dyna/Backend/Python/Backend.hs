@@ -144,6 +144,12 @@ constants = go
   go ("log",1)   = Just $ PDBS $ call "log"
   go ("exp",1)   = Just $ PDBS $ call "exp"
 
+
+
+  go ("pycall", _) = Just $ PDBS $ call "pycall"
+  go ("getattr", 2) = Just $ PDBS $ call "getattr"
+
+
   go ("uniform", _) = Just $ PDBS $ call "uniform"
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="

@@ -1,4 +1,5 @@
-from utils import notimplemented
+from errors import notimplemented
+
 
 # TODO: codegen should output a derived Term instance for each functor
 class Term(object):
