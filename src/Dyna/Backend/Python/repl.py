@@ -139,7 +139,6 @@ class REPL(cmd.Cmd, object):
 
     def _load(self, cmd):
         import re
-        print 'cmd:', repr(cmd)
         [(name, module, args)] = re.findall('^([a-z][a-zA-Z_0-9]*) = ([a-z][a-zA-Z_0-9]*)\((.*)\)', cmd)
 
         m = __import__(module)
