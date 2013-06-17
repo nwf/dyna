@@ -30,9 +30,6 @@ class REPL(cmd.Cmd, object):
     def do_retract_rule(self, idx):
         self.interp.retract_rule(int(idx))
 
-#    def do_retract_item(self, item):
-#       self.interp.retract_item(item)
-
     def do_exit(self, _):
         readline.write_history_file(self.hist)
         return -1
