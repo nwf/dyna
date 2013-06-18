@@ -130,9 +130,10 @@ nnOut = (nfree, nuniv)
 miaod ar = QMode (replicate ar nnIn) nnOut
 
 -- | One-Place INVersion
-opinvd ar d = fmap (\x -> QMode x nnIn d) (go [] ar)
- where
-  go _   0 = []
-  go sfx n = (replicate n nnOut ++ sfx) : go (nnIn:sfx) (n-1)
+opinvd ar d = map (\x -> QMode x nnIn d)
+            $ map (\n ->    (replicate (n-1) nnIn)
+                         ++ nnOut
+                          : (replicate (ar-n) nnIn))
+                  [1..ar]
 
 ------------------------------------------------------------------------}}}

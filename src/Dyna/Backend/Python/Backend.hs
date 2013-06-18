@@ -72,8 +72,10 @@ nfree = nHide IFree
 nuniv = nHide (IUniv UShared)
 
 isGround, isFree :: ModedVar -> Bool
-isGround v = nGround (v^.mv_mi)
-isFree v = nSub (v^.mv_mi) nfree
+-- | Note that isGround here is not quite the same as 'nGround': we do not
+-- accept clobbered parameters.
+isGround v = (v^.mv_mi) `nSub` nuniv
+isFree v   = (v^.mv_mi) `nSub` nfree
 
 builtins :: BackendPossible PyDopeBS
 builtins (f,is,o) = case () of
@@ -200,11 +202,11 @@ tupledOrUnderscore vs = parens ((sepBy "," $ map pretty vs) <> ",")
 
 pslice :: [ModedVar] -> Doc e
 pslice vs = brackets $
-       sepBy "," (map (\x -> if nGround (x^.mv_mi) then pretty (x^.mv_var) else ":") vs)
+       sepBy "," (map (\x -> if isGround x then pretty (x^.mv_var) else ":") vs)
        <> "," -- add a comma to ensure getitem is always passed a tuple.
 
 ground2underscore :: ModedVar -> Doc e
-ground2underscore x = if nGround (x^.mv_mi) then "_" else pretty (x^.mv_var)
+ground2underscore x = if isGround x then "_" else pretty (x^.mv_var)
 
 piterate :: [ModedVar] -> Doc e
 piterate vs = if length vs == 0 then "_"

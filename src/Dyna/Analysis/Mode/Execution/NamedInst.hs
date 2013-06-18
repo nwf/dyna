@@ -23,13 +23,15 @@ module Dyna.Analysis.Mode.Execution.NamedInst (
     -- ** Well-formedness predicates
     nWellFormedUniq, nWellFormedOC,
     -- ** Inquiries
-    nAllNotEmpty, nSomeNotEmpty, nGround, nUpUniq,
+    nAllNotEmpty, nSomeNotEmpty, nGround,
     -- ** Construction
     nHide, nShallow, nDeep,
     -- ** Destruction
     nExpose, 
     -- ** Internals
     nPrune,
+    -- ** Rewrites
+    nUpUniq,
     -- * Binary comparators
     nCmp, nEq, nLeq, nSub,
     -- * Total binary functions
@@ -201,14 +203,14 @@ nWellFormedOC n0 = evalStateT (go n0) H.empty
             (eml n0 (lift . go) (visit q) m a >> return True)
 
 -- | Is a named inst ground?
+--
+-- Note that 'ground' here means 'ground' like the thesis means ground
+-- (see def 3.2.17, p52), which includes everything from UUnique to
+-- UClobbered.  This may not be what you mean.
 nGround :: forall f . NIX f -> Bool
 nGround n0@(NIX i0 m) = evalState (iGround_ q i0) S.empty
  where
   q a = tsc id a $ eml n0 (return . nGround) (iGround_ q) m a
-  {-
-  q (Left a)  = return $ nGround a 
-  q (Right a) = tsc id a $ ml n0 m a >>= iGround_ q
-  -}
 
 -- | Is there some term not ruled out by this inst?
 --

@@ -224,9 +224,12 @@ iIsNotReached _                  = False
 
 -- | Is an instantiation ground?
 --
--- Surrogate for definition 3.2.17, p52
+-- Surrogate for definition 3.2.17, p52.
+--
+-- Note that 'ground' terms include UClobbered terms; this may not be what
+-- you meant.
 iGround_ :: (Monad m) => (i -> m Bool) -> InstF f i -> m Bool
-iGround_ q (IBound UUnique b _) = mfmamm q b
+iGround_ q (IBound _ b _) = mfmamm q b
 iGround_ _ (IUniv _) = return True
 iGround_ _ _ = return False
 {-# INLINABLE iGround_ #-}

@@ -147,6 +147,17 @@ prop_nSubGLB_is_G i1 i2 i3 = nWFU i1 && nWFU i2 && nWFU i3
 --                                 (\i -> property $ i1 `nSub` i && i2 `nSub` i)
 --                           $ nSubLUB i1 i2
 
+-- | Check that nGround and (`nLeq` $ nHide $ IUniv UUnique) are the same
+-- function.  The former is defined inductively and is therefore probably
+-- faster.
+prop_nGround_nLeq_IUniv :: NIX TestFunct -> QCP.Property
+prop_nGround_nLeq_IUniv i1 = nGround i1 QCP.==> (i1 `nLeq` niu)
+
+prop_nLeq_IUniv_nGround :: NIX TestFunct -> QCP.Property
+prop_nLeq_IUniv_nGround i1 = (i1 `nLeq` niu) QCP.==> nGround i1
+
+niu = nHide (IUniv UUnique)
+
 -- | When we enact a call, the rules (figure 3.13, p45; see also 'doCall')
 -- tell us that we first check that the incoming variables are all ⊑ the
 -- input half of the mode, then unify the input variables with the output
