@@ -17,6 +17,7 @@ import           Control.Applicative ((<*))
 import           Control.Exception
 -- import           Control.Monad
 import qualified Data.ByteString.UTF8         as BU
+import           Data.Either
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
 -- import qualified Data.Set                     as S
@@ -48,6 +49,7 @@ data DumpType = DumpAgg
               | DumpANF
               | DumpDopIni
               | DumpDopUpd
+              | DumpFailedPlans
               | DumpParsed
  deriving (Eq,Ord,Show)
 
@@ -79,6 +81,7 @@ dumpOpts nos =
   ++ mkDumpOpt "anf"    DumpANF     "Administrative Normal Form"
   ++ mkDumpOpt "dopini" DumpDopIni  "DOpAMine planning results: initializers"
   ++ mkDumpOpt "dopupd" DumpDopUpd  "DOpAMine planning results: updates"
+  ++ mkDumpOpt "failed-plans" DumpFailedPlans "Planner failures"
   ++ mkDumpOpt "parse"  DumpParsed  "Parser output"
  where
   mkDumpOpt arg fl hm =
@@ -154,7 +157,7 @@ quickExit QEHelp = do
              ++ "There are known inefficiencies and less-than-ideal code.\n"
              ++ "We hope that you enjoy using it despite these woes! :)"
 
-  h = "\nUsage: dyna -B backend -o FILE.out FILE.dyna\n\nOption summary:"
+  h = "\nUsage: dyna -B backend [-o FILE.out] FILE.dyna\n\nOption summary:"
 quickExit QEHelpBackend = do
   qeBanner "Backend information"
   putDoc backendHelp
@@ -278,6 +281,18 @@ renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
     <+> text "head=" <> pretty (r_head r)
     <+> text "res=" <> pretty (r_result r)
 
+renderFailedInit rd (r,ps) =
+       text ";; failed initialization attempts for"
+  <//> (prettySpanLoc $ r_span r)
+  <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
+
+renderFailedUpdate rd (r,i,ps) =
+       text ";; failed update plans for"
+  <//> (prettySpanLoc $ r_span r)
+  <+>  (text "evalix=" <> pretty i)
+  <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
+
+
 ------------------------------------------------------------------------}}}
 -- Warnings                                                             {{{
 
@@ -306,7 +321,7 @@ processFile fileName = bracket openOut hClose go
    
     let (frs, anfWarns) = unzip $ map normRule rs
 
-    dump DumpANF (vcat $ map printANF frs)
+    dump DumpANF (vcat $ map renderANF frs)
 
     hPutDoc stderr $ vcat $ MA.mapMaybe maybeWarnANF anfWarns
 
@@ -318,14 +333,17 @@ processFile fileName = bracket openOut hClose go
 
     case dcfg_backend ?dcfg of
       Backend _ be_b be_c be_ddi be_d ->
-        let initializers = MA.mapMaybe
-                             (\(f,mca) -> (\(c,a) -> (f,c,a)) `fmap` mca)
-                           $ map (\x -> (x, planInitializer be_b x)) frs
-   
+        let
+            initializers = map (\(f,mca) -> either (\e -> Left (f,e))
+                                                   (\(c,a) -> Right (f,c,a)) mca)
+                         $ map (\x -> (x, planInitializer be_b x)) frs
+
+            cInitializers = rights initializers
   
-            uPlans = combineUpdatePlans
-                     $ map (\x -> (x, planEachEval be_b be_c x))
-                           frs
+            uPlans = map (\x -> (x, planEachEval be_b be_c x))
+                         frs
+
+            cuPlans = combineUpdatePlans uPlans
 
 {-
             qPlans = combineQueryPlans
@@ -334,16 +352,38 @@ processFile fileName = bracket openOut hClose go
 -}
 
         in do
+            -- Do this before forcing cInitializers, cuPlans, etc.,
+            -- as those will panic and stop the pipeline.
+            dump DumpFailedPlans $
+              vcat [ vcat $ map (renderFailedInit (renderDop be_ddi))
+                          $ lefts initializers
+                   , let
+                       shuffle (r,ips) = map sgo ips
+                        where
+                         sgo (i,Left e) = Left (r,i,e)
+                         sgo (_,Right _) = Right ()
+                     in vcat $ map (renderFailedUpdate (renderDop be_ddi))
+                             $ lefts
+                             $ concat
+                             $ map shuffle uPlans
+                   ]
+
             -- Force evaluation of a lot of the work of the compiler,
             -- even if the backend and dump flags won't do it for us.
-            initializers' <- evaluate $ initializers
-            uPlans'       <- evaluate $ uPlans
+            cInitializers' <- evaluate $ cInitializers
+            cuPlans'      <- evaluate $ cuPlans
 
-            dump DumpDopIni (renderDopInis be_ddi initializers')
-            dump DumpDopUpd (renderDopUpds be_ddi uPlans')
+            case lefts initializers of
+              [] -> return ()
+              xs -> dynacUserErr $ "Unable to plan initializers for rule(s):"
+                               <//> (indent 2 $ vcat $
+                                     map (prettySpanLoc . r_span . fst) xs)
+
+            dump DumpDopIni (renderDopInis be_ddi cInitializers')
+            dump DumpDopUpd (renderDopUpds be_ddi cuPlans')
 
             -- Invoke the backend code generator
-            be_d aggm uPlans' {- qPlans -} initializers' pp out
+            be_d aggm cuPlans' {- qPlans -} cInitializers' pp out
 
   parse aggs = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName

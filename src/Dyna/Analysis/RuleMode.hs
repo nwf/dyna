@@ -161,6 +161,8 @@ possible fp cr =
     -- unification crank out a series of DOpAMine opcodes for us, but for
     -- the moment, since everything we do is either IFree or IUniv, just use
     -- iEq everywhere.
+    --
+    -- XXX Rescue the new planner from plan-nonground, when convenient.
 
     -- XXX Actually, this is all worse than it should be.  The unification
     -- should be done before any case analysis.  Note that we also don't do
@@ -291,7 +293,6 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 ------------------------------------------------------------------------}}}
 -- Planning                                                             {{{
 
-
 data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
                           , pp_binds          :: BindChart
                           , pp_score          :: Cost
@@ -300,6 +301,14 @@ data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
 
 pp_liveVars :: PartialPlan fbs -> S.Set DVar
 pp_liveVars p = allCruxVars (pp_cruxes p)
+
+-- XXX This certainly belongs elsewhere
+renderPartialPlan rd (PP crs bs c pl) =
+  vcat [ text "cost=" <> pretty c
+       , text "pendingCruxes:" <//> indent 2 (renderCruxes crs)
+       , text "context:" <//> indent 2 (pretty bs)
+       , text "actions:" <//> indent 2 (rd pl)
+       ]
 
 -- XXX This does not have a way to signal UFNotReached back to its caller.
 -- That is particularly disappointing since any unification producing that
@@ -343,7 +352,8 @@ stepPartialPlan poss score p =
                             plan
                 ) []
 
-planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
+planner_ :: forall fbs .
+            (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Available steps
          -> (PartialPlan fbs -> Actions fbs -> Cost)
          -- ^ Scoring function
@@ -356,7 +366,7 @@ planner_ :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
          -> SIMCtx DVar
          -- ^ Initial context (which must cover all the variables
          -- in the given cruxes)
-         -> [(Cost, Actions fbs)]
+         -> Either [PartialPlan fbs] [(Cost, Actions fbs)]
          -- ^ Plans and their costs
 planner_ st sc cr mic ictx = runAgenda
    $ PP { pp_cruxes = cr
@@ -365,18 +375,32 @@ planner_ st sc cr mic ictx = runAgenda
         , pp_plan   = ip
         }
  where
-  runAgenda = go . (flip mioaPlan M.empty)
+  runAgenda = goMF [] . (flip mioaPlan M.empty)
    where
     mioaPlan :: PartialPlan fbs
              -> M.Map Cost [PartialPlan fbs]
              -> M.Map Cost [PartialPlan fbs]
     mioaPlan p@(PP{pp_score=psc}) = mapInOrCons psc p
 
-    go pq = maybe [] go' $ mapMinRepView pq
+    goMF fs pq = maybe (Left fs) (go' goMFkf (\df pq' -> Right (df:go pq')))
+               $ mapMinRepView pq
      where
-      go' (p, pq') = case stepPartialPlan st sc p of
-                       Left df -> df : (go pq')
-                       Right ps' -> go (foldr mioaPlan pq' ps')
+      goMFkf Nothing  = goMF fs
+      goMFkf (Just p) = goMF (p:fs)
+
+    go :: M.Map Cost [PartialPlan fbs]
+       -> [(Cost, Actions fbs)]
+    go pq = maybe [] (go' (\_ -> go) (\df -> (df :) . go))
+          $ mapMinRepView pq
+
+    go' :: (Maybe (PartialPlan fbs) -> M.Map Cost [PartialPlan fbs] -> x)
+        -> ((Cost,Actions fbs) -> M.Map Cost [PartialPlan fbs] -> x)
+        -> (PartialPlan fbs, M.Map Cost [PartialPlan fbs])
+        -> x
+    go' kf ks (p, pq') = case stepPartialPlan st sc p of
+                           Right []  -> kf (Just p) pq'
+                           Left df   -> ks df pq'
+                           Right ps' -> kf Nothing (foldr mioaPlan pq' ps')
 
   ctx' = either (const $ dynacPanicStr "Unable to bind input variable")
                 snd
@@ -399,9 +423,11 @@ planner_ st sc cr mic ictx = runAgenda
 -- considering at most a constant number of plans.
 --
 -- XXX This is probably not the right idea
-bestPlan :: [(Cost, a)] -> Maybe (Cost, a)
-bestPlan []    = Nothing
-bestPlan plans = Just $ argmin fst (take 1000 plans)
+bestPlan :: Either e [(Cost, a)] -> Either e (Cost, a)
+bestPlan = fmap go
+ where
+  go []          = dynacPanic "Planner claimed success with no plans!"
+  go plans@(_:_) = argmin fst (take 1000 plans)
 
 -- | Add the last Emit verb to a string of actions from the planner.
 --
@@ -422,11 +448,12 @@ planUpdate :: BackendPossible fbs
            -> S.Set (Crux DVar TBase)                     -- ^ Normal form
            -> (EvalCrux DVar, DVar, DVar)
            -> SIMCtx DVar
-           -> Maybe (Cost, Actions fbs)
+           -> Either [PartialPlan fbs] (Cost, Actions fbs)
 planUpdate bp r sc anf mi ictx = fmap (second (finalizePlan r)) $
   bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
 
-planInitializer :: BackendPossible fbs -> Rule -> Maybe (Cost, Actions fbs)
+planInitializer :: BackendPossible fbs -> Rule
+                -> Either [PartialPlan fbs] (Cost, Actions fbs)
 planInitializer bp r = fmap (second (finalizePlan r)) $
   let cruxes = r_cruxes r in
   bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
@@ -494,8 +521,7 @@ handleDoubles vc e r = S.fold (go e) S.empty r
 planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
              -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
              -> Rule
-             -> [(Int, Maybe (Cost, DVar, DVar, Actions fbs))]
--- planEachEval _ _ _ = []
+             -> [(Int, Either [PartialPlan fbs] (Cost, DVar, DVar, Actions fbs))]
 planEachEval bp cs r  =
   map (\(n,cr) ->
           let
@@ -577,7 +603,7 @@ type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
 -- timv: might want to fuse these into one circuit
 --
 combineUpdatePlans :: [(Rule,[( Int,
-                                Maybe (Cost, DVar, DVar, Actions fbs))])]
+                                Either a (Cost, DVar, DVar, Actions fbs))])]
                    -> UpdateEvalMap fbs  
 combineUpdatePlans = go (M.empty)
  where
@@ -587,18 +613,18 @@ combineUpdatePlans = go (M.empty)
   go' xs _  []           m = go m xs
   go' xs fr ((n,mca):ys) m =
     case mca of
-      Nothing -> dynacUserErr
+      Left _ -> dynacUserErr
                        $ "No update plan for"
                           <+> maybe "indirection"
                                     (\(f,a) -> pretty f <> char '/' <> pretty a)
                                     fa
                           <+> "in rule at"
                           <> line <> indent 2 (prettySpanLoc $ r_span fr)
-      Just (c,v1,v2,a) -> go' xs fr ys $ mapInOrCons fa (fr,n,c,v1,v2,a) m
+      Right (c,v1,v2,a) -> go' xs fr ys $ mapInOrCons fa (fr,n,c,v1,v2,a) m
    where
     fa = evalCruxFA ev
-    ev = maybe (dynacPanic $ "Eval index without eval crux in rule "
-                             <+> (printANF fr))
+    ev = maybe (dynacPanic $ "Eval index without eval crux in rule:"
+                             <//> (renderANF fr))
                id
                (IM.lookup n (r_ecruxes fr))
 
