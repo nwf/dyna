@@ -4,10 +4,11 @@
 
 -- Header material                                                      {{{
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Dyna.Backend.Python.Selftest where
 
-import           Control.Exception (throw)
+import           Control.Exception (handle,throw)
 import qualified Dyna.Backend.Python.Backend         as DP
 import qualified Dyna.Main.Driver                    as D
 import           System.Directory (removeFile)
@@ -23,11 +24,11 @@ import           Test.Golden
 ------------------------------------------------------------------------}}}
 -- Run Backend                                                          {{{
 
--- XXX There's something wrong here -- if we encounter an ExitFailure and
--- throw an exception, we fail to fail the test or even time out.  This
--- might be my fault, or it might be upstream.
 runDynaPy :: FilePath -> FilePath -> FilePath -> IO ()
-runDynaPy f pl out = do
+
+-- XXX this 'handle' thing is pretty hackish, but it does stop us from
+-- breaking the test harness.
+runDynaPy f pl out = handle (\(_ :: ExitCode) -> return ()) $ do
   _ <- tryIOError $ removeFile pl
   _ <- tryIOError $ removeFile out
 
