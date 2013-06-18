@@ -63,10 +63,6 @@ import           Dyna.XXX.Trifecta (prettySpanLoc)
 -- import           Dyna.XXX.TrifectaTest
 import           Text.PrettyPrint.Free
 
--- XXX Aaaaany second now
--- import           Dyna.Analysis.Mode.Execution.Base
--- import           Dyna.Analysis.Mode.Execution.Functions
-
 ------------------------------------------------------------------------}}}
 -- Bindings                                                             {{{
 

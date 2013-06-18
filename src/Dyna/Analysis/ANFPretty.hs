@@ -1,4 +1,7 @@
+---------------------------------------------------------------------------
+-- | Pretty-printer for ANF
 
+-- Header material                                                      {{{
 module Dyna.Analysis.ANFPretty (renderANF, renderCruxes) where
 
 import           Data.Either

@@ -3,8 +3,7 @@
 % binary rules
 rewrite(X, Y, Z) :=
     rules_tsv(Linenum, Cost, X, R),
-    List is pycall("split", R, "\\s+"),
-    cons(Y, &cons(Z, &nil)) is List,
+    cons(Y, &cons(Z, &nil)) is pycall("split", R, "\\s+"),
     pycall("float", Cost).
 
 % load unary rules

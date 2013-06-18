@@ -13,5 +13,7 @@ examples/*.out
 docs/sphinx/_build
 
 test/*/*.out
+test/*/*.plan
+test/*/*.plan.py
 
 libpeerconnection.log

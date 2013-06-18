@@ -25,8 +25,12 @@ test tests: build
 .PHONY: clean veryclean
 clean:
 	rm -rf examples/*.dyna.*.plan  \
+           examples/*.dyna.*.planc \
+           examples/*.dyna.plan.py \
+           examples/*.dyna.plan.pyc \
            examples/*.dyna.*.out \
-           examples/*.dyna.d
+           examples/*.dyna.d \
+           examples/*.hist
 	rm -rf test/*/*.out
 	rm -f tags TAGS
 veryclean: clean

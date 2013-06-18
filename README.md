@@ -27,7 +27,7 @@ You'll want to have the following programs installed:
 
 The python modules required
 
-    $ easy_install numpy ipython pygments path.py
+    $ easy_install numpy ipython pygments path.py matplotlib
 
 You should probably run
 
