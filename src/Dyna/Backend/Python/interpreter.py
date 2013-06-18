@@ -23,20 +23,16 @@ TODO
 
  - doc tests for Dyna code.
 
- - think about indices as memoized queries
-
- - let Dyna do some of the work for you. think about using Dyna to maintain
-   rules and update handlers.
+ - Use Dyna do some more work! think about using Dyna to maintain rules, update
+   handlers, and indices (as Jason points out indices are just memoized
+   queries).
 
  - magic templates transform for backward chaining, for example:
 
    :- sigmoid(X) := needs(X), 1 / (1 + exp(-X)).
    :- needs(0.5).
 
- - operator for getattr (this will generate slightly different code because we
-   don't want to look up by string -- i.e. call the getattr builtin).
-
- - hook for python imports?
+ - hook for python imports? or maybe an arbirary preamble/epilogue.
 
    :- python: from numpy import exp, sqrt, log
 
@@ -58,16 +54,17 @@ BUGS
 FASTER
 ======
 
- - specialize calls to emit, don't build the big dictionaries if the aggregator
-   doesn't use them. Consider generate both version (or an argument to the
-   update handler which will skip the appropriate code paths).
+ - specialize calls to emit: don't build the local variable dictionaries if the
+   aggregator doesn't use them. Consider generate both versions (or an argument
+   to the update handler which will skip the appropriate code paths).
 
  - faster charts (dynamic argument types? jason's trie data structure)
 
  - teach planner to prefer not to use the value column, because it's not
    indexed.
 
- - Consider indexing value column if plans will need it.
+ - Collect all query modes use by the planner. Consider indexing value column if
+   plans need it.
 
  - dynac should provide routines for building terms. We can hack something
    together with anf output, but this will be prety kludgy and inefficient.
@@ -173,6 +170,9 @@ import os, sys, imp, argparse
 from collections import defaultdict
 from hashlib import sha1
 from time import time
+
+import load, post
+
 
 from chart import Chart, Term, _repr
 from defn import aggregator
@@ -596,28 +596,23 @@ def peel(fn, item):
 
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source',
-                        help='Path to Dyna source file (or plan if --plan=true).', nargs='?')
+    parser.add_argument('source', nargs='?',
+                        help='Path to Dyna source file (or plan if --plan=true).')
     parser.add_argument('--plan', action='store_true',
                         help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('-i', dest='interactive', action='store_true',
-                        help='Fire-up an IPython shell.')
-    parser.add_argument('-o', dest='output',
+                        help='Fire-up REPL after runing solver..')
+    parser.add_argument('-o', '--output', dest='output',
                         type=argparse.FileType('wb'),
                         help='Output chart.')
-    parser.add_argument('--post-process',
-                        help='run post-processing script.')
+    parser.add_argument('--post-process', nargs='*',
+                        help='run post-processor.')
+    parser.add_argument('--load', nargs='*',
+                        help='run loaders.')
     parser.add_argument('--profile', action='store_true',
                         help='run profiler.')
 
     args = parser.parse_args()
-
-    if args.post_process is not None:
-        try:
-            pp = __import__(args.post_process)
-        except ImportError:
-            print ('ERROR: No postprocessor named %r' % args.post_process)
-            return
 
     interp = Interpreter()
 
@@ -652,14 +647,18 @@ def main():
             return
 
         interp.do(plan)
+        interp.dump_charts(args.output)      # should be a post-processor
 
-        interp.dump_charts(args.output)
+    if args.load:
+        for cmd in args.load:
+            load.run(interp, cmd)
+
+    if args.post_process:
+        for cmd in args.post_process:
+            post.run(interp, cmd)
 
     if args.interactive or not args.source:
         interp.repl()
-
-    if args.post_process is not None:
-        pp.main(interp)
 
 
 if __name__ == '__main__':

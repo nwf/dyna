@@ -39,8 +39,8 @@ node(U) := true for edge(_,U).
 pos(U,T) := tuple(x(U, T), y(U, T)).
 
 % visualization
-frame(T, Item) := node(Name), Item is &text(Name, pos(Name, T)).
-frame(T, Item) := edge(U,V), Item is &line(pos(U, T), pos(V, T)).
+frame(T, &text(Name, pos(Name, T))) := true for _ is node(Name).
+frame(T, &line(pos(U, T), pos(V, T))) := true for _ is edge(U,V).
 
 % declare some edges
 edge("a", "b") := 1.

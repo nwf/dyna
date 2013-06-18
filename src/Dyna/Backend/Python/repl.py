@@ -6,6 +6,11 @@ from errors import DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
 
+from errors import show_traceback
+import load, post
+
+from interpreter import Interpreter, foo, none
+
 
 class REPL(cmd.Cmd, object):
 
@@ -116,10 +121,6 @@ class REPL(cmd.Cmd, object):
         print
         self.interp.dump_errors()
 
-    def do_draw_circuit(self, _):
-        import draw_circuit
-        draw_circuit.main(self.interp)
-
     def cmdloop(self, _=None):
         try:
             super(REPL, self).cmdloop()
@@ -130,22 +131,17 @@ class REPL(cmd.Cmd, object):
         finally:
             readline.write_history_file(self.hist)
 
-    def do_load(self, cmd):
+    def do_load(self, line):
         try:
-            self._load(cmd)
+            load.run(self.interp, line)
+            self.interp.dump_charts()
         except:
-            from errors import show_traceback
             show_traceback()
+            readline.write_history_file(self.hist)
 
-    def _load(self, cmd):
-        import re
-        [(name, module, args)] = re.findall('^([a-z][a-zA-Z_0-9]*) = ([a-z][a-zA-Z_0-9]*)\((.*)\)', cmd)
-
-        m = __import__(module)
-        m.interp = self.interp
-        m.name = name
-
-        exec 'm.main(%s)' % args
-
-        self.interp.go()
-        self.interp.dump_charts()
+    def do_post(self, line):
+        try:
+            post.run(self.interp, line)
+        except:
+            show_traceback()
+            readline.write_history_file(self.hist)

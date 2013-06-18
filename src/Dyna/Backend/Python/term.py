@@ -38,11 +38,11 @@ class Term(object):
 
     __add__ = __sub__ = __mul__ = notimplemented
 
-    def subst(self, v):
-        if self in v:
-            return v[self]
-        # TODO: this should go thru the Chart
-        return Term(self.fn, tuple(x if isconst(x) else x.subst(v) for x in self.args))
+#    def subst(self, v):
+#        if self in v:
+#            return v[self]
+#        # TODO: this should go thru the Chart
+#        return Term(self.fn, tuple(x if isconst(x) else x.subst(v) for x in self.args))
 
 
 def _repr(x):
@@ -61,6 +61,7 @@ def _repr(x):
 
 def isconst(x):
     return not isinstance(x, (Variable, Term))
+
 
 
 class Variable(object):
@@ -111,10 +112,10 @@ class Variable(object):
         else:
             return other == self.value
 
-    def subst(self, v):
-        if self in v:
-            return v[self]
-        return self
+#    def subst(self, v):
+#        if self in v:
+#            return v[self]
+#        return self
 
 
 def extend(v, x, t):
@@ -123,7 +124,7 @@ def extend(v, x, t):
     """
     v1 = v.copy()
     v1[x] = t
-    x.value = t
+#    x.value = t
     return v1
 
 
@@ -199,38 +200,44 @@ def symbol(name):
     return Symbol(name)
 
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
+#
+#    [f,g,h] = map(symbol, ['f','g','h'])
+#    vs = [X,Y,Z] = map(symbol, ['X','Y','Z'])
+#
+#    def test(a, b):
+#        for v in vs:
+#            v.value = None
+#
+#        print
+#        print 'unify %s and %s' % (a,b)
+#        s = unify(a, b)
+#        print '->', s
+#        if s is None:
+#            return
+#
+#        # apply new bindings
+#        for v, now in s.iteritems():
+#            print '%s [was: %r, now: %r]' % (v, v.value, now)
+#            v.value = now
+#
+#        print a, b
+#        assert a == b
+#        assert repr(a) == repr(b), [a,b]
+#
+#        for v in vs:
+#            v.value = None
+#
+#    test(f(X), f(g(h(X,Y),X)))
+#    test(f(X), f(g(h(Z),"foo")))
+#    test(f(X, Y), f("cat", 123))
+#    test(f(X), f(X))
+#    test(f(X), f(Y))
+#    test("abc", "abc")
+#
+#    Z.value = 3
+#    Y.value = Z
+#    X.value = Y
+#    print [X,Y,Z]
+#    assert X.value == Y.value == Z.value == 3
 
-    [f,g,h] = map(symbol, ['f','g','h'])
-    vs = [X,Y,Z] = map(symbol, ['X','Y','Z'])
-
-    def test(a, b):
-        for v in vs:
-            v.value = None
-
-        print
-        print 'unify %s and %s' % (a,b)
-        s = unify(a, b)
-        print '->', s
-        if s is None:
-            return
-
-        print a, b
-        assert a == b
-        assert repr(a) == repr(b), [a,b]
-
-        for v in vs:
-            v.value = None
-
-    test(f(X), f(g(h(X,Y),X)))
-    test(f(X), f(g(h(Z),"foo")))
-    test(f(X, Y), f("cat", 123))
-    test(f(X), f(X))
-    test(f(X), f(Y))
-    test("abc", "abc")
-
-    Z.value = 3
-    Y.value = Z
-    X.value = Y
-    print [X,Y,Z]
-    assert X.value == Y.value == Z.value == 3
