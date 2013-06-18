@@ -2,11 +2,13 @@
 *.o
 *.pyc
 *.swp
+*.pyc
 
 dist/
 examples/*.d
 examples/*.hist
 examples/*.plan
+examples/*.planc
 examples/*.plan.py
 examples/*.out
 

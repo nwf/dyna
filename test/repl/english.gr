@@ -1,0 +1,98 @@
+0	S	NP VP
+1.58	ROOT	S .
+1.58	ROOT	S !
+1.58	ROOT	VP !
+3.81	VP	V
+3.81	VP	V NP
+1.49	VP	V VP
+3.81	VP	V NP VP
+3.81	VP	V SBAR
+3.81	VP	V N
+3.81	VP	V Adj
+0	SBAR	that S
+3.7	NP	Det N
+3.7	N	Adj N
+0	PP	P NP
+3.81	VP	VP PP
+3.7	N	N PP
+3.81	VP	Modal VP
+3	Modal	will
+3	Modal	would
+3	Modal	should
+3	Modal	could
+3	Modal	can
+3	Modal	might
+3	Modal	may
+3	Modal	must
+4.09	V	V -ed
+5.09	V	V -ing
+5.09	V	V -s
+5.09	V	V -0
+5.09	V	to V
+4.09	V	have
+4.09	V	had
+5.09	V	having
+5.09	V	has
+5.09	V	be
+5.09	V	was
+5.09	V	were
+5.09	V	been
+5.09	V	being
+5.09	V	is
+5.09	V	are
+5.09	V	go
+5.09	V	sleep
+5.09	V	kiss
+5.09	V	love
+5.09	V	spoon
+4.09	V	eat
+3.5	V	want
+5.09	V	say
+4.09	V	understand
+4.09	V	entice
+3.7	NP	Papa
+3.7	NP	George
+3.7	NP	Laura
+3.7	NP	her
+3.7	NP	she
+3.7	NP	him
+3.7	NP	he
+2.7	NP	it
+3.7	NP	they
+3.7	NP	them
+3.7	N	N -s
+3.7	N	bonbon
+3.7	N	spoon
+3.7	N	president
+3.7	N	pickle
+3.7	N	sandwich
+3.7	N	floor
+3.7	N	chief of staff
+3.7	N	chiefs of staff
+3.7	N	man
+3.7	N	woman
+4.09	Det	a
+4.09	Det	all
+4.09	Det	every
+4.09	Det	each
+4.09	Det	two
+3.09	Det	some
+3.09	Det	the
+3.09	Det	his
+3.09	Det	her
+3.09	Det	its
+3.09	Det	their
+2.81	Adj	fine
+2.81	Adj	blue
+2.81	Adj	delicious
+2.81	Adj	perplexed
+2.81	Adj	pickled
+2.81	Adj	very Adj
+2.32	P	with
+2.32	P	on
+2.32	P	onto
+2.32	P	under
+2.32	P	in
+2.81	Adj	Adj and Adj
+3.7	NP	NP and NP
+3.81	VP	VP and VP

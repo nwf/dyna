@@ -33,8 +33,11 @@ class sexpr(object):
             if isinstance(xs, basestring):
                 return xs
             else:
-                assert len(xs) > 1
-                if len(xs) == 2:
+                if len(xs) == 1:
+#                    [sym] = map(t, xs)
+#                    return node(sym, ())
+                    return t(xs[0])          # doesn't have a label.
+                elif len(xs) == 2:
                     [sym, a] = map(t, xs)
                     return node(sym, a)
                 elif len(xs) == 3:
@@ -47,7 +50,7 @@ class sexpr(object):
 
         contents = file(filename).read()
 
-        for i, [x] in enumerate(parse_sexpr(contents)):
+        for i, x in enumerate(parse_sexpr(contents)):
             interp.emit(obj(i),
                         t(x),
                         ruleix=None,

@@ -17,4 +17,4 @@ phrase(S,X,I,K) += phrase(S,Y,I,J) + phrase(S,Z,J,K) + rewrite(X,Y,Z).
 phrase(S,W,I,I+1) += W is token(S,I), 0.
 
 sentence_length(S) max= token(S,I), I+1.
-goal(S) += phrase(S, "S", 0, sentence_length(S)).
+goal(S) += phrase(S, "ROOT", 0, sentence_length(S)).
