@@ -13,7 +13,7 @@ module Dyna.Backend.Python.Backend (pythonBackend) where
 
 -- import           Control.Applicative ((<*))
 -- import qualified Control.Arrow              as A
--- import           Control.Exception
+import           Control.Exception (assert)
 import           Control.Lens ((^.))
 import           Control.Monad
 import           Control.Monad.State
@@ -219,14 +219,14 @@ piterate vs = if length vs == 0 then "_"
 -- filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
 
 -- | Render a single dopamine opcode or its surrogate
-pdope_ :: DOpAMine PyDopeBS -> State Int (Doc e)
-pdope_ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
-pdope_ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
-pdope_ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
+pdope_ :: S.Set DFunctAr -> DOpAMine PyDopeBS -> State Int (Doc e)
+pdope_ _ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
+pdope_ _ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
+pdope_ _ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
                                       <+> pretty val <> ": continue"
-pdope_ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
+pdope_ _ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
                                       <+> pretty val <> ": continue"
-pdope_ (OPPeel vs i f _) = return $
+pdope_ _ (OPPeel vs i f _) = return $
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs
             <+> equals
@@ -234,17 +234,17 @@ pdope_ (OPPeel vs i f _) = return $
     )
     -- you'll get a "TypeError: 'NoneType' is not iterable."
     `above` "except (TypeError, AssertionError): continue"
-pdope_ (OPWrap v vs f) = return $ pretty v
+pdope_ _ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
                            <> (parens $ pfas f vs <> comma
                                 <> (sepBy "," $ map pretty vs))
 
-pdope_ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
+pdope_ _ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
                                      <+> c v vs
 
-pdope_ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
+pdope_ _ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
            "Unexpected determinism flag (at python code gen):"
     <+> pretty v
     <+> pretty vs
@@ -252,7 +252,21 @@ pdope_ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
     <+> text (show d)
     <+> parens (pretty $ c v vs)
 
-pdope_ (OPIter o m f _ Nothing) = do
+-- XXX This works only for the special case at hand (thus the asserts)
+pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc =
+  return $
+  assert (iIsFree $ nExpose $ o^.mv_mi) $
+  assert (all (not . iIsFree . nExpose . _mv_mi) m) $
+  vcat
+  [     pretty (o^.mv_var)
+    <+> equals
+    <+> "gbc" <> brackets (pfas f m)
+    <> tupled (map (pretty . _mv_var) m)
+  , "if" <+> pretty (o^.mv_var) <+> "is not None" <> colon
+  ]
+
+pdope_ bc (OPIter o m f _ Nothing) = 
+  assert (not $ (f,length m) `S.member` bc) $ do
       i <- incState
       return $ let mo = m ++ [o] in
           "for" <+> "d" <> pretty i <> "," <> piterate m <> comma <> (ground2underscore o)
@@ -261,7 +275,7 @@ pdope_ (OPIter o m f _ Nothing) = do
     -- XXX Ought to make i and vs conditional on... doing debugging or the
     -- aggregator for this head caring.  The latter is a good bit more
     -- advanced than we are right now.
-pdope_ (OPEmit h r i vs) = do
+pdope_ _ (OPEmit h r i vs) = do
   ds <- get
 
   -- A python map of variable name to value
@@ -276,14 +290,14 @@ pdope_ (OPEmit h r i vs) = do
                             ]
 
 -- | Render a dopamine sequence's checks and loops above a (indended) core.
-pdope :: Actions PyDopeBS -> Doc e
-pdope _d =         (indent 4 $ "for _ in [None]:")
-           `above` (indent 8 $ evalState (go _d) 0)
+pdope :: S.Set DFunctAr -> Actions PyDopeBS -> Doc e
+pdope bc _d =         (indent 4 $ "for _ in [None]:")
+              `above` (indent 8 $ evalState (go _d) 0)
  where
   go []  = return empty
   go (x:xs) = let indents = case x of OPIter _ _ _ d _ -> d /= Det ; _ -> False
               in do
-                   x' <- pdope_ x
+                   x' <- pdope_ bc x
                    xs' <- go xs
                    return $ x' `above` ((if indents then indent 4 else id) xs')
 
@@ -297,40 +311,68 @@ printPlanHeader r c mn = do
        , "Cost:  " <+> (pretty c)
        , "'''"]
 
-printInitializer :: Handle -> Rule -> Cost -> Actions PyDopeBS -> IO ()
-printInitializer fh rule cost dope = do
+printInitializer :: Handle -> S.Set DFunctAr
+                 -> Rule -> Cost -> Actions PyDopeBS -> IO ()
+printInitializer fh bc rule cost dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "def" <+> char '_' <> tupled ["emit"] <> colon
                    `above` (indent 4 $ printPlanHeader rule cost Nothing)
-                   `above` pdope dope
+                   `above` pdope bc dope
                    <> line
                    <> "initializers.append((" <> (pretty $ r_index rule) <> ", _" <> "))"
                    <> line
                    <> line
                    <> line
 
-printUpdate :: Handle -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar)
+printUpdate :: Handle
+            -> S.Set DFunctAr
+            -> Rule -> Cost -> Int -> Maybe DFunctAr -> (DVar, DVar)
             -> Actions PyDopeBS -> IO ()
 -- XXX INDIR EVAL
-printUpdate _  _    _    _      Nothing      _      _    =
+printUpdate _  _  _    _    _      Nothing      _      _    =
   dynacPanic "Python backend does not know how to do indirect evaluations"
-printUpdate fh rule cost evalix (Just (f,a)) (hv,v) dope = do
+printUpdate fh bc rule cost evalix (Just (f,a)) (hv,v) dope = do
   displayIO fh $ renderPretty 1.0 100
                  $ "#" <+> (pfa f a)
                    `above` "def" <+> char '_' <> tupled (map pretty [hv,v,"emit"]) <> colon
                    `above` (indent 4 $ printPlanHeader rule cost (Just evalix))
-                   `above` pdope dope
+                   `above` pdope bc dope
                    <> line
-                   <> "updaters.append((" <> (pfa f a) <> "," <> (pretty $ r_index rule) <> ",_))"
+                   <> "updaters.append"
+                     <> parens (tupled [pfa f a, pretty $ r_index rule, "_"])
                    <> line
                    <> line
                    <> line
+
+printQuery :: Handle
+           -> S.Set DFunctAr
+           -> DFunctAr
+           -> Rule
+           -> [DVar]
+           -> Cost
+           -> Actions PyDopeBS
+           -> IO ()
+printQuery fh bc (f,a) rule vs cost dope = do
+  displayIO fh $ renderPretty 1.0 100
+                 $ "#" <+> (pfa f a)
+                 `above` "def" <+> char '_'
+                               <> tupled (map pretty vs ++ ["emit"])
+                               <> colon
+                 `above` (indent 4 $ printPlanHeader rule cost Nothing)
+                 `above` pdope bc dope
+                 <> line
+                 <> "queries.append"
+                 <> parens (tupled [pfa f a, pretty $ r_index rule, "_"])
+                 <> line
+                 <> line
+                 <> line
+
 
 ------------------------------------------------------------------------}}}
 -- Driver                                                               {{{
 
 driver :: BackendDriver PyDopeBS
-driver am um {-qm-} is pr fh = do
+driver am um is bc qp pr fh = do
   -- Parser resume state
   hPutStrLn fh "parser_state = \"\"\""
   hPutStrLn fh $ show pr
@@ -359,25 +401,16 @@ driver am um {-qm-} is pr fh = do
      hPutStrLn fh ""
      hPutStrLn fh $ "# " ++ show fa
      forM_ ps $ \(r,n,c,vi,vo,act) -> do
-       printUpdate fh r c n fa (vi,vo) act
+       printUpdate fh bc r c n fa (vi,vo) act
 
   hPutStrLn fh ""
   hPutStrLn fh $ "# ==Initializers=="
   forM_ is $ \(r,c,a) -> do
-    printInitializer fh r c a
+    printInitializer fh bc r c a
 
-{-
   hPutStrLn fh $ "# ==Queries=="
 
-  forM_ (M.toList qm) $ \(fa, ps) -> do
-    hPutStrLn fh $ "# " ++ show fa
-    forM_ ps $ \(r,c,qv,a) -> do
-      printPlanHeader fh r c
-      hPutStrLn fh $ "# " ++ show qv
-      -- XXX
-      -- displayIO fh $ renderPretty 1.0 100 $ pdope a "XXX"
-      hPutStrLn fh ""
--}
+  forM_ qp $ \(fa,r,(vs,(c,a))) -> printQuery fh bc fa r vs c a
 
 ------------------------------------------------------------------------}}}
 -- Export                                                               {{{

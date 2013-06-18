@@ -45,6 +45,8 @@ data ParsedDynaProgram = PDP
 
   , pdp_aggrs         :: M.Map DFunctAr DAgg
 
+  , pdp_gbc           :: S.Set DFunctAr
+
     -- | A rather ugly hack for resumable parsing: this records the set of
     -- pragmas to restore the current PCS.
   , pdp_parser_resume :: forall e . PP.Doc e
@@ -59,6 +61,9 @@ data PCS = PCS
   , _pcs_dt_over   :: DisposTabOver
   , _pcs_dt_cache  :: DisposTab
     -- ^ Cache the disposition table
+
+  , _pcs_gbc_set   :: S.Set DFunctAr
+
   , _pcs_iagg_map  :: M.Map DFunctAr DAgg
   , _pcs_instmap   :: M.Map B.ByteString ([DVar]
                                          ,ParsedInst
@@ -116,6 +121,8 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_dt_cache  = dtmk (defPCS ^. pcs_dt_mk)
                                      (defPCS ^. pcs_dt_over)
 
+             , _pcs_gbc_set   = S.empty
+
              , _pcs_iagg_map  = M.empty
 
              , _pcs_instmap   = mempty -- XXX
@@ -129,6 +136,9 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
 
 -- | Update the PCS to reflect a new pragma
 pcsProcPragma :: (Parsing m, MonadState PCS m) => Spanned Pragma -> m ()
+
+pcsProcPragma (PBackchain fa :~ _) = do
+  pcs_gbc_set %= S.insert fa
 
 pcsProcPragma (PDispos s f as :~ _) = do
   pcs_dt_over %= dtoMerge (f,length as) (s,as)
@@ -173,12 +183,14 @@ sorryPragma p s = dynacSorry $ "Cannot handle pragma"
 
 pragmasFromPCS :: PCS -> PP.Doc e
 pragmasFromPCS (PCS dt_mk dt_over _
+                    gbcs
                     _
                     im mm
                     _ _
                     rix) =
   PP.vcat $ map renderPragma $
-       (map (\((k,_),(s,as)) -> PDispos s k as)
+       (map PBackchain $ S.toList gbcs)
+    ++ (map (\((k,_),(s,as)) -> PDispos s k as)
           $ M.toList dt_over)
     ++ [PDisposDefl dt_mk]
     -- XXX leaving out the item agg map, because that gets refined during
@@ -217,6 +229,7 @@ oneshotDynaParser aggs = (postProcess =<<)
   postProcess (rs,pcs) = return $
     PDP (catMaybes rs)
         (pcs ^. pcs_iagg_map)
+        (pcs ^. pcs_gbc_set)
         (pragmasFromPCS pcs)
 
 ------------------------------------------------------------------------}}}

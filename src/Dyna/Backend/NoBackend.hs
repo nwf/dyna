@@ -45,7 +45,7 @@ noBackend = Backend
           , be_driver         = driver
           }
 
-driver _ _ {-_-} _ _ fh = hPutStrLn fh "No backend selected; stopping."
+driver _ _ _ _ _ _ fh = hPutStrLn fh "No backend selected; stopping."
 
 ------------------------------------------------------------------------}}}
 -- Primitive operations                                                 {{{
@@ -58,7 +58,7 @@ data PrimOp = PO
 primOps :: DFunctAr -> Maybe [QMode (NIX DFunct)] -- XXX ,UMode
 primOps = go
  where
-  go ("-"    ,1) = Just   [miaod 1 Det     ]
+  go ("-"    ,1) = Just $ [miaod 1 Det     ] ++ opinvd 1 Det
   go ("^"    ,2) = Just   [miaod 2 Det     ]
   go ("|"    ,2) = Just   [miaod 2 Det     ]
   go ("-"    ,2) = Just $ [miaod 2 Det     ] ++ opinvd 2 Det

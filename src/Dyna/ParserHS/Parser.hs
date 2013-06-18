@@ -34,6 +34,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Dyna.ParserHS.Parser (
@@ -493,11 +494,13 @@ parseUniq = choice [ symbol "clobbered" *> pure UClobbered
 ------------------------------------------------------------------------}}}
 -- Parsing pragma bodies                                                {{{
 
-pragmaBody :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
+pragmaBody :: forall m .
+              (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
            => m Pragma
 pragmaBody = token $ choice
   [ 
-    symbol "dispos_def" *> parseDisposDefl -- set default dispositions
+    symbol "backchain" *> parseBackchain
+  , symbol "dispos_def" *> parseDisposDefl -- set default dispositions
   , symbol "dispos" *> parseDisposition -- in-place dispositions
   , symbol "iaggr"  *> parseIAggr       -- alternate syntax for aggr
   , symbol "inst"   *> parseInstDecl    -- instance delcarations
@@ -506,6 +509,17 @@ pragmaBody = token $ choice
   , symbol "ruleix" *> (PRuleIx <$> decimal)
   ]
  where
+  parseArity :: m Int
+  parseArity = do
+    n <- token decimal
+    when (n > fromIntegral (maxBound :: Int)) $ unexpected "huge number"
+    return (fromIntegral n)
+
+  parseBackchain = PBackchain <$> (   (,)
+                                   <$> parseFunctor
+                                   <*  char '/'
+                                   <*> parseArity)
+
   parseDisposition = PDispos <$> selfdis
                              <*> parseFunctor
                              <*> (parens (argdis `sepBy` comma)
@@ -528,8 +542,7 @@ pragmaBody = token $ choice
   parseIAggr = do
     f <- parseFunctor
     _ <- char '/'
-    n <- token decimal
-    when (n > fromIntegral (maxBound :: Int)) $ unexpected "huge number"
+    n <- parseArity
     a <- join $ asks dlc_aggrs
     return (PIAggr f (fromIntegral n) a)
 
@@ -602,6 +615,10 @@ renderPNWA :: NameWithArgs -> PP.Doc e
 renderPNWA (PNWA n as) = PP.pretty n PP.<> PP.tupled (map PP.pretty as)
 
 renderPragma_ :: Pragma -> PP.Doc e
+renderPragma_ (PBackchain (f,a)) = "backchain" PP.<+> renderFunctor f
+                                               PP.<> PP.char '/'
+                                               PP.<> PP.pretty a
+
 renderPragma_ (PDisposDefl s) = "dispos_def" PP.<+> PP.text s
 
 renderPragma_ (PDispos s f as) = "dispos" PP.<+> rs s

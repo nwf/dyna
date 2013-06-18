@@ -14,7 +14,7 @@ import           Dyna.Analysis.DOpAMine (BackendRenderDopIter)
 import           Dyna.Analysis.RuleMode (
                     Actions, BackendPossible, Cost,
                     UpdateEvalMap {-, QueryEvalMap -})
-import           Dyna.Term.TTerm (DFunctAr)
+import           Dyna.Term.TTerm (DFunctAr,DVar)
 import           System.IO (Handle)
 import qualified Text.PrettyPrint.Free            as PP
 
@@ -25,8 +25,9 @@ import qualified Text.PrettyPrint.Free            as PP
 
 type BackendDriver bs = AggMap                    -- ^ Aggregation
                       -> UpdateEvalMap bs         -- ^ Rule update
-                      -- -> QueryEvalMap bs          -- ^ Rule query
                       -> [(Rule,Cost,Actions bs)] -- ^ Initializers
+                      -> S.Set DFunctAr           -- ^ Ground backchains
+                      -> [(DFunctAr,Rule,([DVar],(Cost,Actions bs)))] -- ^ GBC plans
                       -> (forall e . PP.Doc e)    -- ^ Parser persistence
                       -> Handle                   -- ^ Output
                       -> IO ()
