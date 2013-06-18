@@ -205,7 +205,7 @@ oneshotDynaParser :: (DeltaParsing m, LookAheadParsing m)
 oneshotDynaParser aggs = (postProcess =<<)
    $ flip runStateT defPCS
    $  optional (dynaWhiteSpace (someSpace))
-   *> many (try $ do
+   *> many (do
              mr <- nextRule aggs
              case mr of
                Nothing -> return Nothing
