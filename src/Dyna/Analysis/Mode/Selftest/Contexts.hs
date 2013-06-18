@@ -89,10 +89,9 @@ prop_alias_unifyUnaliasedNV = unifProp nWFN' alias_unifyUnaliasedNV nLeqGLBRL
  where
   alias_unifyUnaliasedNV n1 n2 =
     fmap fst $ runIdentity
-             $ flip CA.runSIMCT (CA.allFreeSIMCtx [v])
+             $ flip CA.runSIMCT (CA.ctxFromBindings [(v,n1)])
              $ flip runReaderT (UnifParams True False)
              $ do
-                _ <- FA.unifyUnaliasedNV n1 v
                 _ <- FA.unifyUnaliasedNV n2 v
                 FA.expandV v
    where v = "A"
@@ -102,11 +101,9 @@ prop_alias_unify = unifProp nWFN' alias_unify nLeqGLBRL
  where
   alias_unify n1 n2 =
     fmap fst $ runIdentity
-             $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
+             $ flip CA.runSIMCT (CA.ctxFromBindings [(vA,n1),(vB,n2)])
              $ flip runReaderT (UnifParams True False)
              $ do
-                _ <- FA.unifyUnaliasedNV n1 vA
-                _ <- FA.unifyUnaliasedNV n2 vB
                 _ <- FA.unifyVV vA vB
                 FA.expandV vA
    where vA = "A"
@@ -126,11 +123,8 @@ prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
 
   alias_unifyVF n1 n2 =
     fmap fst $ runIdentity
-             $ flip CA.runSIMCT (CA.allFreeSIMCtx [vA,vB])
+             $ flip CA.runSIMCT (CA.ctxFromBindings [(vA,n1),(vB,n2)])
              $ do
-                _ <- flip runReaderT (UnifParams True False) $ do
-                  _ <- FA.unifyUnaliasedNV n1 vA
-                  FA.unifyUnaliasedNV n2 vB
                 _ <- FA.unifyVF True (const $ return True) vA G [vB]
                 FA.expandV vA
    where
