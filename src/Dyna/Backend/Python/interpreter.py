@@ -7,8 +7,6 @@ TODO
  - More info in crash handler. (stack trace, repl transcript, cmd-line args,
    version control info, and dyna source is enough)
 
- - call pre/post-processors from repl.
-
  - vbench: a script which tracks performace over time (= git commits).
 
  - profiler workflow
@@ -27,15 +25,46 @@ TODO
    handlers, and indices (as Jason points out indices are just memoized
    queries).
 
- - magic templates transform for backward chaining, for example:
-
-   :- sigmoid(X) := needs(X), 1 / (1 + exp(-X)).
-   :- needs(0.5).
-
  - hook for python imports? or maybe an arbirary preamble/epilogue.
 
    :- python: from numpy import exp, sqrt, log
 
+ - Subscriptions:
+
+   - TODO: users are automatically be subscribed to errors.
+
+   - everything
+   - functor
+   - ignore variable
+
+   - output formats: vquery and query
+   - show diffs
+
+   Maybe subscription to diff is a different beast, only available as a
+   procedural world.
+
+ - New syntax for doing repl stuff (@nwf): load, subscribe, post-process
+
+   - sheebang
+
+ - Errors:
+
+   - Should errors be maintained by dyna? I guess that's an (implicit?) program
+     transform where all items in a rule have a side conditions that they are
+     not in an error state.
+
+ - crash handler
+
+   - where to errors go?
+
+     - @nwf suggests temporary measure for LSA students: time-stamped file
+       sitting in the users home directory,
+       e.g. ~/.dyna/crash/2013-06-19.crash.tar.gz
+
+ - Hide all *.plan.py files
+
+ - multi-line input in REPL. Consider using a fancier library such as cmd2 or
+   ipython's.
 
 BUGS
 ====
@@ -63,8 +92,8 @@ FASTER
  - teach planner to prefer not to use the value column, because it's not
    indexed.
 
- - Collect all query modes use by the planner. Consider indexing value column if
-   plans need it.
+ - Collect all query modes used by the planner. Consider indexing value column
+   if plans need it.
 
  - dynac should provide routines for building terms. We can hack something
    together with anf output, but this will be prety kludgy and inefficient.
@@ -142,8 +171,7 @@ NOTES
 
     - numeric approximations, stream folding (fails to get null)
 
-    - delete the hyperedge: not sure this is perfect because hyperedges aren't
-      named with numeric values of variables.
+    - delete/add the hyperedge explicitly
 
 
 JUST FOR FUN
@@ -155,14 +183,6 @@ JUST FOR FUN
  - overload everything so that values maintain provenance and we can inspect the
    entire fine-grained circuit.
 
- - play around with cool python modules:
-
-   - uncertainties (error propagation and gradients), look
-
-   - values with units (i.e dimensional analysis).
-
-   - sympy?
-
 """
 
 from __future__ import division
@@ -172,7 +192,6 @@ from hashlib import sha1
 from time import time
 
 import load, post
-
 
 from chart import Chart, Term, _repr
 from defn import aggregator
@@ -533,8 +552,8 @@ class Interpreter(object):
             # TODO: how do I make this transactional? what if the user hits ^C
             # in the middle of the following blocK?
             #
-            #   - maybe transaction isn't want I mean. Maybe all I want (for now
-            #     is to avoid ^C.
+            #  - maybe transaction isn't want I mean. Maybe all I want (for now
+            #    is to avoid ^C.
 
             # add new updaters
             for fn, r, h in env.updaters:
@@ -593,15 +612,15 @@ def peel(fn, item):
     assert item.fn == fn
     return item.args
 
-
+from path import path
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source', nargs='?',
+    parser.add_argument('source', nargs='?', type=path,
                         help='Path to Dyna source file (or plan if --plan=true).')
-    parser.add_argument('--plan', action='store_true',
-                        help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('-i', dest='interactive', action='store_true',
                         help='Fire-up REPL after runing solver..')
+    parser.add_argument('--plan', action='store_true',
+                        help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('-o', '--output', dest='output',
                         type=argparse.FileType('wb'),
                         help='Output chart.')
@@ -627,7 +646,7 @@ def main():
         if args.plan:
             plan = args.source
         else:
-            plan = "%s.plan.py" % args.source
+            plan = dotdynadir / 'tmp' / args.source.read_hexhash('sha1') + '.plan.py'
             dynac(args.source, plan)
 
         if args.profile:

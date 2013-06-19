@@ -7,4 +7,5 @@ FATAL: Encountered error in input program:
  uses '|=' for a/0 but I had been lead to expect '+='.
 
 > new rule(s) were not added to program.
+
 :- exit
