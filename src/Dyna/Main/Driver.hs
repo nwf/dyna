@@ -350,27 +350,28 @@ processFile fileName = bracket openOut hClose go
     case dcfg_backend ?dcfg of
       Backend _ be_b be_c be_ddi be_d ->
         let
+            (bcrules,fcrules) = partitionEithers
+                                $ map
+                                  (\r -> maybe (p r)
+                                               (\fa -> if fa `S.member` gbcs
+                                                        then Left (fa,r)
+                                                        else Right r)
+                                        $ findHeadFA (r_head r) (r_ucruxes r))
+                                  frs
+              where
+               p r = (dynacPanic $ "Can't check rule"
+                                 <+> (prettySpanLoc (r_span r))
+                                 <+> "for chaining direction")
+
             initializers = map (\(f,mca) -> either (\e -> Left (f,e))
                                                    (\(c,a) -> Right (f,c,a)) mca)
-                         $ map (\x -> (x, planInitializer be_b gbcs x)) frs
+                         $ map (\x -> (x, planInitializer be_b gbcs x)) fcrules
 
             cInitializers = rights initializers
   
-            uPlans = map (\x -> (x, planEachEval be_b gbcs be_c x)) frs
+            uPlans = map (\x -> (x, planEachEval be_b gbcs be_c x)) fcrules
 
             cuPlans = combineUpdatePlans uPlans
-
-            bcrules = MA.mapMaybe (\r -> maybe (p r)
-                                               (\fa -> if fa `S.member` gbcs
-                                                        then Just (fa,r)
-                                                        else Nothing)
-                                        $ findHeadFA (r_head r) (r_ucruxes r))
-                      $ frs
-                      where
-                       p r = (dynacPanic $ "Can't check rule"
-                                         <+> (prettySpanLoc (r_span r))
-                                         <+> "for backchaining: no head")
-
 
             qPlans = map (\(fa@(f,a),r) -> (fa,r,
                                             planBackchain be_b gbcs (f,mkqm a) r))
