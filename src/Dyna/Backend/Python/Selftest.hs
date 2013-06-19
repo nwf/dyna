@@ -56,6 +56,7 @@ runDynaPy f pl out = handle (\(_ :: ExitCode) -> return ()) $ do
       , create_group = False
       }
    ec <- waitForProcess ph
+   _ <- tryIOError $ removeFile pl
    case ec of
     ExitSuccess -> return ()
     ExitFailure _ -> throw ec
