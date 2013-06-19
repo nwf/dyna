@@ -115,16 +115,24 @@ sym(&t(A,B,C)) := needs(&t(A,B,C)), A.
 rules(&t(X,Y)) := needs(&t(X,Y)), &r(X, sym(Y)).
 rules(&t(X,Y,Z)) := needs(&t(X,Y,Z)), needs(Z), &r(X, sym(Y), sym(Z)).
 
+:- dispos &t(&).
+:- dispos &t(&,&).
+:- dispos &t(&,&,&).
+
 % count the number of words in a subtree
+:- backchain numwords/1.
 numwords(X) := 1.
 numwords(t(X,Y)) := numwords(Y).
 numwords(t(X,Y,Z)) := numwords(Y) + numwords(Z).
 
 % extract word and it's position in tree
+:- backchain word/2.
 word(0, X) := X.
 word(I, t(X,Y)) := word(I, Y).
 word(I, t(X,Y,Z)) := I < numwords(Y), word(I, Y).
 word(I, t(X,Y,Z)) := I >= numwords(Y), word(I-numwords(Y), Z).
+
+%senword(S, I) := word(I, sentence(S)), between(0,I,numwords(S)).
 
 % unnormalized
 c(X,Y) += r(X,Y) is rules(&t(X1,Y1)), 1.

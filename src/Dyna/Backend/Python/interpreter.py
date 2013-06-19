@@ -234,12 +234,13 @@ class Rule(object):
         self.idx = idx
         self.init = None
         self.updaters = []
+        self.query = None
     @property
     def span(self):
-        return parse_attrs(self.init)['Span']
+        return parse_attrs(self.init or self.query)['Span']
     @property
     def src(self):
-        return parse_attrs(self.init)['rule']
+        return parse_attrs(self.init or self.query)['rule']
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.idx, self.src)
 
@@ -266,6 +267,8 @@ class Interpreter(object):
         # declarations
         self.agg_name = defaultdict(none)
         self.updaters = defaultdict(list)
+        self._gbc = defaultdict(list)
+
         # data structures
         self.agenda = prioritydict()
         self.parser_state = ''
@@ -488,6 +491,34 @@ class Interpreter(object):
         rule.updaters.append(handler)
         handler.rule = rule
 
+
+    def gbc(self, fn, *args):
+        # TODO: need to distinguish `unknown` from `null`
+
+        head = self.build(fn, *args)
+
+        if head.value is not None:
+            return head.value
+
+        head.aggregator.clear()
+
+        def _emit(item, val, ruleix, variables):
+            assert item is head, [item, head]
+            head.aggregator.inc(val, ruleix, variables)
+
+        for h in self._gbc[fn]:
+            h(*args, emit=_emit)
+
+        head.value = head.aggregator.fold()
+        return head.value
+
+    def new_query(self, fn, ruleix, handler):
+        self._gbc[fn].append(handler)
+        rule = self.rules[ruleix]
+        assert rule.query is None
+        rule.query = handler
+        handler.rule = rule
+
     def new_initializer(self, ruleix, init):
         rule = self.rules[ruleix]
         assert rule.init is None
@@ -525,6 +556,7 @@ class Interpreter(object):
 
         for k,v in [('chart', self.chart),
                     ('build', self.build),
+                    ('gbc', self.gbc),
                     ('peel', peel),
                     ('uniform', uniform), ('log', log), ('exp', exp), ('sqrt', sqrt),
                     ('pycall', pycall)]:
@@ -537,6 +569,9 @@ class Interpreter(object):
         # TODO: this should be a transaction.
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
+
+        for fn, r, h in env.queries:
+            self.new_query(fn, r, h)
 
         try:
             if initialize:
@@ -555,12 +590,11 @@ class Interpreter(object):
             #  - maybe transaction isn't want I mean. Maybe all I want (for now
             #    is to avoid ^C.
 
-            # add new updaters
             for fn, r, h in env.updaters:
                 self.new_updater(fn, r, h)
-            # add new initializers
             for r, h in env.initializers:
                 self.new_initializer(r, h)
+
             # accept the new parser state
             self.parser_state = env.parser_state
             # process emits
@@ -646,7 +680,8 @@ def main():
         if args.plan:
             plan = args.source
         else:
-            plan = dotdynadir / 'tmp' / args.source.read_hexhash('sha1') + '.plan.py'
+#            plan = dotdynadir / 'tmp' / args.source.read_hexhash('sha1') + '.plan.py'
+            plan = args.source + '.plan.py'
             dynac(args.source, plan)
 
         if args.profile:

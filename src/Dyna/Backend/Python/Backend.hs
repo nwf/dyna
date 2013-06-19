@@ -260,12 +260,12 @@ pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc =
   vcat
   [     pretty (o^.mv_var)
     <+> equals
-    <+> "gbc" <> brackets (pfas f m)
-    <> tupled (map (pretty . _mv_var) m)
+    <+> "gbc"
+    <> tupled (pfas f m : map (pretty . _mv_var) m)
   , "if" <+> pretty (o^.mv_var) <+> "is not None" <> colon
   ]
 
-pdope_ bc (OPIter o m f _ Nothing) = 
+pdope_ bc (OPIter o m f _ Nothing) =
   assert (not $ (f,length m) `S.member` bc) $ do
       i <- incState
       return $ let mo = m ++ [o] in
@@ -383,6 +383,7 @@ driver am um is bc qp pr fh = do
   hPutStrLn fh "\"\"\""
   hPutStrLn fh ""
 
+  hPutStrLn fh $ "queries = []"
   hPutStrLn fh $ "agg_decl = {}"
   hPutStrLn fh $ "updaters = []"
   hPutStrLn fh $ "initializers = []"
