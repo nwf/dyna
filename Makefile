@@ -22,6 +22,12 @@ test tests: build
 	dist/build/dyna-selftests/dyna-selftests
 	# cabal test
 
+# Compilation takes a while; for faster iteration while developing,
+# turn off optimization.
+fcomp:
+	cabal configure --user --enable-tests -O0
+	cabal build
+
 .PHONY: clean veryclean
 clean:
 	rm -rf examples/*.dyna.*.plan  \
