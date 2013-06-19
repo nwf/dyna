@@ -108,7 +108,7 @@ class REPL(cmd.Cmd, object):
             print type(e).__name__ + ':'
             print e
             print '> new rule(s) were not added to program.'
-
+            print
         else:
             self._changed(changed)
 
@@ -127,14 +127,32 @@ class REPL(cmd.Cmd, object):
         except KeyboardInterrupt:
             # Catch Control-C and resume REPL.
             print '^C'
+            readline.write_history_file(self.hist)
             self.cmdloop()
         finally:
             readline.write_history_file(self.hist)
 
+    def do_subscribe(self, line):
+        if line.endswith('.'):
+            print "Queries don't end with a dot."
+            return
+        # subscriptions are maintained via forward chaining.
+        query = 'subscribed(%s, %s) dict= %s.' % (self.lineno, _repr(line), line)
+        self.default(query)
+
+    def do_subscriptions(self, _):
+        for (_, [_, q], answers) in self.interp.chart['subscribed/2'][:,:,:]:
+            print
+            print q
+            for [value, vs] in answers:
+                print '  %s when {%s}' \
+                    % (value, ', '.join('%s=%s' % (k, _repr(v)) for k,v in vs.items()))
+        print
+
     def do_load(self, line):
         try:
             load.run(self.interp, line)
-            self.interp.dump_charts()
+#            self.interp.dump_charts()
         except:
             show_traceback()
             readline.write_history_file(self.hist)

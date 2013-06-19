@@ -14,7 +14,6 @@ black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
-
 def dynac(f, out):
     """
     Run compiler on file, ``f``, write results to ``out``. Raises
