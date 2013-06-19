@@ -20,12 +20,17 @@ import qualified Data.ByteString.UTF8         as BU
 import           Data.Either
 import qualified Data.Map                     as M
 import qualified Data.Maybe                   as MA
--- import qualified Data.Set                     as S
+import qualified Data.Set                     as S
 import           Data.String
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.ANFPretty
 import           Dyna.Analysis.DOpAMine
+import           Dyna.Analysis.Mode.Det
+import           Dyna.Analysis.Mode.Execution.NamedInst
+import           Dyna.Analysis.Mode.Inst
+import           Dyna.Analysis.Mode.Mode
+import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Analysis.RuleMode
 import           Dyna.Backend.BackendDefn
 import           Dyna.Backend.Backends
@@ -292,6 +297,16 @@ renderFailedUpdate rd (r,i,ps) =
   <+>  (text "evalix=" <> pretty i)
   <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
 
+renderFailedQuery rd (r,pbce) =
+       text ";; failed query attempts for"
+  <//> (prettySpanLoc $ r_span r)
+  <//>
+  case pbce of
+    PBCWrongFunctor f -> "wrong functor" <+> squotes (pretty f)
+    PBCWrongArity n   -> "wrong arity"   <+> squotes (pretty n)
+    PBCBadRule        -> "bad rule"
+    PBCNoPlan ps      -> "no plan:"
+                         <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
 
 ------------------------------------------------------------------------}}}
 -- Warnings                                                             {{{
@@ -313,7 +328,7 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs iaggmap pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
+    P.PDP rs iaggmap gbcs pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
 
     dump DumpParsed $
          (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
@@ -331,49 +346,80 @@ processFile fileName = bracket openOut hClose go
                                     (pretty f <+> colon <+> pretty a))
                                  empty aggm)
 
+
     case dcfg_backend ?dcfg of
       Backend _ be_b be_c be_ddi be_d ->
         let
             initializers = map (\(f,mca) -> either (\e -> Left (f,e))
                                                    (\(c,a) -> Right (f,c,a)) mca)
-                         $ map (\x -> (x, planInitializer be_b x)) frs
+                         $ map (\x -> (x, planInitializer be_b gbcs x)) frs
 
             cInitializers = rights initializers
   
-            uPlans = map (\x -> (x, planEachEval be_b be_c x))
-                         frs
+            uPlans = map (\x -> (x, planEachEval be_b gbcs be_c x)) frs
 
             cuPlans = combineUpdatePlans uPlans
 
-{-
-            qPlans = combineQueryPlans
-                     $ map (\x -> (x, planGroundBackchain be_b x))
-                           frs
--}
+            bcrules = MA.mapMaybe (\r -> maybe (p r)
+                                               (\fa -> if fa `S.member` gbcs
+                                                        then Just (fa,r)
+                                                        else Nothing)
+                                        $ findHeadFA (r_head r) (r_ucruxes r))
+                      $ frs
+                      where
+                       p r = (dynacPanic $ "Can't check rule"
+                                         <+> (prettySpanLoc (r_span r))
+                                         <+> "for backchaining: no head")
+
+
+            qPlans = map (\(fa@(f,a),r) -> (fa,r,
+                                            planBackchain be_b gbcs (f,mkqm a) r))
+                         bcrules
+                      where
+                       mkqm a = QMode (replicate a (tus,tus)) (tf,tus) DetSemi
+
+                       tus = nHide $ IUniv UShared
+                       tf  = nHide IFree
+
+            cqPlans = map (\(fa,r,e) -> (fa,r,check e)) qPlans
+                       where
+                        check (Right p) = p
+                        check (Left  _) = dynacPanic $ "Backchaining planner failed"
 
         in do
             -- Do this before forcing cInitializers, cuPlans, etc.,
             -- as those will panic and stop the pipeline.
             dump DumpFailedPlans $
-              vcat [ vcat $ map (renderFailedInit (renderDop be_ddi))
-                          $ lefts initializers
-                   , let
-                       shuffle (r,ips) = map sgo ips
-                        where
-                         sgo (i,Left e) = Left (r,i,e)
-                         sgo (_,Right _) = Right ()
-                     in vcat $ map (renderFailedUpdate (renderDop be_ddi))
-                             $ lefts
-                             $ concat
-                             $ map shuffle uPlans
-                   ]
+              let rend = renderDop be_ddi
+              in vcat [ vcat $ map (renderFailedInit rend)
+                             $ lefts initializers
+                      , let
+                          shuffle (r,ips) = map sgo ips
+                           where
+                            sgo (i,Left e) = Left (r,i,e)
+                            sgo (_,Right _) = Right ()
+                        in vcat $ map (renderFailedUpdate rend)
+                                $ lefts
+                                $ concat
+                                $ map shuffle uPlans
+                      , let
+                          shuffle (_,r,Right _) = Nothing
+                          shuffle (_,r,Left  e) = Just (r,e)
+                        in vcat $ map (renderFailedQuery rend)
+                                $ MA.catMaybes $ map shuffle qPlans
+                      ]
 
             -- Force evaluation of a lot of the work of the compiler,
             -- even if the backend and dump flags won't do it for us.
             cInitializers' <- evaluate $ cInitializers
             cuPlans'      <- evaluate $ cuPlans
 
-            case lefts initializers of
+            let noInitErrGbcs = filter (\(r,_) ->
+                    maybe True
+                          (\fa -> not $ fa `S.member` gbcs)
+                        $ findHeadFA (r_head r) (r_ucruxes r))
+
+            case noInitErrGbcs $ lefts initializers of
               [] -> return ()
               xs -> dynacUserErr $ "Unable to plan initializers for rule(s):"
                                <//> (indent 2 $ vcat $
@@ -383,13 +429,14 @@ processFile fileName = bracket openOut hClose go
             dump DumpDopUpd (renderDopUpds be_ddi cuPlans')
 
             -- Invoke the backend code generator
-            be_d aggm cuPlans' {- qPlans -} cInitializers' pp out
+            be_d aggm cuPlans' cInitializers' gbcs cqPlans pp out
 
   parse aggs = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
     case pr of
       TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
       TR.Success rs -> return rs
+
 
 ------------------------------------------------------------------------}}}
 -- Main                                                                 {{{

@@ -23,7 +23,7 @@ import qualified Data.Data                        as D
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Main.Defns
 import           Dyna.Term.TTerm (Annotation(..), TBase(..),
-                                  DFunct)
+                                  DFunct, DFunctAr)
 import           Dyna.Term.SurfaceSyntax
 import           Text.Trifecta
 
@@ -49,7 +49,11 @@ data NameWithArgs = PNWA B.ByteString [B.ByteString]
  deriving (Eq,Show)
 
 -- | Pragmas that are recognized by the parser
-data Pragma = PDispos SelfDispos B.ByteString [ArgDispos]
+data Pragma = PBackchain DFunctAr
+                -- ^ A given functor should be planned for ground
+                -- backchaining.
+
+            | PDispos SelfDispos B.ByteString [ArgDispos]
                 -- ^ Assert the evaluation disposition of a functor
 
             | PDisposDefl String

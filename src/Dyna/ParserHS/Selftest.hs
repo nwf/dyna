@@ -228,7 +228,7 @@ progrules = unsafeParse (whiteSpace *> many (spanned (testRule defDLC)) <* eof)
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
 oneshotRules = xlate . unsafeParse (oneshotDynaParser Nothing)
  where
-  xlate (PDP rs _ _) = map (\(i,_,sr) -> (i,sr)) rs
+  xlate (PDP rs _ _ _) = map (\(i,_,sr) -> (i,sr)) rs
 
 case_ruleFact :: Assertion
 case_ruleFact = e @=? (progrule sr)
@@ -455,7 +455,8 @@ case_rule_with_unknown_operator =
 
 arbPragma :: Gen Pragma
 arbPragma = oneof
-  [ PDispos <$> arbSD <*> arbAtom <*> listOf arbAD
+  [ PBackchain <$> ((,) <$> arbAtom <*> (getPositive <$> arbitrary))
+  , PDispos <$> arbSD <*> arbAtom <*> listOf arbAD
   , PDisposDefl <$> elements ["dyna", "prologish"]
   , PIAggr <$> arbAtom <*> (getPositive <$> arbitrary) <*> (elements okAggrs)
   , PRuleIx <$> (getPositive <$> arbitrary)

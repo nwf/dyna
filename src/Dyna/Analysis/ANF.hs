@@ -62,7 +62,7 @@ module Dyna.Analysis.ANF (
 	SelfDispos(..), ArgDispos(..), EvalMarks,
 
     -- * Placeholders
-    evalCruxFA, findHeadFA, r_cruxes,
+    evalCruxFA, findHeadFA, r_cruxes, extractHeadVars
 ) where
 
 import           Control.Lens
@@ -471,5 +471,20 @@ findHeadFA h crs = MA.listToMaybe
  where
   m (CStruct o is f) | o == h = Just (f,length is)
   m _                         = Nothing
+
+-- XXX There ought to be something better we could do here, possibly
+-- involving unification.  This is not very robust to changes.
+extractHeadVars :: Rule -> Maybe (DFunct,[DVar])
+extractHeadVars (Rule { r_head = h
+                      , r_ucruxes = us }) =
+     let hbuilds = MA.mapMaybe hs $ S.toList us
+      in case hbuilds of
+           [] -> Nothing
+           y:_ -> Just y
+ where
+  hs (CStruct v vs f) = if h == v then Just (f,vs) else Nothing
+  hs (CAssign _ _   ) = Nothing
+  hs (CEquals _ _   ) = Nothing
+  hs (CNotEqu _ _   ) = Nothing
 
 ------------------------------------------------------------------------}}}

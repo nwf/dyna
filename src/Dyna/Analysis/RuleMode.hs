@@ -43,7 +43,7 @@ import           Control.Monad.Identity
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Char8      as BC
 import qualified Data.IntMap                as IM
--- import qualified Data.List                  as L
+import qualified Data.List                  as L
 import qualified Data.Map                   as M
 import qualified Data.Maybe                 as MA
 import qualified Data.Set                   as S
@@ -101,7 +101,7 @@ data BackendAction fbs = BAct
 
 -- | Builtin support hook for mode planning.  Options are
 --   to return
--- 
+--
 --   * @Left False@  -- This functor is not built in
 --
 --   * @Left True@   -- There is no plan for this mode
@@ -139,7 +139,7 @@ fgn :: forall a m k .
         MCVT m DVar ~ VR DFunct (NIX DFunct) k, MCR m DVar)
     => DVar -> m a -> m a -> m a -> m a
 fgn v cf cg cn = do
-  ff <- v `subVN` (nHide IFree)
+  ff <- liftM (iIsFree . nExpose) $ expandV v
   gf <- v `subVN` (nHide $ IUniv UShared)
   case (ff,gf) of
     (True ,True ) -> dynacPanicStr "Variable is both free and ground"
@@ -149,9 +149,12 @@ fgn v cf cg cn = do
 
 possible :: (Monad m)
          => BackendPossible fbs
+         -> (S.Set DFunctAr)
+         -> Bool
+         -> (DVar -> Bool)
          -> Crux DVar TBase
          -> SIMCT m DFunct (Actions fbs)
-possible fp cr =
+possible fp bcs co lf cr =
   case cr of
     -- XXX This is going to be such a pile.  We really, really should have
     -- unification crank out a series of DOpAMine opcodes for us, but for
@@ -166,17 +169,17 @@ possible fp cr =
 
     -- Assign or check
     Right (CAssign o i) ->
-        fgn o (runReaderT (unifyVU o) (UnifParams True False)
+        fgn o (runReaderT (unifyVU o) (UnifParams (lf o) False)
                 >> return [ OPAsgn o (NTBase i) ])
               (let chk = "_chk" in return [ OPAsgn chk (NTBase i), OPCheq chk o])
               (throwError UFExDomain)
 
     Right (CEquals o i) ->
        fgn o (fgn i (throwError UFExDomain)
-                    (runReaderT (unifyVV i o) (UnifParams True False)
+                    (runReaderT (unifyVV i o) (UnifParams (lf o || lf i) False)
                        >> return [ OPAsgn o (NTVar i) ])
                     (throwError UFExDomain))
-             (fgn i (runReaderT (unifyVV i o) (UnifParams True False)
+             (fgn i (runReaderT (unifyVV i o) (UnifParams (lf o || lf i) False)
                        >> return [ OPAsgn i (NTVar o) ])
                     (return [ OPCheq o i ])
                     (throwError UFExDomain))
@@ -218,20 +221,39 @@ possible fp cr =
       is <- mapM mkMV vis 
       o  <- mkMV vo
       case fp (funct,is,o) of
-          -- XXX Not a built-in, so we assume that it can be
-          -- iterated in full.
-        Left False      -> do mapM_ bind (vo:vis)
-                              return [OPIter o is funct DetNon Nothing]
+        Left False      -> 
+          if (funct,length is) `S.member` bcs
+            -- If this is a back-chained definition, check that it is all
+            -- ground and then go.
+            --
+            -- XXX This should really be "check that it ascribes to one of
+            -- the declared modes" but we don't have those yet.
+           then do
+                 mapM_ ensureBound vis
+                 fgn vo (bind vo >> return [OPIter o is funct DetSemi Nothing])
+                        (let chk = "_chk" in return
+                           [OPIter (MV chk mf mo) is funct DetSemi Nothing,
+                            OPCheq chk vo])
+                        (throwError UFExDomain)
+
+            -- XXX Not a built-in and not back-chained, so we assume
+            -- that it can be iterated in full.  This is permitted only
+            -- when we're not restricted to constants only!
+           else if co
+                 then throwError UFExDomain
+                 else do mapM_ bind (vo:vis)
+                         return [OPIter o is funct DetNon Nothing]
 
           -- Builtin called in improper mode; bail on this plan
         Left True        -> throwError UFExDomain
 
           -- Builtin called in accessible mode; apply bindings and return
-        Right (BAct a m) -> do runReaderT
-                                 (mapM_ (uncurry $ flip unifyUnaliasedNV) m)
-                                 (UnifParams True True) -- XXX Live?
+        Right (BAct a m) -> do forM_ m $ \(v,vn) ->
+                                 runReaderT (unifyUnaliasedNV vn v)
+                                           (UnifParams (lf v) True)
                                return a
  where
+     mf = nHide IFree
      mo = nHide (IUniv UShared)
      unifyVU v = unifyUnaliasedNV mo v
      mkMV v = do
@@ -241,7 +263,7 @@ possible fp cr =
      ensureBound v = fgn v (throwError UFExDomain)
                            (return ())
                            (throwError UFExDomain)
-     bind x = runReaderT (unifyVU x) (UnifParams False False)
+     bind x = runReaderT (unifyVU x) (UnifParams (lf x) False)
 
 ------------------------------------------------------------------------}}}
 -- Costing Plans                                                        {{{
@@ -340,7 +362,9 @@ stepPartialPlan poss score p =
  where
    step = S.fold (\crux ps ->
                   let pl = pp_plan p
-                      plan = runIdentity $ runSIMCT (poss crux) (pp_binds p)
+                      plan = runIdentity $ flip runSIMCT (pp_binds p)
+                                         $ poss crux
+                                        
                       rc' = S.delete crux (pp_cruxes p)
                   in either (const ps)
                             (\(act,bc') -> PP rc' bc' (score p act) (pl ++ act)
@@ -349,10 +373,14 @@ stepPartialPlan poss score p =
                 ) []
 
 planner_ :: forall fbs .
-            (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
+            (    (DVar -> Bool)
+              -> Crux DVar TBase
+              -> SIMCT Identity DFunct (Actions fbs))
          -- ^ Available steps
          -> (PartialPlan fbs -> Actions fbs -> Cost)
          -- ^ Scoring function
+         -> (S.Set (Crux DVar TBase) -> DVar -> Bool)
+         -- ^ Hook for live variables
          -> S.Set (Crux DVar TBase)
          -- ^ Cruxes to be planned over
          -> Maybe (EvalCrux DVar, DVar, DVar)
@@ -364,7 +392,7 @@ planner_ :: forall fbs .
          -- in the given cruxes)
          -> Either [PartialPlan fbs] [(Cost, Actions fbs)]
          -- ^ Plans and their costs
-planner_ st sc cr mic ictx = runAgenda
+planner_ st sc lf cr mic ictx = runAgenda
    $ PP { pp_cruxes = cr
         , pp_binds  = ctx'
         , pp_score  = 0
@@ -393,7 +421,7 @@ planner_ st sc cr mic ictx = runAgenda
         -> ((Cost,Actions fbs) -> M.Map Cost [PartialPlan fbs] -> x)
         -> (PartialPlan fbs, M.Map Cost [PartialPlan fbs])
         -> x
-    go' kf ks (p, pq') = case stepPartialPlan st sc p of
+    go' kf ks (p, pq') = case stepPartialPlan (st (lf cr)) sc p of
                            Right []  -> kf (Just p) pq'
                            Left df   -> ks df pq'
                            Right ps' -> kf Nothing (foldr mioaPlan pq' ps')
@@ -439,20 +467,23 @@ finalizePlan r d = d ++ [OPEmit (r_head r) (r_result r) (r_index r)
 --
 -- XXX This has no idea what to do about non-range-restricted rules.
 planUpdate :: BackendPossible fbs
+           -> S.Set DFunctAr
            -> Rule
            -> (PartialPlan fbs -> Actions fbs -> Cost)
            -> S.Set (Crux DVar TBase)                     -- ^ Normal form
            -> (EvalCrux DVar, DVar, DVar)
            -> SIMCtx DVar
            -> Either [PartialPlan fbs] (Cost, Actions fbs)
-planUpdate bp r sc anf mi ictx = fmap (second (finalizePlan r)) $
-  bestPlan $ planner_ (possible bp) sc anf (Just mi) ictx
+planUpdate bp bc r sc anf mi ictx = fmap (second (finalizePlan r)) $
+  bestPlan $ planner_ (possible bp bc False) sc (\cs v -> v `S.member` allCruxVars cs) anf (Just mi) ictx
 
-planInitializer :: BackendPossible fbs -> Rule
+planInitializer :: BackendPossible fbs
+                -> S.Set DFunctAr
+                -> Rule
                 -> Either [PartialPlan fbs] (Cost, Actions fbs)
-planInitializer bp r = fmap (second (finalizePlan r)) $
+planInitializer bp bc r = fmap (second (finalizePlan r)) $
   let cruxes = r_cruxes r in
-  bestPlan $ planner_ (possible bp) simpleCost cruxes Nothing
+  bestPlan $ planner_ (possible bp bc False) simpleCost (\cs v -> v `S.member` allCruxVars cs) cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
 -- | Given a particular crux and the remaining evaluation cruxes in a rule, 
@@ -515,10 +546,11 @@ handleDoubles vc e r = S.fold (go e) S.empty r
 -- feeds that to the planner.  The former will also be useful in dumping
 -- more accurate ANF.
 planEachEval :: BackendPossible fbs     -- ^ The backend's primitive support
+             -> S.Set DFunctAr
              -> (DFunctAr -> Bool)      -- ^ Indicator for constant function
              -> Rule
              -> [(Int, Either [PartialPlan fbs] (Cost, DVar, DVar, Actions fbs))]
-planEachEval bp cs r  =
+planEachEval bp bc cs r  =
   map (\(n,cr) ->
           let
               -- pending eval cruxes
@@ -541,15 +573,17 @@ planEachEval bp cs r  =
                       $ allCruxVars
                       $ S.insert (Left cr) cruxes'
 
-          in (n, varify $ planUpdate bp r simpleCost cruxes' (mic $ snd cr) ictx))
+          in (n, varify $ planUpdate bp bc r simpleCost cruxes' (mic $ snd cr) ictx))
     -- Filter out non-constant evaluations
     --
     -- XXX This instead should look at the update modes of each evaluation
   $ MA.mapMaybe (\ec -> case ec of
-                  (n, CCall _ is f) | not (cs (f,length is))
-                                -> Just (n, ec)
-                  (_, CCall _ _  _) -> Nothing
-                  (n, CEval _ _   ) -> Just (n,ec))
+                          (n, CCall _ is f) -> let fa = (f,length is)
+                                               in if    not (cs fa)
+                                                     && not (fa `S.member` bc)
+                                                   then Just (n, ec)
+                                                   else Nothing
+                          (n, CEval _ _   ) -> Just (n,ec))
 
     -- Grab all evaluations
   $ ecs
@@ -567,22 +601,42 @@ planEachEval bp cs r  =
   varHead = "__i"
   varVal  = "__v"
 
-{-
-planGroundBackchain :: BackendPossible fbs
-                    -> Rule
-                    -> Maybe (Cost, DVar, Action fbs)
-planGroundBackchain bp (Rule { r_anf = anf, r_head = h }) =
-  varify
-  $ bestPlan
-  $ anfPlanner_ (possible bp) simpleCost anf Nothing (S.singleton h)
- where
-  varify = fmap $ \(c,a) -> (c,h,a)
+data PBCError fbs = PBCWrongFunctor DFunct
+                  | PBCWrongArity   Int
+                  | PBCNoPlan [PartialPlan fbs]
+                  | PBCBadRule
 
-planBackchains :: BackendPossible fbs
-               -> Rule
-               -> M.Map [Mode] (Cost, [DVar], Action fbs)
-planBackchains bp (Rule { r_anf = anf, r_head = h })
--}
+planBackchain :: BackendPossible fbs
+              -> S.Set DFunctAr
+              -> (DFunct, QMode (NIX DFunct))
+              -> Rule
+              -> Either (PBCError fbs) ([DVar],(Cost, Actions fbs))
+planBackchain bp bc (f,qm) r =
+  case extractHeadVars r of
+    Nothing -> Left PBCBadRule
+    Just (f',hvs) -> if f /= f'
+                      then Left $ PBCWrongFunctor f'
+                      else let (mri,mais) = unpackModeInputs qm
+                           in if length mais /= length hvs
+                               then Left $ PBCWrongArity (length hvs)
+                               else go $ zip (r_result r:hvs) (mri:mais)
+ where
+  go l = let
+             (lf,lb) = L.partition (iIsFree . nExpose . snd) l
+
+             ctx1 = ctxFromBindings $
+                    (map (\x -> (x,tf)) $ S.toList $ allCruxVars $ r_cruxes r)
+                    ++ lf ++ lb
+         in either (Left . PBCNoPlan)
+                   (Right . (\x -> (map fst lb,x))
+                          . fmap (finalizePlan r)) $
+            bestPlan $ planner_ (possible bp bc True) simpleCost
+                                (\cs v ->    (v == r_head   r)
+                                          || (v == r_result r)
+                                          || (v `S.member` allCruxVars cs))
+                                (r_cruxes r) Nothing ctx1
+
+  tf  = nHide IFree
 
 ------------------------------------------------------------------------}}}
 -- Update plan combination                                              {{{
@@ -623,39 +677,6 @@ combineUpdatePlans = go (M.empty)
                              <//> (renderANF fr))
                id
                (IM.lookup n (r_ecruxes fr))
-
-------------------------------------------------------------------------}}}
--- Backward chaining plan combination                                   {{{
-
-{-
-type QueryEvalMap fbs = M.Map (Maybe DFunctAr)
-                              [(Rule, Cost, DVar, Action fbs)]
-
-combineQueryPlans :: [(Rule, Maybe (Cost, DVar, Action fbs))]
-                   -> QueryEvalMap fbs  
-combineQueryPlans = go (M.empty)
- where
-  go m []              = m
-  go m ((fr,mcva):xs)  = go' xs fr mcva m
-
-  go' _  fr Nothing        _ = dynacUserErr
-                               $ "No query plan for rule at"
-                                 <+> (prettySpanLoc $ r_span fr)
-  go' xs fr (Just (c,v,a)) m = go (mapInOrCons (findHeadFA fr)
-                                              (fr,c,v,a)
-                                              m)
-                                  xs
-
-    -- XXX This is unforunate and wrong, but our ANF is not quite right to
-    -- let us do this right.  See also Dyna.Backend.Python's use of this
-    -- function.
-  findHeadFA (Rule _ h _ _ _ (AS { as_assgn = as })) =
-    case M.lookup h as of
-      Nothing            -> error "No unification for head variable?"
-      Just (Left _)      -> error "NTVar head?"
-      Just (Right (f,a)) -> Just (f, length a)
--}
-
 
 ------------------------------------------------------------------------}}}
 -- Adorned Queries                                                      {{{

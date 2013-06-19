@@ -34,4 +34,8 @@ data QMode n = QMode
  deriving Show
 $(makeLenses ''QMode)
 
+unpackModeInputs :: QMode n -> (n, [n])
+unpackModeInputs qm = ( fst $ _qmode_result qm
+                      , map fst $ _qmode_args qm)
+
 -- XXX Update Modes
