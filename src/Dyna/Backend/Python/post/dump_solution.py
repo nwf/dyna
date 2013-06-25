@@ -1,14 +1,9 @@
-
-
-"""
-Save interpreter state using python's pickle protocol.
-"""
-
 import sys
 
-
-class dump_chart(object):
-
+class dump_solution(object):
+    """
+    Print solution
+    """
     def __init__(self, interp):
         self.interp = interp
 

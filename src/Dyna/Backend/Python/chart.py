@@ -16,9 +16,17 @@ class Chart(object):
         return aggregator(self.agg_name)
 
     def __repr__(self):
+
         rows = [term for term in self.intern.values() if term.value is not None]
+
+        if not rows:
+            return ''
+
+        if self.arity == 0:
+            return '%s := %s' % (term, _repr(term.value))
+
         x = '\n'.join('%-30s := %s' % (term, _repr(term.value)) for term in sorted(rows))
-        return '%s\n=================\n%s' % (self.name, x)
+        return '%s\n%s\n%s\n' % (self.name, '='*len(self.name), x)
 
     def __getitem__(self, s):
         assert len(s) == self.arity + 1, \

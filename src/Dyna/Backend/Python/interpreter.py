@@ -43,6 +43,8 @@ TODO
    Maybe subscription to diff is a different beast, only available as a
    procedural world.
 
+ - TODO: True and 1 are equivalent. This sometimes leads to strange behavior.
+
  - New syntax for doing repl stuff (@nwf): load, subscribe, post-process
 
    - sheebang
@@ -55,7 +57,7 @@ TODO
 
  - crash handler
 
-   - where to errors go?
+   - where do errors go?
 
      - @nwf suggests temporary measure for LSA students: time-stamped file
        sitting in the users home directory,
@@ -94,9 +96,6 @@ FASTER
 
  - Collect all query modes used by the planner. Consider indexing value column
    if plans need it.
-
- - dynac should provide routines for building terms. We can hack something
-   together with anf output, but this will be prety kludgy and inefficient.
 
  - better default prioritization (currently FIFO)
 
@@ -190,6 +189,7 @@ import os, sys, imp, argparse
 from collections import defaultdict
 from hashlib import sha1
 from time import time
+from path import path
 
 import load, post
 
@@ -314,13 +314,23 @@ class Interpreter(object):
 
     def dump_charts(self, out=sys.stdout):
         print >> out
-        print >> out, 'Charts'
-        print >> out, '============'
+        print >> out, 'Solution'
+        print >> out, '========'
         fns = self.chart.keys()
         fns.sort()
-        for x in fns:
-            print >> out, self.chart[x]
+        nullary = [x for x in fns if x.endswith('/0')]
+        others = [x for x in fns if not x.endswith('/0')]
+        # show nullary charts first
+        for x in nullary:
+            y = str(self.chart[x])   # skip empty chart
+            if y:
+                print >> out, y
+        if nullary:
             print >> out
+        for x in others:
+            y = str(self.chart[x])   # skip empty chart
+            if y:
+                print >> out, y
         self.dump_errors(out)
 
     def dump_errors(self, out=sys.stdout):
@@ -329,7 +339,7 @@ class Interpreter(object):
             return
         print >> out
         print >> out, 'Errors'
-        print >> out, '============'
+        print >> out, '======'
         for item, (val, es) in self.error.items():
             print >> out,  'because %r is %s:' % (item, _repr(val))
             for e, h in es:
@@ -491,7 +501,6 @@ class Interpreter(object):
         rule.updaters.append(handler)
         handler.rule = rule
 
-
     def gbc(self, fn, *args):
         # TODO: need to distinguish `unknown` from `null`
 
@@ -533,12 +542,11 @@ class Interpreter(object):
             item.aggregator.dec(val, ruleix, variables)
         else:
             item.aggregator.inc(val, ruleix, variables)
-#        self.agenda[item] = 0   # everything is high priority
         self.agenda[item] = time()  # FIFO
 
     def repl(self):
         import repl
-        repl.REPL(self, dotdynadir / 'dyna.hist').cmdloop()
+        repl.REPL(self).cmdloop()
 
     def do(self, filename, initialize=True):
         """
@@ -646,7 +654,7 @@ def peel(fn, item):
     assert item.fn == fn
     return item.args
 
-from path import path
+
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
     parser.add_argument('source', nargs='?', type=path,

@@ -17,7 +17,7 @@ class Aggregator(object):
 
 
 class BAggregator(Counter, Aggregator):
-#    def __init__(self):   
+#    def __init__(self):
 #        super(BAggregator, self).__init__()
     def inc(self, val, ruleix, variables):
         self[val] += 1
@@ -25,7 +25,7 @@ class BAggregator(Counter, Aggregator):
         self[val] -= 1
     def fromkeys(self, *_):
         assert False, "This method should never be called."
-        
+
 
 class PlusEquals(object):
     __slots__ = 'pos', 'neg'
@@ -55,8 +55,18 @@ def user_vars(variables):
     "Post process the variables past to emit (which passes them to aggregator)."
     # remove the 'u' prefix on user variables 'uX'
     # Note: We also ignore user variables with an underscore prefix
-    return tuple((name[1:], val) for name, val in variables.items()
+    return tuple((name[1:], val) for name, val in variables
                  if name.startswith('u') and not name.startswith('u_'))
+
+
+from term import _repr
+def drepr(vs):
+    return '{%s}' %  ', '.join('%s=%s' % (k, _repr(v)) for k,v in vs.iteritems())
+
+from collections import namedtuple
+class Result(namedtuple('Result', 'value variables')):
+    def __repr__(self):
+        return 'Result(value=%s, variables=%s)' % (_repr(self.value), drepr(dict(self.variables)))
 
 
 class DictEquals(BAggregator):
@@ -72,7 +82,7 @@ class DictEquals(BAggregator):
         self[val, vs] -= 1
 
     def fold(self):
-        return list((v, dict(b)) for (v, b), cnt in self.iteritems())
+        return tuple(Result(v, b) for (v, b), cnt in self.iteritems() if cnt > 0)
 
 
 class majority_equals(BAggregator):

@@ -5,10 +5,10 @@ a += 1.
 b += 1.
 a += 1.
 rules
-chart
+sol
 retract_rule 0
 retract_rule 1
-chart" |./dyna > $0.out
+sol" |./dyna > $0.out
 
 diff $0.expect $0.out && echo pass
 

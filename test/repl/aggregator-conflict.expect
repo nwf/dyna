@@ -1,6 +1,5 @@
 :- :- =============
 a := 1
-
 :- DynaCompilerError:
 FATAL: Encountered error in input program:
  Conflicting aggregators; rule /home/timv/.dyna/tmp/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:1-/home/timv/.dyna/tmp/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:3

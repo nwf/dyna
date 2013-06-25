@@ -1,35 +1,11 @@
 
-Charts
-============
-a/0
-=================
-a                              := 0
-
-b/0
-=================
-b                              := 0
-
-by_evl_cross/0
-=================
-by_evl_cross                   := true
-
-by_evl_refl/0
-=================
-by_evl_refl                    := true
-
-by_is_0a/0
-=================
-by_is_0a                       := true
-
-by_is_ab/0
-=================
-
-
-by_syn_cross/0
-=================
-by_syn_cross                   := false
-
-by_syn_refl/0
-=================
-by_syn_refl                    := true
+Solution
+========
+a := 0
+b := 0
+by_evl_cross := true
+by_evl_refl := true
+by_is_0a := true
+by_syn_cross := false
+by_syn_refl := true
 

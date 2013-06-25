@@ -1,11 +1,10 @@
-"""
-Save interpreter state using python's pickle protocol.
-"""
 
 import cPickle
 
-
 class save(object):
+    """
+    Save interpreter state using python's pickle protocol.
+    """
 
     def __init__(self, interp):
         self.interp = interp

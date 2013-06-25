@@ -279,14 +279,14 @@ pdope_ _ (OPEmit h r i vs) = do
   ds <- get
 
   -- A python map of variable name to value
-  let varmap = braces $ align $ fillPunct (comma <> space) $
-         ("'nodes'" <> colon <> (encloseSep lbracket rbracket comma $ map (("d"<>).pretty) [0..ds-1]))
-         : (map (\v -> let v' = pretty v in dquotes v' <> colon <+> v') vs)
+  let varmap = brackets $ align $ fillPunct (comma <> space) $
+         parens ("'nodes'" <> comma <> (encloseSep lbracket rbracket comma $ map (("d"<>).pretty) [0..ds-1]))
+         : (map (\v -> let v' = pretty v in parens (dquotes v' <> comma <+> v')) vs)
 
   return $ "emit" <> tupled [ pretty h
                             , pretty r
                             , pretty i
-                            , varmap
+                            , "tuple" <> (parens $ varmap)
                             ]
 
 -- | Render a dopamine sequence's checks and loops above a (indended) core.

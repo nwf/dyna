@@ -1,38 +1,37 @@
-"""
-Postprocessor for animated visualization of basic elements such as lines and
-text.
-
-We look for the following patterns in the dynabase
-
-         visual element
-               v
-    frame(T, &text(String, tuple(X, Y))).
-          ^
-       time index
-
-Frames should have value true. The example above places a text element reading
-`String` at position `(X,Y)` in a frame at time `T`. This element can be
-specified by dyna rule.
-"""
-
 import pylab as pl
 from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 
 class graph(object):
+    """
+    Postprocessor for animated visualization of basic elements such as lines and
+    text.
+
+    We look for the following patterns in the dynabase
+
+             visual element
+                   v
+        frame(T, &text(String, tuple(X, Y))).
+              ^
+           time index
+
+    Frames should have value true. The example above places a text element reading
+    `String` at position `(X,Y)` in a frame at time `T`. This element can be
+    specified by dyna rule.
+    """
 
     def __init__(self, interp):
         self.interp = interp
 
-    def main(self, outfile):
-        
+    def main(self, outfile, fps=30):
+
         frame = defaultdict(list)
         for _, [t, item], val in self.interp.chart['frame/2'][:,:,:]:
             if val:
                 frame[t].append(item)
-    
+
         nframes = max(frame)
-    
+
         def draw_frame(t):
             ax.cla()
             ax.set_title(t)
@@ -49,12 +48,8 @@ class graph(object):
                     ax.text(x,y,s)
                 else:
                     print 'dont know how to render', item
-    
+
         fig = pl.figure()
         ax = pl.axes()
-    
-        print 'creating animation..'
         anim = FuncAnimation(fig, draw_frame, frames=nframes)
-        print 'saving...'
-        anim.save(outfile, fps=30, extra_args=['-vcodec', 'libx264'])
-        print 'wrote examples/force.dyna.mp4'
+        anim.save(outfile, fps=fps, extra_args=['-vcodec', 'libx264'])

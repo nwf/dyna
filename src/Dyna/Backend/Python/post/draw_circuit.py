@@ -1,7 +1,3 @@
-"""
-Crude visualization of circuit pertaining to state of the interpreter.
-"""
-
 import webbrowser
 from debug import Hypergraph
 from cStringIO import StringIO
@@ -21,7 +17,7 @@ def infer_edges(interp):
 
     # Use rule initializers to find all active hyperedges in the current Chart.
     def _emit(item, _, ruleix, variables):
-        b = variables['nodes']
+        b = dict(variables)['nodes']
         b.sort()
         b = tuple(b)
         edges.add((item, ruleix, b))
@@ -33,6 +29,9 @@ def infer_edges(interp):
 
 
 class draw_circuit(object):
+    """
+    Crude visualization of circuit pertaining to state of the interpreter.
+    """
 
     def __init__(self, interp):
         self.interp = interp

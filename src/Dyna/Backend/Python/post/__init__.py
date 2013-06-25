@@ -1,11 +1,11 @@
-import re
+import re as _re
 from save import save
 from graph import graph
 from draw_circuit import draw_circuit
-from dump_chart import dump_chart
+from dump_solution import dump_solution
 
 
 def run(interp, line):
-    [(name, args)] = re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line)
+    [(name, args)] = _re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line)
     m = globals()[name](interp)
     eval('m.main(%s)' % args)

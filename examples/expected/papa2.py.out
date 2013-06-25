@@ -1,33 +1,18 @@
 
-Charts
-============
-best/0
-=================
-best                           := pair(1,t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),"."))
-
-bestParse/0
-=================
-bestParse                      := t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")
-
-bestScore/0
-=================
-bestScore                      := 1
+Solution
+========
+best := pair(1,t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),"."))
+bestParse := t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")
+bestScore := 1
+length := 8
 
 goal/1
-=================
+======
 goal(t("S",t("S",t("NP","Papa"),t("VP",t("V","ate"),t("NP",t("NP",t("Det","the"),t("N","caviar")),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon")))))),".")) := 1
 goal(t("S",t("S",t("NP","Papa"),t("VP",t("VP",t("V","ate"),t("NP",t("Det","the"),t("N","caviar"))),t("PP",t("P","with"),t("NP",t("Det","a"),t("N","spoon"))))),".")) := 1
 
-length/0
-=================
-length                         := 8
-
-pair/2
-=================
-
-
 phrase/4
-=================
+========
 phrase(".",7,8,".")            := 1
 phrase("Det",2,3,t("Det","the")) := 1
 phrase("Det",5,6,t("Det","a")) := 1
@@ -57,7 +42,7 @@ phrase("the",2,3,"the")        := 1
 phrase("with",4,5,"with")      := 1
 
 rewrite/2
-=================
+=========
 rewrite("Det","a")             := 1
 rewrite("Det","the")           := 1
 rewrite("N","caviar")          := 1
@@ -67,7 +52,7 @@ rewrite("P","with")            := 1
 rewrite("V","ate")             := 1
 
 rewrite/3
-=================
+=========
 rewrite("NP","Det","N")        := 1
 rewrite("NP","NP","PP")        := 1
 rewrite("PP","P","NP")         := 1
@@ -76,16 +61,8 @@ rewrite("S","S",".")           := 1
 rewrite("VP","V","NP")         := 1
 rewrite("VP","VP","PP")        := 1
 
-t/2
-=================
-
-
-t/3
-=================
-
-
 word/2
-=================
+======
 word(".",7)                    := true
 word("Papa",0)                 := true
 word("a",5)                    := true
