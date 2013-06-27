@@ -1,9 +1,24 @@
 import re, sys
+from path import path
 from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from config import dynahome, dotdynadir
 import signal
 from contextlib import contextmanager
+from collections import namedtuple
+
+def _repr(x):
+    if x is True:
+        return 'true'
+    elif x is False:
+        return 'false'
+    elif x is None:
+        return 'null'
+    elif isinstance(x, basestring):
+        # dyna doesn't accept single-quoted strings
+        return '"%s"' % x.replace('"', r'\"')
+    else:
+        return repr(x)
 
 
 # interactive IPython shell
@@ -20,12 +35,39 @@ def dynac(f, out):
     ``DynaCompilerError`` on failure.
     """
     from errors import DynaCompilerError
+
     p = Popen(['%s/dist/build/dyna/dyna' % dynahome,
+               '--dump-anf=' + out + '.anf',                                 # timv: don't like this filename...
                '-B', 'python', '-o', out, f], stdout=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
         raise DynaCompilerError(stderr)
+
+
+def lexer(term):
+    return re.findall('"[^"]*"'               # string
+                      '|[a-z][a-zA-Z_0-9]*'   # functor
+                      '|[A-Z][a-zA-Z0-9_]*'   # variable
+                      '|[(), ]+'              # parens and comma
+                      '|[^(), ]+', term)      # everything else
+
+
+def subst(term, v):
+    """
+    >>> subst('f("asdf",*g(1,X, Y), X+1)', {'X': 1234})
+    'f("asdf",*g(1,1234, Y), 1234+1)'
+
+    >>> subst('f("asdf",*g(1,X, Y), XX+1)', {'X': 1234})
+    'f("asdf",*g(1,1234, Y), XX+1)'
+
+    >>> subst('f("asdf",*g(1,uX, Y), X_+1)', {'X': 1234})
+    'f("asdf",*g(1,uX, Y), X_+1)'
+
+    """
+    assert isinstance(v, dict)
+    return ''.join((_repr(v[x]) if x in v else x) for x in lexer(term))
+
 
 
 @contextmanager
@@ -90,9 +132,10 @@ def parse_sexpr(e):
     return es
 
 
-def read_anf(e):
-    x = parse_sexpr(e)
+class ANF(namedtuple('ANF', 'lines ruleix agg head evals unifs result')):
+    pass
 
+def read_anf(e):
     def _g(x):
 #        return [(var, val[0], val[1:]) for var, val in x]
         for var, val in x:
@@ -103,12 +146,15 @@ def read_anf(e):
     def g(x):
         return list(_g(x))
 
-    for (agg, head, evals, unifs, [_,result]) in x:
-        yield (agg,
-               head,
-               g(evals[1:]),
-               g(unifs[1:]),
-               result)
+    for lines, ruleix, anf in re.findall('^;; (.*)\n;; index (\d+)\n(\([\w\W]+?)\n(?:\n|$)', e, re.MULTILINE):
+        for (agg, head, evals, unifs, [_,result]) in parse_sexpr(anf):
+            yield ANF(lines,
+                      int(ruleix),
+                      agg,
+                      head,
+                      g(evals[1:]),
+                      g(unifs[1:]),
+                      result)
 
 
 def parse_attrs(fn):
@@ -136,7 +182,7 @@ def rule_source(span, src=None):
     if len(rlines) > 1:
         s = rlines[0][bc-1:]
         m = rlines[1:-1]
-        e = rlines[-1][:ec]
+        e = rlines[-1][:ec-1]
         return s + ''.join(m) + e
 
     else:

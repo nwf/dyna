@@ -280,7 +280,7 @@ pdope_ _ (OPEmit h r i vs) = do
 
   -- A python map of variable name to value
   let varmap = brackets $ align $ fillPunct (comma <> space) $
-         parens ("'nodes'" <> comma <> (encloseSep lbracket rbracket comma $ map (("d"<>).pretty) [0..ds-1]))
+         parens ("'nodes'" <> comma <> parens (hcat $ map (\x -> ("d" <> pretty x <> ",")) [0..ds-1]))
          : (map (\v -> let v' = pretty v in parens (dquotes v' <> comma <+> v')) vs)
 
   return $ "emit" <> tupled [ pretty h
@@ -373,6 +373,9 @@ printQuery fh bc (f,a) rule vs cost dope = do
 
 driver :: BackendDriver PyDopeBS
 driver am um is bc qp pr fh = do
+
+  hPutStrLn fh "from __future__ import division"
+
   -- Parser resume state
   hPutStrLn fh "parser_state = \"\"\""
   hPutStrLn fh $ show pr
@@ -382,7 +385,6 @@ driver am um is bc qp pr fh = do
         $ M.toList am
   hPutStrLn fh "\"\"\""
   hPutStrLn fh ""
-
   hPutStrLn fh $ "queries = []"
   hPutStrLn fh $ "agg_decl = {}"
   hPutStrLn fh $ "updaters = []"

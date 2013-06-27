@@ -1,3 +1,5 @@
+from __future__ import division
+
 # TODO: codegen should produce specialized Term with inc/dec methods baked
 # in. This seems nicer than having a separate aggregator object.
 

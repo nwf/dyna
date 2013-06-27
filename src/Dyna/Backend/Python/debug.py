@@ -120,10 +120,17 @@ class Hypergraph(object):
         String of symbolic representation of ``x``, a variable or function, in
         this expresion graph.
         """
+
         if isinstance(x, Edge):
+            label = re.sub('@\d+$', '', x.label)
             if not x.body:  # arity 0
-                return x.label
-            return '%s(%s)' % (x.label, ', '.join(map(self.get_function, x.body)))
+                return label
+
+            if not label[0].isalpha() and len(x.body) == 2:
+                [a,b] = map(self.get_function, x.body)
+                return '(%s %s %s)' % (a, label, b)
+
+            return '%s(%s)' % (label, ', '.join(map(self.get_function, x.body)))
         else:
             if not self.incoming[x]:  # input variable
                 return x
@@ -151,9 +158,10 @@ def isvar(x):
 
 def circuit(anf):
 
-    (agg, head, evals, unifs, result) = anf
-
     g = Hypergraph()
+
+    (g.source_lines, g.ruleix, g.aggregator, head, evals, unifs, result) = anf
+
     for var, op, args in evals:
         g.edge(head=var, label=op, body=args)
 
@@ -249,19 +257,17 @@ body { background: black; color: white; }
 <script type="text/javascript" language="javascript" src="prototype.js"></script>
 
 <script type="text/javascript" language="javascript">
-
 function selectline(lineno) {
+  var r = source_to_ruleix[lineno];
   $("update-handler-pane").innerHTML = "";
-  $$(".handler-" + lineno).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
+  $$(".handler-" + r).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
 
   $("dopamine-pane").innerHTML = "";
-  $$(".dopamine-" + lineno).each(function (e) { $("dopamine-pane").innerHTML += e.innerHTML; });
+  $$(".dopamine-" + r).each(function (e) { $("dopamine-pane").innerHTML += e.innerHTML; });
 
   $("circuit-pane").innerHTML = "";
-  $$(".circuit-" + lineno).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
-
+  $$(".circuit-" + r).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
 }
-
 </script>
 
 </head>
@@ -302,24 +308,22 @@ function selectline(lineno) {
         print >> html, '<div style="display:none;">'
 
         with file(d + '/anf') as f:
-            anf = f.read()
 
-            # Suppress this since we display ANF graphically instead.
-            # print >> html, '<h2>ANF</h2>'
-            # print >> html, '<pre>\n%s\n</pre>' % anf.strip()
+            rules = [circuit(x) for x in read_anf(f.read())]
 
-            print >> html, '<h2>Hyperedge templates</h2>'
+            # output map from source lines to rule index
+            print >> html, '<script type="text/javascript" language="javascript">source_to_ruleix = {'
+            for r in rules:
+                [(_filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', r.source_lines)
+                (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
+                for line in range(bl, el):
+                    print >> html, '  %s: %s,' % (line, r.ruleix)   # these lines go to this rule.
+            print >> html, '}; </script>'
 
-            linenos = re.findall(';; (.*?):(\d+):\d+-.*?:(\d+):\d+', anf)
-
-            rules = [circuit(x) for x in read_anf(anf)]
-
-            assert len(rules) == len(linenos), 'missing line number in ANF.'
-
-            for (i, ((_, lineno, _), g)) in enumerate(zip(linenos, rules)):
+            for g in rules:
                 sty = graph_styles(g)
-                svg = g.render(dynafile + '.d/rule-%s' % i, sty)
-                print >> html, '<div class="circuit-%s">%s</div>' % (lineno, svg)
+                svg = g.render(dynafile + '.d/rule-%s' % g.ruleix, sty)
+                print >> html, '<div class="circuit-%s">%s</div>' % (g.ruleix, svg)
 
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
