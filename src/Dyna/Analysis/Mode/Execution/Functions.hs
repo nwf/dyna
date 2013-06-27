@@ -173,29 +173,44 @@ leqYK yl kr = clookup kr >>= either (leqYN yl) (leqYQ yl)
 -- 'nShallow', rather than expanding the named inst with 'nExpose'.  Since
 -- the right hand side is not getting smaller in such a case, the latter
 -- strategy would lead divergence.
-leqNY :: (LeqC m f n k) => n -> InstF f (VR f n k) -> m Bool
+leqNY :: forall m f n k . (LeqC m f n k) => n -> InstF f (VR f n k) -> m Bool
 leqNY nl (nShallow -> Just nr) = leqNN nl nr
-leqNY nl yr                    = iLeq_ leqNY leqNX (nExpose nl) yr
+leqNY nl yr                    = iLeq_ leqNL leqNX (nExpose nl) yr
+ where
+  leqNL :: NIX f -> (forall i_ . InstF f i_) -> m Bool
+  leqNL nl' yr' = leqNY nl' (ly yr')
+
+  -- What a mess.  Necessary that it is written and scoped under here to
+  -- avoid ambiguous tyvars.
+  ly :: (forall i_ . InstF f i_) -> InstF f (VR f n k)
+  ly x = x
 
 -- | Induction hypothesis YN
 --
 -- Induction is similarly funny as in 'leqNY'
 leqYN :: (LeqC m f n k) => InstF f (VR f n k) -> n -> m Bool
 leqYN (nShallow -> Just nl) nr = leqNN nl nr
-leqYN yl                    nr = iLeq_ leqXI leqXN yl (nExpose nr)
+leqYN yl                    nr = iLeq_ leqXL leqXN yl (nExpose nr)
 
 -- | Induction hypothesis YY
 leqYY :: (LeqC m f n k) => InstF f (VR f n k) -> InstF f (VR f n k) -> m Bool
-leqYY = iLeq_ leqXY leqXX
+leqYY = iLeq_ leqXL leqXX
 
+leqXL :: (LeqC m f n k) => VR f n k -> (forall i_ . InstF f i_) -> m Bool
+leqXL xl yr = leqXX xl (VRStruct yr)
+
+{-
 -- | Repackage Y as X and invoke generic dispatch.  Despite the growth of
 -- the RHS, this is guaranteed to then step to one of the induction
 -- hypotheses, which will reduce both sides.
 leqXY :: (LeqC m f n k) => VR f n k -> InstF f (VR f n k) -> m Bool
 leqXY xl yr = leqXX xl (VRStruct yr)
+-}
 
+{-
 leqXI :: (LeqC m f n k) => VR f n k -> InstF f n -> m Bool
 leqXI xl ir = leqXX xl (VRName $ nHide ir)
+-}
 
 leqXN :: (LeqC m f n k) => VR f n k -> n -> m Bool
 leqXN xl nr = leqXX xl (VRName nr)
@@ -414,7 +429,8 @@ unifyNQ' u n q = unifyNQ u n q
                             (liftM Right . cnew . const . return . Right)
 
 -- | Induction hypothesis QQ
-unifyQQ :: (UnifC m f n, UnifKC m f n k)
+unifyQQ :: forall m f n k .
+           (UnifC m f n, UnifKC m f n k)
         => Uniq
         -> KRI f n k
         -> KRI f n k
@@ -423,6 +439,7 @@ unifyQQ u ya yb = selUnifI >>= \f ->
     f jUpUniq jUpUniq fJQ fJQ unifyJJ u ya yb
     >>= either throwError return
  where
+  fJQ :: Uniq -> (forall i_. InstF f i_) -> Either n k -> m (Either n k)
   fJQ u' q' j' = unifyJQ u' j' q'
 
 -- | Name-on-Name unification, which computes a new name for the result.

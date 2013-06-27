@@ -319,7 +319,7 @@ nCmp :: forall f .
         (Ord f)
      => (forall a b m .
             (Monad m)
-         => (a -> InstF f b -> m Bool)
+         => (a -> (forall i_ . InstF f i_) -> m Bool)
          -> (a -> b -> m Bool)
          -> InstF f a -> InstF f b -> m Bool)
      -> NIX f -> NIX f -> Bool
@@ -339,9 +339,13 @@ nCmp q l0@(NIX li0 lm) r0@(NIX ri0 rm) =
 
   -- Q Out of Phase
   qop l ri = -- XT.traceShow ("NCMP QOP",l,ri) $
-             tsc _2 (l,ri) $ eml l0 (return . flip (nCmp q) (NIX ri rm))
-                                    (flip (q qop qip) ri)
-                                    lm l
+             tsc _2 (l,downcast ri)
+               $ eml l0 (return . flip (nCmp q) (NIX ri rm))
+                        (flip (q qop qip) ri)
+                        lm l
+
+  downcast :: (forall i_ . InstF f i_) -> InstF f ()
+  downcast i = i
 
 nEq, nLeq, nSub :: (Ord f) => NIX f -> NIX f -> Bool
 nEq  = nCmp (\_ -> iEq_)
@@ -368,8 +372,8 @@ nTBin :: forall f . (Ord f, Show f)
             (Monad m)
          => (Uniq -> a -> m c)
          -> (Uniq -> b -> m c)
-         -> (Uniq -> InstF f b -> a -> m c)
-         -> (Uniq -> InstF f a -> b -> m c)
+         -> (Uniq -> (forall i_ . InstF f i_) -> a -> m c)
+         -> (Uniq -> (forall i_ . InstF f i_) -> b -> m c)
          -> (Uniq -> a -> b -> m c)
          -> Uniq
          -> InstF f a -> InstF f b -> m (InstF f c))
@@ -465,8 +469,8 @@ nPBin :: forall e f .
             (Monad m, Show a, Show b, Show c)
          => (Uniq -> a -> m c)
          -> (Uniq -> b -> m c)
-         -> (Uniq -> InstF f b -> a -> m c)
-         -> (Uniq -> InstF f a -> b -> m c)
+         -> (Uniq -> (forall i_ . InstF f i_) -> a -> m c)
+         -> (Uniq -> (forall i_ . InstF f i_) -> b -> m c)
          -> (Uniq -> a -> b -> m c)
          -> Uniq
          -> InstF f a -> InstF f b -> m (Either e (InstF f c)))

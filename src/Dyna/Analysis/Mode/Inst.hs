@@ -26,7 +26,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 module Dyna.Analysis.Mode.Inst(
-  InstF(..), inst_uniq, inst_rec, inst_recps,
+  InstF(..), inst_uniq, inst_rec, inst_recps, inst_irecps,
   iNotReached, iIsNotReached,
   iUniq, iIsFree, iWellFormed_, iEq_, iGround_,
   iLeq_, iLeqGLB_, TyILeqGLB_,
@@ -152,12 +152,21 @@ $(makeLensesFor [("_inst_uniq","inst_uniq")
                 ,("_inst_rec","inst_rec")
                 ]
                 ''InstF)
+-- Note that makeLensesFor creates INLINE pragmas for its lenses, too. :)
 
 -- | Traverse all of the recursion points @a@, rather than the @M.Map f [a]@
 -- structure itself.  This provides a more robust interface to term
 -- recursion, but of course loses information about disjunctions.
 inst_recps :: (Applicative a) => (i -> a i') -> InstF f i -> a (InstF f i')
 inst_recps = inst_rec . each . each
+{-# INLINABLE inst_recps #-}
+
+-- | An indexed variant of 'inst_recps' which reveals the functor of the
+-- disjunct and the argument position being traversed right now.
+inst_irecps :: (Applicative a) => ((f, Int) -> i -> a i')
+                               -> InstF f i -> a (InstF f i')
+inst_irecps = itraverseOf (inst_rec .> each <.> each)
+{-# INLINABLE inst_irecps #-}
 
 ------------------------------------------------------------------------}}}
 -- Instantiation States: Unary predicates                               {{{
@@ -293,7 +302,7 @@ iEq_ _ (IBound _ _ _) (IBound _ _ _)
 --
 -- Definition 3.2.14, p51 (see also definitions 3.1.4 (p32) and 3.2.5 (p46))
 iLeq_ :: (Ord f, Monad m)
-      => (i -> InstF f i' -> m Bool)
+      => (i -> (forall i_ . InstF f i_) -> m Bool)
       -> (i -> i' -> m Bool)
       -> InstF f i -> InstF f i' -> m Bool
 iLeq_ _ _  _            IFree             = return $ True
@@ -323,8 +332,8 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
 type TyILeqGLB_ f m i i' i'' r = 
             (Uniq -> i  -> m i'')               -- ^ Import left
          -> (Uniq -> i' -> m i'')               -- ^ Import right
-         -> (Uniq -> InstF f i' -> i  -> m i'') -- ^ Lopsided merge left
-         -> (Uniq -> InstF f i  -> i' -> m i'') -- ^ Lopsided merge right
+         -> (Uniq -> (forall i_ . InstF f i_) -> i  -> m i'') -- ^ Lopsided merge left
+         -> (Uniq -> (forall i_ . InstF f i_) -> i' -> m i'') -- ^ Lopsided merge right
          -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
          -> Uniq                                -- ^ Uniq of outer context
          -> InstF f i                           -- ^ Left
@@ -397,7 +406,7 @@ iLeqGLB_ _ _ _ _ q _ (IBound u m b) (IBound u' m' b') = do
 -- Definition 3.2.15, p51 (see also definitions 3.1.11 (p35) and 3.2.7
 -- (p46))
 iSub_ :: (Ord f, Monad m)
-      => (i -> InstF f i' -> m Bool)
+      => (i -> (forall i_ . InstF f i_) -> m Bool)
       -> (i -> i' -> m Bool)
       -> InstF f i
       -> InstF f i'
@@ -432,8 +441,8 @@ iSub_ _ q (IBound u m b) (IBound u' m' b') = andM1 (u <= u' && b <= b') $
 -- on 'IFree' are with 'IFree' or 'iNotReached', there is no recursion to be
 -- done.
 iSubGLB_ :: (Ord f, Monad m)
-         => (InstF f i' -> i  -> m i'')
-         -> (InstF f i  -> i' -> m i'')
+         => ((forall i_ . InstF f i_) -> i  -> m i'')
+         -> ((forall i_ . InstF f i_) -> i' -> m i'')
          -> (i -> i' -> m i'')
          -> InstF f i -> InstF f i' -> m (InstF f i'')
 iSubGLB_ _ _ _ IFree      IFree        = return $ IFree
@@ -449,15 +458,15 @@ iSubGLB_ _ _ _ (IAny u')  (IUniv u)    = return $ IUniv (min u u')
 iSubGLB_ _ _ _ (IUniv u)  (IAny u')    = return $ IUniv (min u u')
 iSubGLB_ _ _ _ (IUniv u)  (IUniv u')   = return $ IUniv (min u u')
 
-iSubGLB_ l _ _ (IBound u m b) r@(IAny u') = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM (l r)) m
-iSubGLB_ _ r _ l@(IAny u') (IBound u m b) = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM (r l)) m
+iSubGLB_ l _ _ (IBound u m b) (IAny u') = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (l (IAny u'))) m
+iSubGLB_ _ r _ (IAny u') (IBound u m b) = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (r (IAny u'))) m
 
-iSubGLB_ l _ _ (IBound u m b) r@(IUniv u') = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM (l r)) m
-iSubGLB_ _ r _ l@(IUniv u') (IBound u m b) = (return . flip (IBound (min u u')) b)
-                                            =<< T.mapM (T.mapM (r l)) m
+iSubGLB_ l _ _ (IBound u m b) (IUniv u') = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (l (IUniv u'))) m
+iSubGLB_ _ r _ (IUniv u') (IBound u m b) = (return . flip (IBound (min u u')) b)
+                                            =<< T.mapM (T.mapM (r (IUniv u'))) m
 
 iSubGLB_ _ _ q (IBound u m b) (IBound u' m' b') = do
     let u'' = min u u'
