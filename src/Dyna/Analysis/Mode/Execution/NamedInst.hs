@@ -118,7 +118,7 @@ instance (Show f) => Show (NIX f) where
 -- | Throw exception if ever a NIX is not well formed
 panicwf :: NIX f -> a
 panicwf n = dynacPanic (text "NIX not well-formed"
-                        `above` indent 2 (pretty n))
+                        `above` indent 2 (renderNIX n))
 
 -- | Often we want to check a set cache for membership, returning true if
 -- so, or assume this case and run some action to obtain a boolean.  This is
@@ -148,6 +148,31 @@ eml n al ar m x = either al ar (ml n m x)
 -- | Our particular version of 'fromJust' which panics appropriately.
 ml :: (Ord k) => NIX f -> M.Map k b -> k -> b
 ml n m x = maybe (panicwf n) id (M.lookup x m)
+
+------------------------------------------------------------------------}}}
+-- Pretty-printing core                                                 {{{
+
+renderNIX_ :: forall f e. (NIX f -> Doc e) -> NIX f -> Doc e
+renderNIX_ p (NIX r m) = align $
+   ri r <> if M.null m
+            then empty
+            else line <> (indent 2 $
+                            text "where"
+                            <+> (align $ vsep $ map rme $ M.toList m))
+  where
+   -- render index
+   rix = angles . text . show
+
+   -- render map entry
+   rme (k,v) = rix k <+> equals <+> either p ri v
+
+   ri = IP.compactly (text . show) rix
+
+-- | Print out a NIX just as it is.  Notably, this is used by 'panicwf',
+-- rather than the 'Pretty' instance, which, in order to be pretty, calls
+-- 'nPrune'.
+renderNIX :: forall f e . NIX f -> Doc e
+renderNIX = fix renderNIX_
 
 ------------------------------------------------------------------------}}}
 -- Unary predicates                                                     {{{
@@ -631,24 +656,9 @@ nPrune :: forall f . NIX f -> NIX f
 nPrune = nCrawl (const IFree) UUnique
 
 ------------------------------------------------------------------------}}}
--- Pretty-printing                                                      {{{
+-- Pretty-printing part 2                                               {{{
 
 instance Pretty (NIX f) where
- pretty (nPrune -> NIX r m) = align $
-   ri r <> if M.null m
-            then empty
-            else line <> (indent 2 $
-                            text "where"
-                            <+> (align $ vsep $ map rme $ M.toList m))
-  where
-   -- render index
-   rix = angles . text . show
-
-   -- render map entry
-   rme (k,v) = rix k <+> equals <+> either pretty ri v
-
-   ri = IP.compactly (text . show) rix 
-
-
+ pretty (nPrune -> n) = renderNIX_ pretty n
 
 ------------------------------------------------------------------------}}}
