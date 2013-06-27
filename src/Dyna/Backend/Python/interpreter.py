@@ -4,6 +4,8 @@
 TODO
 ====
 
+ - TODO: @nwf remove comments from rule source
+
  - More info in crash handler. (stack trace, repl transcript, cmd-line args,
    version control info, and dyna source is enough)
 
@@ -139,10 +141,10 @@ USERS
 NOTES
 =====
 
- - TODO: `None` does not propagate, eventually it will because of the `?` prefix
+ - `None` does not propagate, eventually it will because of the `?` prefix
    operator.
 
- - TODO: Term values should only be aggregated with ``=`` or ``:=`` maybe even
+ - Term values should only be aggregated with ``=`` or ``:=`` maybe even
    ``set=``. We should disallow ``a += &b.``
 
      Equals aggregation only one value allowed, mult. >0 on single value. The
@@ -154,7 +156,7 @@ NOTES
      This might not be the case during computation -- this is the same as the
      error problem.
 
- - TODO: Numeric precision is an issue with BAggregators.
+ - Numeric precision is an issue with BAggregators.
 
      timv: Are we sure we have this bug?
 
