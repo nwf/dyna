@@ -523,9 +523,7 @@ class Interpreter(object):
         for k,v in [('chart', self.chart),
                     ('build', self.build),
                     ('gbc', self.gbc),
-                    ('peel', peel),
-                    ('uniform', uniform), ('log', log), ('exp', exp), ('sqrt', sqrt),
-                    ('pycall', pycall)]:
+                    ('peel', peel)]:
             setattr(env, k, v)
 
         emits = []
