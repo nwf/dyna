@@ -265,6 +265,7 @@ renderDopUpds ddi um = vsep $ flip map (M.toList um) $ \(fa,ps) ->
   planHeader r (fa :: Maybe DFunctAr) n c (vi,vo) =
         text ";;"
     <+> (prettySpanLoc $ r_span r)
+    <+> text "ruleix=" <> pretty (r_index r)
     <+> text "fa="     <> maybe empty
                                 (\(f,a) -> pretty f <> text "/" <> pretty a)
                                 fa
@@ -282,6 +283,7 @@ renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
   iniHeader r c = 
         text ";;"
     <+> (prettySpanLoc $ r_span r)
+    <+> text "ruleix=" <> pretty (r_index r)
     <+> text "cost=" <> pretty c
     <+> text "head=" <> pretty (r_head r)
     <+> text "res=" <> pretty (r_result r)
@@ -289,17 +291,20 @@ renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
 renderFailedInit rd (r,ps) =
        text ";; failed initialization attempts for"
   <//> (prettySpanLoc $ r_span r)
+   <+> text "ruleix=" <> pretty (r_index r)
   <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
 
 renderFailedUpdate rd (r,i,ps) =
        text ";; failed update plans for"
   <//> (prettySpanLoc $ r_span r)
-  <+>  (text "evalix=" <> pretty i)
+   <+> text "ruleix=" <> pretty (r_index r)
+   <+> (text "evalix=" <> pretty i)
   <//> indent 2 (vsep $ map (renderPartialPlan rd) ps)
 
 renderFailedQuery rd (r,pbce) =
        text ";; failed query attempts for"
   <//> (prettySpanLoc $ r_span r)
+   <+> text "ruleix=" <> pretty (r_index r)
   <//>
   case pbce of
     PBCWrongFunctor f -> "wrong functor" <+> squotes (pretty f)
