@@ -1,5 +1,8 @@
 % accompanies load.bash
 
+:- dispos &cons(&,&).
+:- dispos &nil.
+
 % binary rules
 rewrite(X, Y, Z) :=
     rules_tsv(Linenum, Cost, X, R),
