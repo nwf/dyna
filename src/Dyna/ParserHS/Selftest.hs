@@ -155,6 +155,20 @@ case_colonFunctor = e @=? (term pvv)
        :~ Span (Columns 0 0) (Columns 17 17) pvv
   pvv = "possible(Var:Val)"
 
+case_bracketTuple :: Assertion
+case_bracketTuple = e @=? (term s)
+ where
+  e = TFunctor "tuple"
+        [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
+        , TFunctor "+"
+            [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
+            , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
+            ]
+           :~ Span (Columns 3 3) (Columns 6 6) s
+        ]
+       :~ Span (Columns 0 0) (Columns 7 7) s
+  s = "[1,2+3]"
+
 -- case_nullaryStar :: Assertion
 -- case_nullaryStar = e @=? (term gs)
 --  where
@@ -200,7 +214,7 @@ test_aggregators = hUnitTestToTests $ TestList
                                                (\_ -> return ()))
         [".", ". ", "+=3", "+3=", "+=a", "+a=" ]
   , TestLabel "custom accept" $
-      let r = unsafeParse (testRule cdlc) r1
+      let r :~ _ = unsafeParse (testRule cdlc) r1
       in r ~=? Rule (TFunctor "a" [] :~ Span (Columns 0 0) (Columns 2 2) r1)
                     "+="
                     (TFunctor "b" [] :~ Span (Columns 5 5) (Columns 6 6) r1)
@@ -220,10 +234,10 @@ test_aggregators = hUnitTestToTests $ TestList
 -- Rules                                                                {{{
 
 progrule :: ByteString -> Spanned Rule
-progrule = unsafeParse (whiteSpace *> spanned (testRule defDLC <* eof))
+progrule = unsafeParse (whiteSpace *> (testRule defDLC <* eof))
 
 progrules :: ByteString -> [Spanned Rule]
-progrules = unsafeParse (whiteSpace *> many (spanned (testRule defDLC)) <* eof)
+progrules = unsafeParse (whiteSpace *> many (testRule defDLC) <* eof)
 
 oneshotRules :: ByteString -> [(RuleIx, Spanned Rule)]
 oneshotRules = xlate . unsafeParse (oneshotDynaParser Nothing)
@@ -236,7 +250,7 @@ case_ruleFact = e @=? (progrule sr)
   e  = Rule
        (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
        "|="
-       (TFunctor "true" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
+       (TFunctor "true" [] :~ Span (Columns 4 4) (Columns 5 5) sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
   sr = "goal."
@@ -368,7 +382,9 @@ case_rules = e @=? (progrules sr)
         (_tNumeric (Left 2) :~ Span (Columns 22 22) (Columns 24 24) sr)
        :~ s2
       ]
-  s1 = Span (Columns 0 0) (Columns 12 12) sr
+  -- Here and elsewhere, it is important that the rules not abut!  The
+  -- whitespace separating them is not to be counted in either one.
+  s1 = Span (Columns 0 0) (Columns 11 11) sr
   s2 = Span (Columns 12 12) (Columns 25 25) sr
   sr = "goal += 1 . laog min= 2 ."
 
@@ -391,7 +407,7 @@ case_rules_with_ruleix_pragmas = e @=? (oneshotRules sr)
         )
       ]
 
-  s1 = Span (Columns 13 13) (Columns 24 24) sr
+  s1 = Span (Columns 13 13) (Columns 23 23) sr
   s2 = Span (Columns 24 24) (Columns 36 36) sr
   sr = ":- ruleix 5. goal += 1. laog min= 2."
 
@@ -416,7 +432,7 @@ case_rulesWhitespace = e @=? (progrules sr)
   l1 = " += 1 .\n"
   l2 = "%test \n"
   l3 = " goal += 2 ."
-  s1 = Span (Columns 2 2) (Lines 3 1 31 1) l0
+  s1 = Span (Columns 2 2) (Lines 1 7 22 7) l0
   s2 = Span (Lines 3 1 31 1) (Lines 3 12 42 12) l3
   sr = B.concat [l0,l1,l2,l3]
 
@@ -438,7 +454,7 @@ case_rulesDotExpr = e @=? (progrules sr)
          (_tNumeric (Left 1) :~ Span (Columns 25 25) (Columns 27 27) sr)
         :~ s2
        ]
-  s1 = Span (Columns 0 0) (Columns 17 17) sr
+  s1 = Span (Columns 0 0) (Columns 16 16) sr
   s2 = Span (Columns 17 17) (Columns 28 28) sr
   sr = "goal += foo.bar. goal += 1 ."
 

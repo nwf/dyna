@@ -326,11 +326,14 @@ term = token $ choice
                         <* (notFollowedBy $ char '(')
 
         , try $ nullaryStar
+        ,       spanned $ nakedbrak
         ,       spanned $ parenfunc
         ]
  where
   parenfunc = TFunctor <$> parseFunctor
-                       <*>  parens (tlexpr `sepBy` symbolic ',')
+                       <*> parens (tlexpr `sepBy` symbolic ',')
+
+  nakedbrak = TFunctor "tuple" <$> brackets (tlexpr `sepBy` symbolic ',')
 
   mkta ty te = TAnnot (AnnType ty) te
 
@@ -421,17 +424,17 @@ genericAggregators = token
  ) <?> "Aggregator"
 
 rule :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
-     => m Rule
+     => m (Spanned Rule)
 rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
-            _    <- try (char '.' <* lookAhead whiteSpace)
-            return (Rule h "|=" (TFunctor "true" [] :~ hs))
+            (_ :~ ds) <- try (spanned (char '.') <* lookAhead whiteSpace)
+            return (Rule h "|=" (TFunctor "true" [] :~ ds) :~ (hs <> ds))
          , do
-            aggr <- token $ join $ asks dlc_aggrs
-            body <- tfexpr
-            _    <- char '.'
-            return (Rule h aggr body)
+            aggr    <- token $ join $ asks dlc_aggrs
+            body    <- tfexpr
+            _ :~ ds <- spanned (char '.')
+            return (Rule h aggr body :~ (hs <> ds))
          ]
 
 ------------------------------------------------------------------------}}}
@@ -683,7 +686,7 @@ pragma = token $
 dline :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
       => m (Spanned PLine)
 dline = spanned (choice [ PLPragma <$> pragma
-                        , PLRule <$> spanned rule
+                        , PLRule <$> rule
                         ])
 
 configureParser :: (DeltaParsing m, LookAheadParsing m)
@@ -708,7 +711,7 @@ testGenericAggr :: (DeltaParsing m, LookAheadParsing m)
 testGenericAggr = genericAggregators
 
 testRule   :: (DeltaParsing m, LookAheadParsing m)
-           => DLCfg -> m Rule
+           => DLCfg -> m (Spanned Rule)
 testRule   = configureParser rule
 
 testPragma :: (DeltaParsing m, LookAheadParsing m)
