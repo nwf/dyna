@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 TODO: unsubscribe
 
@@ -173,7 +175,6 @@ class REPL(cmd.Cmd, object):
             # drop $out chart
             del self.interp.chart['$out/1']
 
-
     def do_vquery(self, q):
         """
         See query.
@@ -185,7 +186,9 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for val, bindings in results:
-            print '   ', _repr(val), 'when', drepr(dict(bindings))
+            #if not bindings:
+            #    print '   ', _repr(val)
+            print '   ', _repr(val), 'where', drepr(dict(bindings))
         print
 
     def do_query(self, q):
@@ -202,14 +205,14 @@ class REPL(cmd.Cmd, object):
          - `vquery` shows variable bindings
 
             :- vquery f(X)
-                1 when {X=1}
-                4 when {X=1}
+                1 where {X=1}
+                4 where {X=1}
 
          - `query` shows variable bindings applied to query
 
             :- query f(X)
-                1 is f(1)
-                4 is f(2)
+                1 ← f(1)
+                4 ← f(2)
 
         """
         results = self._query(q)
@@ -219,7 +222,7 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for term, result in sorted((subst(q, dict(result.variables)), result) for result in results):
-            print '   ', _repr(result.value), 'is', term
+            print '   ', _repr(result.value), '←', term
         print
 
     def default(self, line, show_changed=True):
@@ -263,7 +266,7 @@ class REPL(cmd.Cmd, object):
                 if x.value:
                     print '%s: %s' % (i, q)
                     for result in x.value:
-                        print ' ', _repr(result.value), 'when', drepr(dict(result.variables))
+                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
         print
         self.interp.dump_errors()
 
@@ -289,14 +292,14 @@ class REPL(cmd.Cmd, object):
             Changes
             =======
             f(X,X):
-                1 when {X=1}
+                1 where {X=1}
 
         To view all subscriptions:
 
             :- subscriptions
             f(X):
-               1 when {X=1}
-               2 when {X=2}
+               1 where {X=1}
+               2 where {X=2}
 
         """
         if line.endswith('.'):
@@ -312,7 +315,7 @@ class REPL(cmd.Cmd, object):
             if results:
                 print q
                 for result in results:
-                    print ' ', _repr(result.value), 'when', drepr(dict(result.variables))
+                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
         print
 
     def do_help(self, line):

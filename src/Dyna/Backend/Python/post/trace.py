@@ -125,8 +125,7 @@ class Crux(object):
         side = ['side:   ' + self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]
         return [('%s %s' % (red % rule.anf.agg, self.values(rule.anf.result))),
                 (green % ('# %s' % src)),
-                (green % ('# %s' % subst(src, user_vars))),
-                (green % ('# %s' % drepr(user_vars))),
+                (green % ('# %s where %s' % (subst(src, user_vars), drepr(user_vars)))),
                 ('head:   %s' % self.get_function(rule.anf.head)),
                 ('result: %s' % self.get_function(rule.anf.result))] \
                 + side
