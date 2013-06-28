@@ -4,6 +4,8 @@
 *.swp
 *.pyc
 
+*.d   # debugger's output directory.
+
 dist/
 examples/*.d
 examples/*.hist

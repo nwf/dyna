@@ -196,40 +196,18 @@ from path import path
 
 import load, post
 
-from chart import Chart, Term, _repr
+from term import Term, Cons, Nil
+from chart import Chart
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac, read_anf, strip_comments
+    ddict, dynac, read_anf, strip_comments, _repr
 
 from prioritydict import prioritydict
 from config import dotdynadir
 from errors import notimplemented, enable_crash_handler, \
     DynaInitializerException, DynaCompilerError
 
-try:
-    from numpy import log, exp, sqrt
-    from numpy.random import uniform
-except ImportError:                       # XXX: should probably issue a warning.
-    from math import log, exp, sqrt
-    from random import random as _random
-    def uniform(a=0, b=1):
-        return _random() * (b - a) + a
-
-import re
-def split(s, delim='\s+'):
-    return re.split(delim, s)
-
-# used as a work around to bring arbitrary python functions into dyna
-def pycall(name, *args):
-    x = eval(name)(*args)
-    if isinstance(x, list):
-        return todynalist(x)
-    return x
-
-def todynalist(x):
-    if not x:
-        return Term('nil/0', ())
-    return Term('cons/2', (x[0], todynalist(x[1:])))
+from stdlib import *
 
 
 class Rule(object):
@@ -362,10 +340,16 @@ class Interpreter(object):
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
-        if fn == "true/0":
+        if fn == 'true/0':
             return True
-        if fn == "false/0":
+        if fn == 'false/0':
             return False
+
+        if fn == 'cons/2':
+            return Cons(*args)
+        if fn == 'nil/0':
+            return Nil
+
 
         # FIXME:
         if fn not in self.agg_name:
@@ -552,7 +536,7 @@ class Interpreter(object):
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
-        new_rules = set()    
+        new_rules = set()
         for _, r, _ in env.queries:
             new_rules.add(r)
         for r, _ in env.initializers:

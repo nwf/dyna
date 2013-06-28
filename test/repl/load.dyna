@@ -1,15 +1,18 @@
 % accompanies load.bash
 
+:- dispos &cons(&,&).
+:- dispos &nil.
+
 % binary rules
 rewrite(X, Y, Z) :=
     rules_tsv(Linenum, Cost, X, R),
-    cons(Y, &cons(Z, &nil)) is pycall("split", R, "\\s+"),
+    [Y, Z] is pycall("split", R, "\\s+"),
     pycall("float", Cost).
 
 % load unary rules
 rewrite(X, Y) :=
     rules_tsv(Linenum, Cost, X, R),
-    cons(Y, &nil) is pycall("split", R, "\\s+"),
+    [Y] is pycall("split", R, "\\s+"),
     pycall("float", Cost).
 
 phrase(S,X,I,K) += phrase(S,Y,I,K) + rewrite(X,Y).

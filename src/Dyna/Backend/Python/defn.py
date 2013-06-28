@@ -5,7 +5,7 @@ from __future__ import division
 
 import operator
 from collections import Counter
-
+from utils import drepr, _repr
 
 class Aggregator(object):
     def fold(self):
@@ -60,10 +60,6 @@ def user_vars(variables):
     return tuple((name[1:], val) for name, val in variables
                  if name.startswith('u') and not name.startswith('u_'))
 
-
-from term import _repr
-def drepr(vs):
-    return '{%s}' %  ', '.join('%s=%s' % (k, _repr(v)) for k,v in vs.iteritems())
 
 from collections import namedtuple
 class Result(namedtuple('Result', 'value variables')):

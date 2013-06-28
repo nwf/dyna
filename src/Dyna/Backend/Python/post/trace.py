@@ -6,9 +6,7 @@ TODO: backchained stuff
 """
 
 import re
-from utils import yellow, green, red
-from defn import drepr
-from term import _repr
+from utils import yellow, green, red, _repr, drepr
 import debug, defn
 from cStringIO import StringIO
 from utils import lexer, subst

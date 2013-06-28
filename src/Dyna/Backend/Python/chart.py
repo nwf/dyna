@@ -1,6 +1,7 @@
 from collections import defaultdict
 from defn import aggregator
-from term import Term, _repr
+from term import Term
+from utils import _repr
 
 
 class Chart(object):

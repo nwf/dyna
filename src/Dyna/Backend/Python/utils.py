@@ -7,6 +7,7 @@ import signal
 from contextlib import contextmanager
 from collections import namedtuple
 
+
 def _repr(x):
     if x is True:
         return 'true'
@@ -21,8 +22,21 @@ def _repr(x):
         return repr(x)
 
 
+def drepr(vs):
+    return '{%s}' %  ', '.join('%s=%s' % (k, _repr(v)) for k,v in vs.iteritems())
+
+
 # interactive IPython shell
 ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
+
+
+def get_module(cmd, sub):
+    try:
+        exec 'from %s.%s import %s as m' % (cmd, sub, sub)
+    except (ImportError, SyntaxError):
+        return
+    else:
+        return m
 
 
 black, red, green, yellow, blue, magenta, cyan, white = \
@@ -149,9 +163,9 @@ def parse_sexpr(e):
 class ANF(namedtuple('ANF', 'lines ruleix agg head evals unifs result')):
     pass
 
+
 def read_anf(e):
     def _g(x):
-#        return [(var, val[0], val[1:]) for var, val in x]
         for var, val in x:
             if isinstance(val, list):
                 yield (var, val[0], val[1:])

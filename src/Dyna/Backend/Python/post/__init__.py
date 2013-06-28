@@ -1,24 +1,21 @@
 import re as _re
-from save import save
-from graph import graph
-from draw_circuit import draw_circuit
-from dump_solution import dump_solution
-from trace import trace
+from utils import get_module
+
+available = 'trace', 'dump_solution', 'draw_circuit', 'graph', 'save'
 
 def run(interp, line):
 
     try:
-        [(name, args)] = _re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line.strip())
+        [(module, args)] = _re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line.strip())
     except ValueError:
         print 'Error: failed to parse post command.'
         print '    %s' % line
         print
         return
 
-    try:
-        m = globals()[name](interp)
-    except KeyError:
-        print 'did not recognize post-processor %r' % name
+    if module not in available:
+        print 'did not recognize post-processor %r' % module
         return
 
+    m = get_module('post', module)(interp)
     eval('m.main(%s)' % args)
