@@ -140,18 +140,17 @@ constants = go
   go ("&",2)     = Just $ PDBS $ infixOp "&"
   go ("%",2)     = Just $ PDBS $ infixOp "%"
   go ("+",2)     = Just $ PDBS $ infixOp "+"
+  go ("mod",2)      = Just $ PDBS $ infixOp "%"
+  go ("abs",1)      = Just $ PDBS $ call "abs"
 
-  go ("mod",2)   = Just $ PDBS $ infixOp "%"
-  go ("abs",1)   = Just $ PDBS $ call "abs"
-  go ("log",1)   = Just $ PDBS $ call "log"
-  go ("exp",1)   = Just $ PDBS $ call "exp"
-
-
-
-  go ("pycall", _) = Just $ PDBS $ call "pycall"
-  go ("getattr", 2) = Just $ PDBS $ call "getattr"
-
-
+  go ("log",_)      = Just $ PDBS $ call "log"
+  go ("exp",1)      = Just $ PDBS $ call "exp"
+  go ("sqrt",1)     = Just $ PDBS $ call "sqrt"
+  go ("split", _)   = Just $ PDBS $ call "split"
+  go ("float", _)   = Just $ PDBS $ call "float"
+  go ("int", _)     = Just $ PDBS $ call "int"
+  go ("pycall", _)  = Just $ PDBS $ call "pycall"
+  go ("getattr", _) = Just $ PDBS $ call "getattr"
   go ("uniform", _) = Just $ PDBS $ call "uniform"
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
@@ -383,6 +382,7 @@ driver :: BackendDriver PyDopeBS
 driver am um is bc qp pr fh = do
 
   hPutStrLn fh "from __future__ import division"
+  hPutStrLn fh "from stdlib import *"
 
   -- Parser resume state
   hPutStrLn fh "parser_state = \"\"\""
