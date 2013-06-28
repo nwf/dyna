@@ -6,7 +6,6 @@ normalization process.
 
 import re, os, shutil, webbrowser
 from collections import defaultdict, namedtuple
-from cStringIO import StringIO
 from utils import magenta, red, green, yellow, white, read_anf
 from config import dynahome
 
@@ -14,8 +13,8 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
 
-cssfile="%s/src/Dyna/Backend/Python/debug-pygments.css" % dynahome
-jsfile="%s/external/prototype-1.6.0.3.js" % dynahome
+cssfile = dynahome / 'src' / 'Dyna' / 'Backend' / 'Python' / 'debug-pygments.css'
+jsfile = dynahome / 'external' / 'prototype-1.6.0.3.js'
 
 Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "tail"
 
@@ -101,12 +100,8 @@ class Hypergraph(object):
 
             print >> f, '}'
 
-#        print 'wrote', dot, 'compiling...'
-
         # run graphviz to produce image
         assert 0 == os.system('(dot -Tsvg %s > %s)' % (dot, svg)), 'graphviz failed.'
-
-#        print 'created', svg
 
         with file(svg) as f:
             return f.read()
@@ -259,6 +254,9 @@ body { background: black; color: white; }
 <script type="text/javascript" language="javascript">
 function selectline(lineno) {
   var r = source_to_ruleix[lineno];
+
+  //alert(lineno + "->" + r);
+
   $("update-handler-pane").innerHTML = "";
   $$(".handler-" + r).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
 
@@ -276,17 +274,26 @@ function selectline(lineno) {
         print >> html, '<div id="dyna-source">'
         print >> html, '  <pre>'
 
+
         with file(dynafile) as f:
-            code = f.read().strip()
+            original_code = f.read()
+
+        offset = 0
+        for x in original_code.split('\n'):
+            if x.strip():  # stop of first non empty line
+                break
+            offset += 1
 
         lexer = get_lexer_by_name("haskell")
         formatter = HtmlFormatter(linenos=False)
-        c = re.sub('%', '--', code)
+        c = re.sub('%', '--', original_code)
         pretty_code = highlight(c, lexer, formatter)
         pretty_code = re.sub('--', '%', pretty_code)
 
-        for lineno, line in enumerate(pretty_code.split('\n'), start=1):
-            print >> html, '<a onclick="selectline(%s)">%s</a>' % (lineno, line.rstrip())
+#        from arsenal.debug import ip; ip()
+
+        for lineno, line in enumerate(pretty_code.split('\n'), start=0):
+            print >> html, '<a onclick="selectline(%s)">%s    </a>' % (lineno + offset, line)
 
         print >> html, '  </pre>'
         print >> html, '</div>'
@@ -314,9 +321,8 @@ function selectline(lineno) {
             # output map from source lines to rule index
             print >> html, '<script type="text/javascript" language="javascript">source_to_ruleix = {'
             for r in rules:
-                [(_filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', r.source_lines)
-                (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
-                for line in range(bl, el):
+                [(_filename, bl, el)] = re.findall(r'(.*):(\d+):\d+-\1:(\d+):\d+', r.source_lines)
+                for line in xrange(int(bl)-1, int(el)):
                     print >> html, '  %s: %s,' % (line, r.ruleix)   # these lines go to this rule.
             print >> html, '}; </script>'
 
@@ -328,38 +334,19 @@ function selectline(lineno) {
         # find "update plans" -- every term (edge) in a rule must have code to
         # handle an update to it's value.
 
-        with file(d + '/dopupd') as f:
-            code = f.read()
-
-            print >> html, '<h2>Update plans</h2>'
-
-            for (f,bline,bcol,eline,ecol,kv,block) in \
-                re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)'
-                          , code) :
-
-                # [fa] = re.findall('fa=([^ ]*)', kv)
-
-                print >> html, """\
-<div class="dopamine-%s">
-<pre>
-Update %s
-%s
-</pre>
-</div>
-""" % (bline, kv, block)
-
-
         # -------------
         # Dopamine code
+        with file(d + '/dopupd') as f:
+            code = f.read()
+            print >> html, '<h2>Update plans</h2>'
+            for (f, bline, _bcol, _eline, _ecol, kv, block) in re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
+                # [fa] = re.findall('fa=([^ ]*)', kv)
+                print >> html, """<div class="dopamine-%s"><pre>Update %s\n%s</pre></div>""" % (bline, kv, block)
         with file(d + '/dopini') as f:
             code = f.read()
-
             print >> html, '<h2>Initialization plans</h2>'
-
-            for (f,bline,bcol,eline,ecol,kv,block) in \
-                    re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
+            for (f, bline, _bcol, _eline, _ecol, kv, block) in re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
                 print >> html, """<div class="dopamine-%s"><pre>Initializer:\n%s</pre></div>""" % (bline, block)
-
 
         # ----------------
         # Python code
