@@ -158,13 +158,17 @@ case_colonFunctor = e @=? (term pvv)
 case_bracketTuple :: Assertion
 case_bracketTuple = e @=? (term s)
  where
-  e = TFunctor "tuple"
+  e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
-        , TFunctor "+"
-            [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
-            , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
-            ]
-           :~ Span (Columns 3 3) (Columns 6 6) s
+        , TFunctor "cons"
+		    [ TFunctor "+"
+                [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
+                , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
+                ]
+               :~ Span (Columns 3 3) (Columns 6 6) s
+			, TFunctor "nil" [] :~ Span (Columns 7 7) (Columns 7 7) s
+			]
+           :~ Span (Columns 3 3) (Columns 7 7) s
         ]
        :~ Span (Columns 0 0) (Columns 7 7) s
   s = "[1,2+3]"

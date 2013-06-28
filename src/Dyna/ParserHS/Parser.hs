@@ -326,14 +326,21 @@ term = token $ choice
                         <* (notFollowedBy $ char '(')
 
         , try $ nullaryStar
-        ,       spanned $ nakedbrak
+        ,       nakedbrak
         ,       spanned $ parenfunc
         ]
  where
   parenfunc = TFunctor <$> parseFunctor
                        <*> parens (tlexpr `sepBy` symbolic ',')
 
-  nakedbrak = TFunctor "tuple" <$> brackets (tlexpr `sepBy` symbolic ',')
+  nakedbrak = listify <$> spanned (brackets (tlexpr `sepBy` symbolic ','))
+   where
+    listify (xs :~ s) = 
+      let (xs' :~ s') = foldr (\a@(_ :~ sa) b@(_ :~ sb) -> TFunctor "cons" [a,b] :~ (sa <> sb))
+                              (TFunctor "nil" [] :~ r s)
+                              xs
+      in (xs' :~ (s <> s'))
+    r (Span _ e b) = Span e e b
 
   mkta ty te = TAnnot (AnnType ty) te
 
