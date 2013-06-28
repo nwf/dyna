@@ -281,6 +281,9 @@ class Interpreter(object):
         self.rules = ddict(Rule)
         self.error = {}
 
+        # not essential, available in parser_state
+        self.backchained = set()
+
     def __getstate__(self):
         return ((self.chart,
                  self.agenda,
@@ -324,6 +327,7 @@ class Interpreter(object):
         print >> out, '========'
         fns = self.chart.keys()
         fns.sort()
+        fns = [x for x in fns if x not in self.backchained]  # don't show backchained items
         nullary = [x for x in fns if x.endswith('/0')]
         others = [x for x in fns if not x.endswith('/0')]
         # show nullary charts first
@@ -614,6 +618,9 @@ class Interpreter(object):
 
             # accept the new parser state
             self.parser_state = env.parser_state
+
+            self.backchained = {f + '/' + a for f, a in re.findall(":-backchain '([^']+)'/(\d+).", env.parser_state)}
+
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)

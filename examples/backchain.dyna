@@ -1,0 +1,7 @@
+:- backchain f/1.
+
+
+f(X) := X * f(X-1) for X > 0.
+f(0) := 1.
+
+a := f(4).

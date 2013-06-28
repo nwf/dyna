@@ -1,3 +1,0 @@
-
-% trace of a matrix named "a"
-trace("A") += matrix("A", X, X).

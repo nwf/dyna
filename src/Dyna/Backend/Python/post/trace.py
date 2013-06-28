@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Examine solution as an outline of computation.
+
+TODO: backchained stuff
 """
 
 import re
@@ -8,9 +10,6 @@ from utils import yellow, green, red
 from defn import drepr
 from term import _repr
 import debug, defn
-
-import webbrowser
-from debug import Hypergraph
 from cStringIO import StringIO
 from utils import lexer, subst
 
@@ -20,7 +19,7 @@ from collections import defaultdict
 
 class trace(object):
     """
-    Crude visualization of circuit pertaining to state of the interpreter.
+    Examine solution as an outline of computation.
     """
 
     def __init__(self, interp):
