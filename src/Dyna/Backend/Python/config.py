@@ -5,4 +5,4 @@ dotdynadir = path('~/.dyna').expand()
 if not dotdynadir.exists():
     dotdynadir.mkdir()
 
-dynahome = os.getenv('DYNAHOME', '.')
+dynahome = path(os.getenv('DYNAHOME', '.'))
