@@ -54,7 +54,7 @@ data TBase = TNumeric !(Either Integer Double)
 instance PP.Pretty TBase where
     pretty (TNumeric (Left x))  = PP.pretty x
     pretty (TNumeric (Right x)) = PP.pretty x
-    pretty (TString s)          = PP.dquotes (PP.pretty s)
+    pretty (TString s)          = PP.text $ show s
 
 ------------------------------------------------------------------------}}}
 -- Terms                                                                {{{
