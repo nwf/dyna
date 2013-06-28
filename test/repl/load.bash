@@ -6,5 +6,5 @@
   --load 'rules_tsv = tsv("test/repl/english.gr")' \
          'token = matrix("test/repl/english.sen", astype=str)' \
          'tree = sexpr("test/repl/english.par")' \
-  --post 'dump_chart()' \
+  --post 'dump_solution()' \
   "$@"
