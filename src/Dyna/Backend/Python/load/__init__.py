@@ -1,9 +1,12 @@
-from sexpr import sexpr
-from tsv import tsv
-from matrix import matrix
-from pickled import pickled
+#from sexpr import sexpr
+#from tsv import tsv
+#from matrix import matrix
+#from pickled import pickled
 
 import re as _re
+from utils import get_module
+
+available = 'sexpr', 'tsv', 'matrix'
 
 def run(interp, line):
     try:
@@ -14,11 +17,10 @@ def run(interp, line):
         print
         return
 
-    try:
-        m = getattr(__import__('load'), module)(interp, name)
-    except KeyError:
-        print 'did not recognize post-processor %r' % name
+    if module not in available:
+        print 'did not recognize loader %r' % name
         return
 
+    m = get_module('load', module)(interp, name)
     exec 'm.main(%s)' % args
     interp.go()

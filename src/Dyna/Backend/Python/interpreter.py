@@ -552,7 +552,7 @@ class Interpreter(object):
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
-        new_rules = set()    
+        new_rules = set()
         for _, r, _ in env.queries:
             new_rules.add(r)
         for r, _ in env.initializers:

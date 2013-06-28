@@ -16,21 +16,13 @@ to help.
 TODO: $include load rules from a file.
 """
 
-import re, os, cmd, readline
-
-import debug, interpreter
-from utils import dynac, ip, lexer, subst
+import os, cmd, readline
+from utils import dynac, ip, lexer, subst, drepr, _repr
 from errors import DynaCompilerError, DynaInitializerException
-from chart import _repr
 from config import dotdynadir
-
 from errors import show_traceback
-import load, post
-
 from interpreter import Interpreter, foo, none
-
-from term import _repr
-from defn import drepr
+import load, post
 
 
 class REPL(cmd.Cmd, object):
@@ -134,6 +126,7 @@ class REPL(cmd.Cmd, object):
         """
         Development tool. Used for view Dyna's intermediate representations.
         """
+        import debug
         with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
             f.write(line)
         debug.main(f.name)
@@ -211,8 +204,8 @@ class REPL(cmd.Cmd, object):
          - `query` shows variable bindings applied to query
 
             :- query f(X)
-                1 ← f(1)
-                4 ← f(2)
+                1 =* f(1)
+                4 =* f(2)
 
         """
         results = self._query(q)
@@ -327,8 +320,9 @@ class REPL(cmd.Cmd, object):
                 [cmd, sub] = mod
                 if cmd in ('load', 'post'):
                     try:
-                        print getattr(globals()[cmd], sub).__doc__
-                    except (KeyError, AttributeError):
+                        exec 'from %s.%s import %s as m' % (cmd, sub, sub)
+                        print m.__doc__
+                    except (ImportError, KeyError, AttributeError):
                         print 'No help available for "%s %s"' % (cmd, sub)
                         return
                     else:
@@ -341,7 +335,7 @@ class REPL(cmd.Cmd, object):
 
         Available loaders:
 
-            {loaders}
+            {load}
 
         For more information about a particular loader type the following (in
         this case we get help for the `tsv` loader):
@@ -370,8 +364,6 @@ class REPL(cmd.Cmd, object):
             show_traceback()
             readline.write_history_file(self.hist)
 
-    do_load.__doc__ = do_load.__doc__.format(loaders=', '.join(x for x in dir(load) if not x.startswith('_')))
-
     def do_post(self, line):
         """
         Execute post-processor.
@@ -392,4 +384,6 @@ class REPL(cmd.Cmd, object):
             show_traceback()
             readline.write_history_file(self.hist)
 
-    do_post.__doc__ = do_post.__doc__.format(post=', '.join(x for x in dir(post) if not x.startswith('_')))
+
+    do_load.__doc__ = do_load.__doc__.format(load=', '.join(load.available))
+    do_post.__doc__ = do_post.__doc__.format(post=', '.join(post.available))
