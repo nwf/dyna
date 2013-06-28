@@ -5,22 +5,48 @@ normalization process.
 """
 
 import re, os, shutil, webbrowser
-from collections import defaultdict, namedtuple
-from utils import magenta, red, green, yellow, white, read_anf
+from collections import defaultdict
+from utils import dynac, read_anf
 from config import dynahome
+from path import path
+from warnings import warn
 
-from pygments import highlight
-from pygments.lexers import get_lexer_by_name
-from pygments.formatters import HtmlFormatter
+try:
+    from pygments import highlight
+    from pygments.lexers import get_lexer_by_name
+    from pygments.formatters import HtmlFormatter
+
+except ImportError as e:
+    warn('pygments not installed.')
+    def format_code(code):
+        return code, 0
+
+else:
+    def format_code(code):
+        lexer = get_lexer_by_name("haskell")
+        formatter = HtmlFormatter(linenos=False)
+        c = re.sub('%', '--', code)
+        pretty = highlight(c, lexer, formatter)
+        # Pygments seems to toss out blank lines on top...
+        offset = 0
+        for x in code.split('\n'):
+            if x.strip():  # stop of first non empty line
+                break
+            offset += 1
+        pretty = re.sub('--', '%', pretty)
+        return pretty, offset
+
 
 cssfile = dynahome / 'src' / 'Dyna' / 'Backend' / 'Python' / 'debug-pygments.css'
 jsfile = dynahome / 'external' / 'prototype-1.6.0.3.js'
 
-Edge = namedtuple('Edge', 'head label body')  # "body" is sometimes called the "tail"
-
-def edge_code(x):
-    return '%s = %s(%s)' % (x.head, x.label, ', '.join(x.body)) if x.body else x.label
-Edge.__repr__ = edge_code
+class Edge(object):
+    def __init__(self, head, label, body):
+        self.head = head
+        self.label = label
+        self.body = body
+    def __repr__(self):
+        return '%s = %s(%s)' % (self.head, self.label, ', '.join(self.body)) if self.body else self.label
 
 
 class Hypergraph(object):
@@ -205,92 +231,29 @@ def graph_styles(g):
 
 def main(dynafile, browser=True):
 
+    dynafile = path(dynafile)
+
     if not os.path.exists(cssfile) or not os.path.exists(jsfile):
-        print("Debug must be run from the root of the Dyna source tree")
+        print 'Debug must be run from the root of the Dyna source tree.'
         return
 
     d = dynafile + '.d'
-    os.system('mkdir -p %s' % d)
+    d.mkdir_p()
 
-    shutil.copyfile(cssfile,d+"/debug-pygments.css")
-    shutil.copyfile(jsfile,d+"/prototype.js")
+    # XXX: this is sort of silly
+    shutil.copyfile(cssfile, d + '/debug-pygments.css')
+    shutil.copyfile(jsfile, d + '/prototype.js')
 
-    with file(d + '/index.html', 'wb') as html:
+    with file(d / 'index.html', 'wb') as html:
 
-        print >> html, """\
-<head>
-<style>
-
-html, body {margin:0; padding:0; width: 5000px;}
-
-#dyna-source, #circuit-pane, #dopamine-pane, #update-handler-pane {
-  padding-right: 10px;
-  width: 700px;
-  display: inline;
-  float: left;
-  padding: 20px;
-}
-
-#dyna-source { width: 500px; }
-#circuit-pane { width: 700px; }
-#dopamine-pane { width: 500px; }
-#update-handler-pane { width: 500px; }
-
-#dyna-source, #circuit-pane, #dopamine-pane {
-  border-right: 1px solid #666
-}
-
-h2 { margin-top: 40px; }
-a { cursor: pointer; }
-svg { width: 95%; height: 97%; }
-body { background: black; color: white; }
-
-</style>
-
-<link rel="stylesheet" href="debug-pygments.css">
-
-<script type="text/javascript" language="javascript" src="prototype.js"></script>
-
-<script type="text/javascript" language="javascript">
-function selectline(lineno) {
-  var r = source_to_ruleix[lineno];
-
-  //alert(lineno + "->" + r);
-
-  $("update-handler-pane").innerHTML = "";
-  $$(".handler-" + r).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
-
-  $("dopamine-pane").innerHTML = "";
-  $$(".dopamine-" + r).each(function (e) { $("dopamine-pane").innerHTML += e.innerHTML; });
-
-  $("circuit-pane").innerHTML = "";
-  $$(".circuit-" + r).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
-}
-</script>
-
-</head>
-"""
+        print >> html, HEADING
 
         print >> html, '<div id="dyna-source">'
         print >> html, '  <pre>'
-
-
         with file(dynafile) as f:
             original_code = f.read()
 
-        offset = 0
-        for x in original_code.split('\n'):
-            if x.strip():  # stop of first non empty line
-                break
-            offset += 1
-
-        lexer = get_lexer_by_name("haskell")
-        formatter = HtmlFormatter(linenos=False)
-        c = re.sub('%', '--', original_code)
-        pretty_code = highlight(c, lexer, formatter)
-        pretty_code = re.sub('--', '%', pretty_code)
-
-#        from arsenal.debug import ip; ip()
+        pretty_code, offset = format_code(original_code)
 
         for lineno, line in enumerate(pretty_code.split('\n'), start=0):
             print >> html, '<a onclick="selectline(%s)">%s    </a>' % (lineno + offset, line)
@@ -302,19 +265,15 @@ function selectline(lineno) {
         print >> html, '<div id="dopamine-pane" style=""></div>'
         print >> html, '<div id="update-handler-pane" style=""></div>'
 
-        cmd = """%s/dist/build/dyna/dyna -B python \
---dump-anf="%s"/anf \
---dump-dopini="%s"/dopini \
---dump-dopupd="%s"/dopupd \
--o "%s"/plan "%s" """ % (dynahome,d,d,d,d,dynafile)
-        if 0 != os.system(cmd):
-            print 'command failed:\n\t' + cmd
-            os.system('gnome-open %s 2>/dev/null >/dev/null' % html.name)
-            return
+        dynac(dynafile,
+              out = d / 'plan',
+              anf = d / 'anf',
+              compiler_args = ['--dump-dopini=' + d / 'dopini',
+                               '--dump-dopupd=' + d / 'dopupd'])
 
         print >> html, '<div style="display:none;">'
 
-        with file(d + '/anf') as f:
+        with file(d / 'anf') as f:
 
             rules = [circuit(x) for x in read_anf(f.read())]
 
@@ -368,6 +327,56 @@ function selectline(lineno) {
     if browser:
         webbrowser.open(html.name)
 
+
+
+HEADING = """
+<head>
+<style>
+
+html, body {margin:0; padding:0; width: 5000px;}
+
+#dyna-source, #circuit-pane, #dopamine-pane, #update-handler-pane {
+  padding-right: 10px;
+  width: 700px;
+  display: inline;
+  float: left;
+  padding: 20px;
+}
+
+#dyna-source { width: 500px; }
+#circuit-pane { width: 700px; }
+#dopamine-pane { width: 500px; }
+#update-handler-pane { width: 500px; }
+
+#dyna-source, #circuit-pane, #dopamine-pane {
+  border-right: 1px solid #666
+}
+
+h2 { margin-top: 40px; }
+a { cursor: pointer; }
+svg { width: 95%; height: 97%; }
+body { background: black; color: white; }
+
+</style>
+
+<link rel="stylesheet" href="debug-pygments.css">
+
+<script type="text/javascript" language="javascript" src="prototype.js"></script>
+
+<script type="text/javascript" language="javascript">
+function selectline(lineno) {
+  var r = source_to_ruleix[lineno];
+  $("update-handler-pane").innerHTML = "";
+  $$(".handler-" + r).each(function (e) { $("update-handler-pane").innerHTML += e.innerHTML; });
+  $("dopamine-pane").innerHTML = "";
+  $$(".dopamine-" + r).each(function (e) { $("dopamine-pane").innerHTML += e.innerHTML; });
+  $("circuit-pane").innerHTML = "";
+  $$(".circuit-" + r).each(function (e) { $("circuit-pane").innerHTML += e.innerHTML; });
+}
+</script>
+
+</head>
+"""
 
 if __name__ == '__main__':
 

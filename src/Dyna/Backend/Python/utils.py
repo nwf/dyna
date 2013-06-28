@@ -48,7 +48,7 @@ def strip_comments(src):
     return _comments.sub('', src).strip()
 
 
-def dynac(f, out=None):
+def dynac(f, out=None, anf=None, compiler_args=()):
     """
     Run compiler on file, ``f``, write results to ``out``. Raises
     ``DynaCompilerError`` on failure.
@@ -62,9 +62,18 @@ def dynac(f, out=None):
     if out is None:
         out = dotdynadir / 'tmp' / f.read_hexhash('sha1') + '.plan.py'
 
-    p = Popen(['%s/dist/build/dyna/dyna' % dynahome,
-               '--dump-anf=' + out + '.anf',                                 # timv: don't like this filename...
-               '-B', 'python', '-o', out, f], stdout=PIPE, stderr=PIPE)
+    cmd = ['%s/dist/build/dyna/dyna' % dynahome,
+           '-B', 'python', '-o', out, f]
+
+    if anf is None:
+        cmd += ['--dump-anf=' + out + '.anf']
+    else:
+        cmd += ['--dump-anf=' + anf]
+
+    cmd += compiler_args
+
+    p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
