@@ -11,11 +11,13 @@ examples/*.plan
 examples/*.planc
 examples/*.plan.py
 examples/*.out
+examples/*.anf
 
 docs/sphinx/_build
 
 test/*/*.out
 test/*/*.plan
 test/*/*.plan.py
+test/*/*.anf
 
 libpeerconnection.log

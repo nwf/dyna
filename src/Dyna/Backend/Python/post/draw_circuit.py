@@ -1,13 +1,18 @@
+# -*- coding: utf-8 -*-
+"""
+TODO: nwf remove comments from rule source
+"""
+
 import webbrowser
 from debug import Hypergraph
 from cStringIO import StringIO
-
+from utils import lexer, subst
 
 def circuit(edges):
     # create hypergraph object
     g = Hypergraph()
     for e in edges:
-        head, label, body = e
+        head, label, body, _vs = e
         g.edge(str(head), str(label), map(str, body))
     return g
 
@@ -17,10 +22,11 @@ def infer_edges(interp):
 
     # Use rule initializers to find all active hyperedges in the current Chart.
     def _emit(item, _, ruleix, variables):
-        b = dict(variables)['nodes']
+        b = list(dict(variables)['nodes'])
         b.sort()
-        b = tuple(b)
-        edges.add((item, ruleix, b))
+        # variable values not needed to name the edge, but adding them doesn't
+        # change anything.
+        edges.add((item, ruleix, tuple(b), variables))
 
     for r in interp.rules.values():
         r.init(emit=_emit)
@@ -37,6 +43,7 @@ class draw_circuit(object):
         self.interp = interp
 
     def main(self, outfile):
+        global interp
         interp = self.interp
 
         es = infer_edges(interp)

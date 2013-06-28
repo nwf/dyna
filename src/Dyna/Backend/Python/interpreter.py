@@ -4,6 +4,8 @@
 TODO
 ====
 
+ - TODO: @nwf remove comments from rule source
+
  - More info in crash handler. (stack trace, repl transcript, cmd-line args,
    version control info, and dyna source is enough)
 
@@ -48,6 +50,8 @@ TODO
  - New syntax for doing repl stuff (@nwf): load, subscribe, post-process
 
    - sheebang
+
+ - loader for importing rules
 
  - Errors:
 
@@ -137,10 +141,10 @@ USERS
 NOTES
 =====
 
- - TODO: `None` does not propagate, eventually it will because of the `?` prefix
+ - `None` does not propagate, eventually it will because of the `?` prefix
    operator.
 
- - TODO: Term values should only be aggregated with ``=`` or ``:=`` maybe even
+ - Term values should only be aggregated with ``=`` or ``:=`` maybe even
    ``set=``. We should disallow ``a += &b.``
 
      Equals aggregation only one value allowed, mult. >0 on single value. The
@@ -152,7 +156,7 @@ NOTES
      This might not be the case during computation -- this is the same as the
      error problem.
 
- - TODO: Numeric precision is an issue with BAggregators.
+ - Numeric precision is an issue with BAggregators.
 
      timv: Are we sure we have this bug?
 
@@ -196,7 +200,7 @@ import load, post
 from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac
+    ddict, dynac, read_anf
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -312,7 +316,9 @@ class Interpreter(object):
 
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
-    def dump_charts(self, out=sys.stdout):
+    def dump_charts(self, out=None):
+        if out is None:
+            out = sys.stdout
         print >> out
         print >> out, 'Solution'
         print >> out, '========'
@@ -333,7 +339,9 @@ class Interpreter(object):
                 print >> out, y
         self.dump_errors(out)
 
-    def dump_errors(self, out=sys.stdout):
+    def dump_errors(self, out=None):
+        if out is None:
+            out = sys.stdout
         # We only dump the error chart if it's non empty.
         if not self.error:
             return
@@ -559,8 +567,9 @@ class Interpreter(object):
         A rule is bad if the compiler rejects it or it's initializer fails.
         """
         assert os.path.exists(filename)
+#        assert os.path.exists(filename + '.anf')
 
-        env = imp.load_source('module.name', filename)
+        env = imp.load_source('dynamically_loaded_module', filename)
 
         for k,v in [('chart', self.chart),
                     ('build', self.build),
@@ -608,6 +617,11 @@ class Interpreter(object):
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
+
+        if path(filename + '.anf').exists():       # XXX: should have codegen provide this in plan.py
+            with file(filename + '.anf') as f:
+                for anf in read_anf(f.read()):
+                    self.rules[anf.ruleix].anf = anf
 
         return self.go()
 
@@ -665,7 +679,7 @@ def main():
                         help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('-o', '--output', dest='output',
                         type=argparse.FileType('wb'),
-                        help='Output chart.')
+                        help='Write solution to file.')
     parser.add_argument('--post-process', nargs='*',
                         help='run post-processor.')
     parser.add_argument('--load', nargs='*',

@@ -3,7 +3,7 @@ TODO: unsubscribe
 
 TODO: should probably remove the new rule after we get the results.
 
-TODO: probably should show "changed"
+TODO: subscriptions probably should only show "changes"
 
 TODO: queries are all maintained... should probably toss out the query rule. If
 users want queries to be kept up-to-date user should subscribe instead.
@@ -11,12 +11,13 @@ users want queries to be kept up-to-date user should subscribe instead.
 TODO: help should print call signature of loads and post-processors in addition
 to help.
 
+TODO: $include load rules from a file.
 """
 
 import re, os, cmd, readline
 
 import debug, interpreter
-from utils import ip
+from utils import ip, lexer, subst
 from errors import DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
@@ -28,30 +29,6 @@ from interpreter import Interpreter, foo, none
 
 from term import _repr
 from defn import drepr
-
-
-def lexer(term):
-    return re.findall('"[^"]*"'               # string
-                      '|[a-z][a-zA-Z_0-9]*'   # functor
-                      '|[A-Z][a-zA-Z0-9_]*'   # variable
-                      '|[(), ]'               # parens and comma
-                      '|[^(), ]+', term)      # everything else
-
-
-def subst(term, v):
-    """
-    >>> subst('f("asdf",*g(1,X, Y), X+1)', {'X': 1234})
-    'f("asdf",*g(1,1234, Y), 1234+1)'
-
-    >>> subst('f("asdf",*g(1,X, Y), XX+1)', {'X': 1234})
-    'f("asdf",*g(1,1234, Y), XX+1)'
-
-    >>> subst('f("asdf",*g(1,uX, Y), X_+1)', {'X': 1234})
-    'f("asdf",*g(1,uX, Y), X_+1)'
-
-    """
-    assert isinstance(v, dict)
-    return ''.join((_repr(v[x]) if x in v else x) for x in lexer(term))
 
 
 class REPL(cmd.Cmd, object):

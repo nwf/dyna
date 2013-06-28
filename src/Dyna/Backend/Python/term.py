@@ -1,5 +1,5 @@
 from errors import notimplemented
-
+from utils import _repr
 
 # TODO: codegen should output a derived Term instance for each functor
 class Term(object):
@@ -43,20 +43,6 @@ class Term(object):
 #            return v[self]
 #        # TODO: this should go thru the Chart
 #        return Term(self.fn, tuple(x if isconst(x) else x.subst(v) for x in self.args))
-
-
-def _repr(x):
-    if x is True:
-        return 'true'
-    elif x is False:
-        return 'false'
-    elif x is None:
-        return 'null'
-    elif isinstance(x, basestring):
-        # dyna doesn't accept single-quoted strings
-        return '"%s"' % x.replace('"', r'\"')
-    else:
-        return repr(x)
 
 
 def isconst(x):
