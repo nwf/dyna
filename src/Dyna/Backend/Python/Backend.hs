@@ -130,7 +130,7 @@ mpv = map (pretty . (^.mv_var))
 constants :: DFunctAr -> Maybe PyDopeBS
 constants = go
  where
-  go ("-",1)     = Just $ PDBS $ call "-"
+  go ("-",1)     = Just $ PDBS $ call "-" []
   go ("^",2)     = Just $ PDBS $ infixOp "^"
   go ("|",2)     = Just $ PDBS $ infixOp "|"
   go ("-",2)     = Just $ PDBS $ infixOp "-"
@@ -140,18 +140,20 @@ constants = go
   go ("&",2)     = Just $ PDBS $ infixOp "&"
   go ("%",2)     = Just $ PDBS $ infixOp "%"
   go ("+",2)     = Just $ PDBS $ infixOp "+"
-  go ("mod",2)      = Just $ PDBS $ infixOp "%"
-  go ("abs",1)      = Just $ PDBS $ call "abs"
 
-  go ("log",_)      = Just $ PDBS $ call "log"
-  go ("exp",1)      = Just $ PDBS $ call "exp"
-  go ("sqrt",1)     = Just $ PDBS $ call "sqrt"
-  go ("split", _)   = Just $ PDBS $ call "split"
-  go ("float", _)   = Just $ PDBS $ call "float"
-  go ("int", _)     = Just $ PDBS $ call "int"
-  go ("pycall", _)  = Just $ PDBS $ call "pycall"
-  go ("getattr", _) = Just $ PDBS $ call "getattr"
-  go ("uniform", _) = Just $ PDBS $ call "uniform"
+  go ("mod",2)   = Just $ PDBS $ infixOp "%"
+  go ("abs",1)   = Just $ PDBS $ call "abs" []
+  go ("log",_)   = Just $ PDBS $ call "log" []
+  go ("exp",1)   = Just $ PDBS $ call "exp" []
+  go ("sqrt",1)     = Just $ PDBS $ call "sqrt" []
+  go ("getattr", _) = Just $ PDBS $ call "getattr" []
+  go ("uniform", _) = Just $ PDBS $ call "uniform" []
+
+  go ("split", _)   = Just $ PDBS $ call "split" []
+  go ("float", _)   = Just $ PDBS $ call "float" []
+  go ("int", _)     = Just $ PDBS $ call "int" []
+  go ("getattr", _) = Just $ PDBS $ call "getattr" []
+  go ("pycall", _)  = Just $ PDBS $ call "pycall" []
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
@@ -168,15 +170,19 @@ constants = go
   go ("false",0) = Just $ PDBS $ nullary "False"
   go ("null",0)  = Just $ PDBS $ nullary "None"
 
-  go ("!",1)     = Just $ PDBS $ call "not"
-  go ("not",1)   = Just $ PDBS $ call "not"
+  go ("!",1)     = Just $ PDBS $ call "not" []
+  go ("not",1)   = Just $ PDBS $ call "not" []
 
-  go ("eval",1)  = Just $ PDBS $ call "None;exec "
-  go ("tuple",_) = Just $ PDBS $ call ""
+  go ("eval",1)  = Just $ PDBS $ call "None;exec " []
+  go ("tuple",_) = Just $ PDBS $ call "" []
+
+  go ("nil",0)   = Just $ PDBS $ call "build" ["nil/0"]
+  go ("cons",2)  = Just $ PDBS $ call "build" ["cons/2"]
+
   go _           = Nothing
 
-  nullary v  _ _   = v
-  call    fn _ vis = fn <> (parens $ sepBy "," $ mpv vis)
+  nullary v     _ _   = v
+  call    fn as _ vis = fn <> (parens $ sepBy "," $ as ++ mpv vis)
 
 ------------------------------------------------------------------------}}}
 -- DOpAMine Printout                                                    {{{

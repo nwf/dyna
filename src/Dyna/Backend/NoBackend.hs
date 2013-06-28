@@ -91,6 +91,9 @@ primOps = go
   go ("!"    ,1) = Just   [miaod 1 Det     ]
   go ("not"  ,1) = Just   [miaod 1 Det     ]
 
+  go ("nil"  ,0) = Just   []
+  go ("cons" ,2) = Just   []
+
   go _           = Nothing
 
 primPossible :: (DFunct,[ModedVar],ModedVar) -> Either Bool (BackendAction ())

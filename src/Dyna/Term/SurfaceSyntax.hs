@@ -147,6 +147,9 @@ disposTab_prologish t = DisposTab s a
        , (("pair" ,2),(SDQuote,[ADEval,ADEval]))
        , (("true" ,0),(SDQuote,[]))
        , (("false",0),(SDQuote,[]))
+       -- lists
+       , (("nil",  0),(SDQuote,[]))
+       , (("cons", 2),(SDQuote,[ADEval,ADEval]))
        ]
 
 -- | Make the default surface syntax more functional.  Here, all functors
@@ -168,8 +171,12 @@ disposTab_dyna t = DisposTab s a
   dt = M.fromList [
          (("="    ,2),(SDEval ,[ADQuote,ADQuote]))
        , (("pair" ,2),(SDQuote,[ADEval ,ADEval ]))
+       -- booleans
        , (("true" ,0),(SDQuote,[]))
        , (("false",0),(SDQuote,[]))
+       -- lists
+       , (("nil",  0),(SDQuote,[]))
+       , (("cons", 2),(SDQuote,[ADEval,ADEval]))
        ]
 
 ------------------------------------------------------------------------}}}
