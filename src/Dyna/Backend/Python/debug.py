@@ -17,8 +17,8 @@ try:
     from pygments.formatters import HtmlFormatter
 
 except ImportError as e:
-    warn('pygments not installed.')
     def format_code(code):
+        warn('pygments not installed.')
         return code, 0
 
 else:
