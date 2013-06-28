@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-TODO: nwf remove comments from rule source
-"""
 
 import webbrowser
 from debug import Hypergraph
@@ -29,7 +26,17 @@ def infer_edges(interp):
         edges.add((item, ruleix, tuple(b), variables))
 
     for r in interp.rules.values():
-        r.init(emit=_emit)
+        if r.init is not None:
+            r.init(emit=_emit)
+        else:
+            assert r.query is not None
+
+    # todo: this might pick nodes that aren't used
+    for fn, hs in interp._gbc.items():
+        for x in interp.chart[fn].intern.values():
+            if x.value is not None:
+                for h in hs:
+                    h(*x.args, emit=_emit)
 
     return edges
 
@@ -42,8 +49,7 @@ class draw_circuit(object):
     def __init__(self, interp):
         self.interp = interp
 
-    def main(self, outfile):
-        global interp
+    def main(self, outfile, open=True):
         interp = self.interp
 
         es = infer_edges(interp)
@@ -80,4 +86,5 @@ class draw_circuit(object):
 
             print >> f, '</body></html>'
 
-        webbrowser.open(f.name)
+        if open:
+            webbrowser.open(f.name)

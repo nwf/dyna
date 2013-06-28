@@ -64,7 +64,7 @@ def dig(head, visited, groups, interp):
             block = branch([dig(x, visited, groups, interp) for x in body])
 
             if block:
-                contribs.append(crux.format() + [''] + block)
+                contribs.append(crux.format() + ['|'] + block)
             else:
                 contribs.append(crux.format())
 

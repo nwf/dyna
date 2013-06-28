@@ -12,16 +12,23 @@ class Term(object):
         self.value = None
         self.aggregator = None
 
+    def __eq__(self, other):
+        if other is None:
+            return False
+        if not isinstance(other, Term):
+            return False
+        return self.fn == other.fn and self.args == other.args
+
     def __cmp__(self, other):
+#        if self is other:
+#            return 0
         if other is None:
             return 1
         if not isinstance(other, Term):
             return 1
+#        if self == other:
+#            return 0
         return cmp((self.fn, self.args), (other.fn, other.args))
-
-    # default hash and eq suffice because we intern
-    #def __hash__(self):
-    #def __eq__(self):
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
@@ -226,4 +233,3 @@ def symbol(name):
 #    X.value = Y
 #    print [X,Y,Z]
 #    assert X.value == Y.value == Z.value == 3
-

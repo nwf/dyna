@@ -41,10 +41,10 @@ class Chart(object):
 
         if len(b) == 0:
             # all arguments are free.
-            candidates = self.intern.itervalues()
+            candidates = self.intern.values()
 
         elif len(b) == 1:
-            candidates = iter(b[0])
+            candidates = list(b[0])
 
         else:
             b.sort(key=len)           # start with smaller ones

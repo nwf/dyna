@@ -1,7 +1,7 @@
 """
 TODO: unsubscribe
 
-TODO: should probably remove the new rule after we get the results.
+TODO: query should probably remove the new rule after we get the results.
 
 TODO: subscriptions probably should only show "changes"
 
@@ -17,7 +17,7 @@ TODO: $include load rules from a file.
 import re, os, cmd, readline
 
 import debug, interpreter
-from utils import ip, lexer, subst
+from utils import dynac, ip, lexer, subst
 from errors import DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
@@ -136,17 +136,43 @@ class REPL(cmd.Cmd, object):
             f.write(line)
         debug.main(f.name)
 
+    def do_run(self, filename):
+        """
+        Load dyna rules from `filename`.
+
+        :- run examples/papa.dyna
+
+        """
+        try:
+            changed = self.interp.do(dynac(filename))
+        except DynaCompilerError as e:
+            print e
+        else:
+            self._changed(changed)
+
     def _query(self, q):
         if q.endswith('.'):
             print "Queries don't end with a dot."
             return
-        query = '$out(%s) dict= %s.' % (self.lineno, q)
-        self.default(query, show_changed=False)
+
+        self.interp.new_rules = set()
+
         try:
-            [(_, _, results)] = self.interp.chart['$out/1'][self.lineno,:]
-        except ValueError:
-            return []
-        return results
+            query = "$out(%s) dict= %s." % (self.lineno, q)
+            self.default(query, show_changed=False)
+            try:
+                [(_, _, results)] = self.interp.chart['$out/1'][self.lineno,:]
+                return results
+            except ValueError:
+                return []
+        finally:
+            # cleanup:
+            # retract newly added rules.
+            for r in self.interp.new_rules:
+                self.interp.retract_rule(r)
+            # drop $out chart
+            del self.interp.chart['$out/1']
+
 
     def do_vquery(self, q):
         """

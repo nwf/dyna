@@ -39,7 +39,6 @@ TODO
    - functor
    - ignore variable
 
-   - output formats: vquery and query
    - show diffs
 
    Maybe subscription to diff is a different beast, only available as a
@@ -200,7 +199,7 @@ import load, post
 from chart import Chart, Term, _repr
 from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac, read_anf
+    ddict, dynac, read_anf, strip_comments
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -244,7 +243,7 @@ class Rule(object):
         return parse_attrs(self.init or self.query)['Span']
     @property
     def src(self):
-        return parse_attrs(self.init or self.query)['rule']
+        return strip_comments(parse_attrs(self.init or self.query)['rule'])
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.idx, self.src)
 
@@ -280,9 +279,6 @@ class Interpreter(object):
         self.chart = foo(self.agg_name)
         self.rules = ddict(Rule)
         self.error = {}
-
-        # not essential, available in parser_state
-        self.backchained = set()
 
     def __getstate__(self):
         return ((self.chart,
@@ -327,7 +323,7 @@ class Interpreter(object):
         print >> out, '========'
         fns = self.chart.keys()
         fns.sort()
-        fns = [x for x in fns if x not in self.backchained]  # don't show backchained items
+        fns = [x for x in fns if x not in self._gbc]  # don't show backchained items
         nullary = [x for x in fns if x.endswith('/0')]
         others = [x for x in fns if not x.endswith('/0')]
         # show nullary charts first
@@ -364,26 +360,6 @@ class Interpreter(object):
         for i in sorted(self.rules):
             print '%3s: %s' % (i, self.rules[i].src)
 
-#    def query(self, q):
-#        if q.endswith('.'):
-#            print "Queries don't end with a dot."
-#            return
-#
-#        query = 'out("%s") dict= %s.' % (q, q)
-#
-#        src = self.dynac_code(query)   # might raise DynaCompilerError
-#        self.do(src)
-#
-#        try:
-#            [(_, _, results)] = self.chart['out/1'][q,:]
-#        except ValueError:
-#            print 'No results.'
-#            return
-#
-#        for val, bindings in results:
-#            print '   ', val, 'when', bindings
-#        print
-
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
         if fn == "true/0":
@@ -401,24 +377,10 @@ class Interpreter(object):
 
 #    def retract_item(self, item):
 #        """
-#        For the moment we only correctly retract leaves.
-#
-#        If you retract a non-leaf item, you run the risk of it being
-#        rederived. In the case of cyclic programs the derivation might be the
-#        same or different.
+#        For the moment we only correctly retract leaves. If you retract a
+#        non-leaf item, you run the risk of it being rederived. In the case of
+#        cyclic programs the derivation might be the same or different.
 #        """
-#        # and now, for something truely horrendous -- look up an item by it's
-#        # string value! This could fail because of whitespace or trivial
-#        # formatting differences.
-#        items = {}
-#        for c in self.chart.values():
-#            for i in c.intern.values():
-#                items[str(i)] = i
-#        try:
-#            item = items[item]
-#        except KeyError:
-#            print 'item not found. This could be because of a trivial formatting differences...'
-#            return
 #        self.emit(item, item.value, None, sys.maxint, delete=True)
 #        return self.go()
 
@@ -571,7 +533,6 @@ class Interpreter(object):
         A rule is bad if the compiler rejects it or it's initializer fails.
         """
         assert os.path.exists(filename)
-#        assert os.path.exists(filename + '.anf')
 
         env = imp.load_source('dynamically_loaded_module', filename)
 
@@ -590,6 +551,13 @@ class Interpreter(object):
         # TODO: this should be a transaction.
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
+
+        new_rules = set()    
+        for _, r, _ in env.queries:
+            new_rules.add(r)
+        for r, _ in env.initializers:
+            new_rules.add(r)
+        self.new_rules = new_rules
 
         for fn, r, h in env.queries:
             self.new_query(fn, r, h)
@@ -618,8 +586,6 @@ class Interpreter(object):
 
             # accept the new parser state
             self.parser_state = env.parser_state
-
-            self.backchained = {f + '/' + a for f, a in re.findall(":-backchain '([^']+)'/(\d+).", env.parser_state)}
 
             # process emits
             for e in emits:
@@ -709,7 +675,6 @@ def main():
         if args.plan:
             plan = args.source
         else:
-#            plan = dotdynadir / 'tmp' / args.source.read_hexhash('sha1') + '.plan.py'
             plan = args.source + '.plan.py'
             dynac(args.source, plan)
 
