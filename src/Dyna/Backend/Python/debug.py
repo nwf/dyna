@@ -349,51 +349,31 @@ Update %s
 """ % (bline, kv, block)
 
 
+        # -------------
+        # Dopamine code
         with file(d + '/dopini') as f:
             code = f.read()
 
             print >> html, '<h2>Initialization plans</h2>'
 
             for (f,bline,bcol,eline,ecol,kv,block) in \
-                re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)'
-                          , code) :
+                    re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
+                print >> html, """<div class="dopamine-%s"><pre>Initializer:\n%s</pre></div>""" % (bline, block)
 
-                print >> html, """\
-<div class="dopamine-%s">
-<pre>
-Initializer:
-%s
-</pre>
-</div>
-""" % (bline, block)
 
+        # ----------------
+        # Python code
         with file(d + '/plan') as f:
             code = f.read()
-            # print >> html, code
-
             print >> html, '<h2>Update code</h2>'
-
             for block in re.split('\n\s*\n', code):
-
-                x = re.findall('Span:\s*(.*?):(\d+):(\d+)-.*?:(\d+):(\d+)\n',
-                               block)
-
+                x = re.findall('RuleIx: (\d+)\n', block)
                 if not x:
                     continue
-
-                [(f, bline, bcol, eline, ecol)] = x
-                code = block
+                [ruleix] = x
                 lexer = get_lexer_by_name("python", stripall=True)
                 formatter = HtmlFormatter(linenos=False)
-                pretty_code = highlight(code, lexer, formatter)
-
-                print >> html, """\
-<div class="handler-%s">
-<pre>
-%s
-</pre>
-</div>
-""" % (bline, pretty_code)
+                print >> html, """<div class="handler-%s"><pre>%s</pre></div>""" % (ruleix, highlight(block, lexer, formatter))
 
         print >> html, '</pre>'
         print >> html, '</div>'

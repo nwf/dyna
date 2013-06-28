@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
+
 """
 TODO: unsubscribe
 
-TODO: should probably remove the new rule after we get the results.
+TODO: query should probably remove the new rule after we get the results.
 
 TODO: subscriptions probably should only show "changes"
 
@@ -17,7 +19,7 @@ TODO: $include load rules from a file.
 import re, os, cmd, readline
 
 import debug, interpreter
-from utils import ip, lexer, subst
+from utils import dynac, ip, lexer, subst
 from errors import DynaCompilerError, DynaInitializerException
 from chart import _repr
 from config import dotdynadir
@@ -136,17 +138,42 @@ class REPL(cmd.Cmd, object):
             f.write(line)
         debug.main(f.name)
 
+    def do_run(self, filename):
+        """
+        Load dyna rules from `filename`.
+
+        :- run examples/papa.dyna
+
+        """
+        try:
+            changed = self.interp.do(dynac(filename))
+        except DynaCompilerError as e:
+            print e
+        else:
+            self._changed(changed)
+
     def _query(self, q):
         if q.endswith('.'):
             print "Queries don't end with a dot."
             return
-        query = '$out(%s) dict= %s.' % (self.lineno, q)
-        self.default(query, show_changed=False)
+
+        self.interp.new_rules = set()
+
         try:
-            [(_, _, results)] = self.interp.chart['$out/1'][self.lineno,:]
-        except ValueError:
-            return []
-        return results
+            query = "$out(%s) dict= %s." % (self.lineno, q)
+            self.default(query, show_changed=False)
+            try:
+                [(_, _, results)] = self.interp.chart['$out/1'][self.lineno,:]
+                return results
+            except ValueError:
+                return []
+        finally:
+            # cleanup:
+            # retract newly added rules.
+            for r in self.interp.new_rules:
+                self.interp.retract_rule(r)
+            # drop $out chart
+            del self.interp.chart['$out/1']
 
     def do_vquery(self, q):
         """
@@ -159,7 +186,9 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for val, bindings in results:
-            print '   ', _repr(val), 'when', drepr(dict(bindings))
+            #if not bindings:
+            #    print '   ', _repr(val)
+            print '   ', _repr(val), 'where', drepr(dict(bindings))
         print
 
     def do_query(self, q):
@@ -176,14 +205,14 @@ class REPL(cmd.Cmd, object):
          - `vquery` shows variable bindings
 
             :- vquery f(X)
-                1 when {X=1}
-                4 when {X=1}
+                1 where {X=1}
+                4 where {X=1}
 
          - `query` shows variable bindings applied to query
 
             :- query f(X)
-                1 is f(1)
-                4 is f(2)
+                1 ← f(1)
+                4 ← f(2)
 
         """
         results = self._query(q)
@@ -193,7 +222,7 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for term, result in sorted((subst(q, dict(result.variables)), result) for result in results):
-            print '   ', _repr(result.value), 'is', term
+            print '   ', _repr(result.value), '←', term
         print
 
     def default(self, line, show_changed=True):
@@ -237,7 +266,7 @@ class REPL(cmd.Cmd, object):
                 if x.value:
                     print '%s: %s' % (i, q)
                     for result in x.value:
-                        print ' ', _repr(result.value), 'when', drepr(dict(result.variables))
+                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
         print
         self.interp.dump_errors()
 
@@ -263,14 +292,14 @@ class REPL(cmd.Cmd, object):
             Changes
             =======
             f(X,X):
-                1 when {X=1}
+                1 where {X=1}
 
         To view all subscriptions:
 
             :- subscriptions
             f(X):
-               1 when {X=1}
-               2 when {X=2}
+               1 where {X=1}
+               2 where {X=2}
 
         """
         if line.endswith('.'):
@@ -286,7 +315,7 @@ class REPL(cmd.Cmd, object):
             if results:
                 print q
                 for result in results:
-                    print ' ', _repr(result.value), 'when', drepr(dict(result.variables))
+                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
         print
 
     def do_help(self, line):

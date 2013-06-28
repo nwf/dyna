@@ -253,17 +253,25 @@ pdope_ _ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
     <+> parens (pretty $ c v vs)
 
 -- XXX This works only for the special case at hand (thus the asserts)
-pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc =
+pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc = do
+  dookie <- incState
   return $
-  assert (iIsFree $ nExpose $ o^.mv_mi) $
-  assert (all (not . iIsFree . nExpose . _mv_mi) m) $
-  vcat
-  [     pretty (o^.mv_var)
-    <+> equals
-    <+> "gbc"
-    <> tupled (pfas f m : map (pretty . _mv_var) m)
-  , "if" <+> pretty (o^.mv_var) <+> "is not None" <> colon
-  ]
+   assert (iIsFree $ nExpose $ o^.mv_mi) $
+   assert (all (not . iIsFree . nExpose . _mv_mi) m) $
+   vcat
+   [     pretty (o^.mv_var)
+     <+> equals
+     <+> "gbc"
+     <> tupled (pfas f m : map (pretty . _mv_var) m)
+
+--- needs an opbuild
+   , ("d" <> pretty dookie)
+     <+> equals
+     <+> ("build" <> tupled (pfas f m : map (pretty . _mv_var) m))
+
+   , "if" <+> pretty (o^.mv_var) <+> "is not None" <> colon
+
+   ]
 
 pdope_ bc (OPIter o m f _ Nothing) =
   assert (not $ (f,length m) `S.member` bc) $ do

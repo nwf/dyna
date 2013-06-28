@@ -29,12 +29,24 @@ black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
 
 
-def dynac(f, out):
+_comments = re.compile('%.*$', re.MULTILINE)
+def strip_comments(src):
+    return _comments.sub('', src).strip()
+
+
+def dynac(f, out=None):
     """
     Run compiler on file, ``f``, write results to ``out``. Raises
     ``DynaCompilerError`` on failure.
     """
     from errors import DynaCompilerError
+
+    f = path(f)
+    if not f.exists():
+        raise DynaCompilerError("File '%s' does not exist." % f)
+
+    if out is None:
+        out = dotdynadir / 'tmp' / f.read_hexhash('sha1') + '.plan.py'
 
     p = Popen(['%s/dist/build/dyna/dyna' % dynahome,
                '--dump-anf=' + out + '.anf',                                 # timv: don't like this filename...
@@ -43,6 +55,8 @@ def dynac(f, out):
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
         raise DynaCompilerError(stderr)
+
+    return out
 
 
 def lexer(term):
