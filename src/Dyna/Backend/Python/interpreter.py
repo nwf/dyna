@@ -174,6 +174,8 @@ def none():
     return None
 
 
+import os
+
 class Interpreter(object):
 
     def __init__(self):
@@ -191,6 +193,12 @@ class Interpreter(object):
         self.error = {}
 
         self.files = []
+
+        # interpretor needs a place for it's temporary files.
+        self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
+        if tmp.exists():
+            tmp.rmtree()
+        tmp.makedirs_p()
 
     def __getstate__(self):
         return ((self.chart,
@@ -488,13 +496,6 @@ class Interpreter(object):
             raise DynaInitializerException(e, init)
 
         else:
-
-            # TODO: how do I make this transactional? what if the user hits ^C
-            # in the middle of the following blocK?
-            #
-            #  - maybe transaction isn't want I mean. Maybe all I want (for now
-            #    is to avoid ^C.
-
             for fn, r, h in env.updaters:
                 self.new_updater(fn, r, h)
             for r, h in env.initializers:
@@ -514,10 +515,15 @@ class Interpreter(object):
 
         return self.go()
 
-    def dynac(self, filename, out=None):
+    def dynac(self, filename):
+        filename = path(filename)
         self.files.append(filename)
-        out = dynac(filename, out)
+
+        out = self.tmp / filename.read_hexhash('sha1') + '.plan.py'
+
+        dynac(filename, out)
         self.files.append(out)
+        return out
 
     def dynac_code(self, code):
         """
@@ -529,18 +535,13 @@ class Interpreter(object):
         x.update(self.parser_state)
         x.update(code)
 
-        dyna = dotdynadir / 'tmp' / ('%s.dyna' % x.hexdigest())
-        dyna.dirname().mkdir_p()  # make necessary directories
-
-        out = '%s.plan.py' % dyna
+        dyna = self.tmp / ('%s.dyna' % x.hexdigest())
 
         with file(dyna, 'wb') as f:
             f.write(self.parser_state)  # include parser state if any.
             f.write(code)
 
-        self.dynac(dyna, out)   # might raise compiler error
-
-        return out
+        return self.dynac(dyna)
 
 
 def peel(fn, item):
@@ -590,16 +591,7 @@ def main():
 
 #    def pickle_interp():
 #        import subprocess
-#
-#        crash = dotdynadir / 'crash'
-#        crash.rmtree(ignore_errors=False)
-#        crash.mkdir_p()
-#
-#        for f in [dotdynadir / 'crash.log'] + interp.files:
-#            path(f).copy(crash)
-#
-#        subprocess.Popen(['tar', 'czf', dotdynadir / 'crash.tar.gz', crash])
-#
+#        subprocess.Popen(['tar', 'czf', dotdynadir / 'crash.tar.gz', dotdynadir])
 #    crash_handler.interp = pickle_interp
 
 
@@ -610,10 +602,14 @@ def main():
             return
 
         if args.plan:
-            plan = args.source
+            # copy plan to tmp directory
+            plan = tmp / args.source.read_hexhash('sha1') + '.plan.py'
+            args.source.copy(plan)
+
         else:
-            plan = args.source + '.plan.py'
-            interp.dynac(args.source, plan)
+            #plan = args.source + '.plan.py'
+            #interp.dynac(args.source, plan)
+            plan = interp.dynac(args.source)
 
         if args.profile:
             # When profiling, its common practice to disable the garbage collector.

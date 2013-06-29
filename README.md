@@ -30,7 +30,7 @@ The python modules required
 
 Optionally, installing the following will enable certain extension
 
-    $ easy_install pygments matplotlib numpy ipython
+    $ easy_install pygments matplotlib numpy
     $ apt-get install graphviz
 
 Now you're ready to build.

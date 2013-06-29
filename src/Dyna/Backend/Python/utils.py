@@ -46,7 +46,7 @@ def strip_comments(src):
     return _comments.sub('', src).strip()
 
 
-def dynac(f, out=None, anf=None, compiler_args=()):
+def dynac(f, out, anf=None, compiler_args=()):
     """
     Run compiler on file, ``f``, write results to ``out``. Raises
     ``DynaCompilerError`` on failure.
@@ -56,9 +56,6 @@ def dynac(f, out=None, anf=None, compiler_args=()):
     f = path(f)
     if not f.exists():
         raise DynaCompilerError("File '%s' does not exist." % f)
-
-    if out is None:
-        out = dotdynadir / 'tmp' / f.read_hexhash('sha1') + '.plan.py'
 
     cmd = ['%s/dist/build/dyna/dyna' % dynahome,
            '-B', 'python', '-o', out, f]
@@ -77,7 +74,6 @@ def dynac(f, out=None, anf=None, compiler_args=()):
         assert not stdout.strip(), [stdout, stderr]
         raise DynaCompilerError(stderr)
 
-    return out
 
 
 def lexer(term):
