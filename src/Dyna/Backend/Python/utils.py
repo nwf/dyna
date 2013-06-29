@@ -3,8 +3,6 @@ from path import path
 from subprocess import Popen, PIPE
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from config import dynahome, dotdynadir
-import signal
-from contextlib import contextmanager
 from collections import namedtuple
 
 
@@ -106,24 +104,26 @@ def subst(term, v):
     return ''.join((_repr(v[x]) if x in v else x) for x in lexer(term))
 
 
-
-@contextmanager
-def interrupt_after():
-
-    def handler(signum, frame):
-        sys.stderr.write('^C')
-        handler.interrupted = True
-        return signal.SIG_IGN
-
-    handler.interrupted = False
-    signal.signal(signal.SIGINT, handler)
-
-    yield
-
-    signal.signal(signal.SIGINT, signal.default_int_handler)
-
-    if handler.interrupted:
-        raise KeyboardInterrupt
+#import signal
+#from contextlib import contextmanager
+#
+#@contextmanager
+#def interrupt_after():
+#
+#    def handler(signum, frame):
+#        sys.stderr.write('^C')
+#        handler.interrupted = True
+#        return signal.SIG_IGN
+#
+#    handler.interrupted = False
+#    signal.signal(signal.SIGINT, handler)
+#
+#    yield
+#
+#    signal.signal(signal.SIGINT, signal.default_int_handler)
+#
+#    if handler.interrupted:
+#        raise KeyboardInterrupt
 
 
 class ddict(dict):

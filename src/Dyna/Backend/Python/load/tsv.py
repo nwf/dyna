@@ -1,12 +1,27 @@
+"""
+TODO: option for stripping comments
+TODO: option for strict number of columns.
+"""
+
 import re
 
 class tsv(object):
-
     """
     Load tab-delimited files.
 
-    TODO: option for stripping comments
-    TODO: option for strict number of columns.
+    :- load row = tsv("test/repl/english.gr")
+    :- sol
+    row/4
+    =====
+    row(0,"0","S","NP VP")         := true
+    row(1,"1.58","ROOT","S .")     := true
+    row(2,"1.58","ROOT","S !")     := true
+    row(3,"1.58","ROOT","VP !")    := true
+    row(4,"3.81","VP","V")         := true
+    row(5,"3.81","VP","V NP")      := true
+    row(6,"1.49","VP","V VP")      := true
+       ...
+
     """
 
     def __init__(self, interp, name):

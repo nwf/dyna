@@ -8,19 +8,21 @@ class DynaCompilerError(Exception):
     pass
 
 
-#class AggregatorConflict(Exception):
-#    def __init__(self, key, expected, got):
-#        msg = "Aggregator conflict %r was %r trying to set to %r." \
-#            % (key, expected, got)
-#        super(AggregatorConflict, self).__init__(msg)
-
-
 class DynaInitializerException(Exception):
     def __init__(self, exception, init):
-        msg = '%r in ininitializer for rule\n  %s\n        %s' % \
-            (exception,
-             parse_attrs(init)['Span'],
-             parse_attrs(init)['rule'])
+        rule = parse_attrs(init)['rule']
+        span = parse_attrs(init)['Span']
+
+        if span.startswith(dotdynadir / 'tmp'):
+            # don't show users tmp files create by the repl.
+            msg = '%r in ininitializer for rule\n    %s' % \
+                (exception, rule)
+
+        else:
+            msg = '%r in ininitializer for rule\n  %s\n        %s' % \
+                (exception,
+                 span,
+                 rule)
         super(DynaInitializerException, self).__init__(msg)
 
 
@@ -43,16 +45,21 @@ def exception_handler(etype, evalue, tb):
     # chart -- because it might be too big to email); input to repl.
     # This should all go into a tarball.
 
+    if crash_handler.interp is not None:
+        crash_handler.interp()
+
     print 'FATAL ERROR (%s): %s' % (etype.__name__, evalue)
-    print 'Please report this error by emailing bugs@dyna.org. ' \
-        'Please attach the following file %s' % crashreport.name
+    print 'Crash log available %s' % crashreport.name
 
 
-def enable_crash_handler():
+def crash_handler():
     """
     Use our custom exception handler for handling uncaught exceptions.
     """
     sys.excepthook = exception_handler
+
+# XXX: global state...
+crash_handler.interp = None
 
 
 def show_traceback(einfo=None):

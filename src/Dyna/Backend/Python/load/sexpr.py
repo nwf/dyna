@@ -1,12 +1,24 @@
-"""
-Read lisp-style S-Expressions from a file.
-"""
-
 from cStringIO import StringIO
 from utils import parse_sexpr
 
 
 class sexpr(object):
+    """
+    Read lisp-style S-Expressions from a file.
+
+    $ echo '(a (b c) (d e)) (a b (c))' > /tmp/foo
+    $ ./dyna
+    :- load trees = sexpr("/tmp/foo")
+    :- sol
+
+    Solution
+    ========
+    trees/1
+    =======
+    trees(0) := node("a", node("b", "c"), node("d", "e"))
+    trees(1) := node("a", "b", "c")
+
+    """
 
     def __init__(self, interp, name):
         self.interp = interp

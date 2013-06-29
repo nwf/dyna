@@ -139,7 +139,7 @@ class REPL(cmd.Cmd, object):
 
         """
         try:
-            changed = self.interp.do(dynac(filename))
+            changed = self.interp.do(self.interp.dynac(filename))
         except DynaCompilerError as e:
             print e
         else:

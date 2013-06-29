@@ -204,10 +204,7 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import notimplemented, enable_crash_handler, \
-    DynaInitializerException, DynaCompilerError
-
-from stdlib import *
+from errors import crash_handler, DynaInitializerException
 
 
 class Rule(object):
@@ -257,6 +254,8 @@ class Interpreter(object):
         self.chart = foo(self.agg_name)
         self.rules = ddict(Rule)
         self.error = {}
+
+        self.files = []
 
     def __getstate__(self):
         return ((self.chart,
@@ -580,6 +579,11 @@ class Interpreter(object):
 
         return self.go()
 
+    def dynac(self, filename, out=None):
+        self.files.append(filename)
+        out = dynac(filename, out)
+        self.files.append(out)
+
     def dynac_code(self, code):
         """
         Compile a string of dyna code.
@@ -599,7 +603,7 @@ class Interpreter(object):
             f.write(self.parser_state)  # include parser state if any.
             f.write(code)
 
-        dynac(dyna, out)   # might raise compiler error
+        self.dynac(dyna, out)   # might raise compiler error
 
         return out
 
@@ -646,7 +650,23 @@ def main():
 
     interp = Interpreter()
 
-    enable_crash_handler()
+    crash_handler()
+
+
+#    def pickle_interp():
+#        import subprocess
+#
+#        crash = dotdynadir / 'crash'
+#        crash.rmtree(ignore_errors=False)
+#        crash.mkdir_p()
+#
+#        for f in [dotdynadir / 'crash.log'] + interp.files:
+#            path(f).copy(crash)
+#
+#        subprocess.Popen(['tar', 'czf', dotdynadir / 'crash.tar.gz', crash])
+#
+#    crash_handler.interp = pickle_interp
+
 
     if args.source:
 
@@ -658,7 +678,7 @@ def main():
             plan = args.source
         else:
             plan = args.source + '.plan.py'
-            dynac(args.source, plan)
+            interp.dynac(args.source, plan)
 
         if args.profile:
             # When profiling, its common practice to disable the garbage collector.
