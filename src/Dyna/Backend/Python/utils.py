@@ -1,7 +1,7 @@
-import re, sys
+import re
+from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from path import path
 from subprocess import Popen, PIPE
-from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from config import dynahome, dotdynadir
 from collections import namedtuple
 

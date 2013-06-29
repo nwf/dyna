@@ -1,45 +1,44 @@
-An overview of the source tree
-------------------------------
+Dyna
+----
 
-* docs/sphinx/         -- Documentation in reST format for sphinx
-* examples/            -- Dyna source programs
-    *  expected/       -- Expected output for self-tests.
-* misc/                -- Pretty much what it says on the tin
-* src/Dyna/
-    * Analysis         -- The heart of the compiler
-        * Mode         -- A re-implementation of the Mercury mode system
-    * Backend          -- Compilation to target languages
-        * Python       -- A Python code generator
-    * Main             -- Dyna compiler drivers (main and test) and definitions used throughout the pipeline
-    * ParserHS         -- the Haskell front-end parser and selftests
-    * Term             -- Different representations of terms and utilities
-    * XXX              -- code that should probably go upstream or be made freestanding.
+Dyna is a small, high-level declarative programming language. Dyna programs
+specify a collection of named data items. These item's can be queried, much like
+a database. Dyna's power comes from the ability to define an item's value by
+relating other items with an equation. These possibly recursive equations
+specify the logical structure of a computation. Thus, Dyna provides a unified
+way of specifying both data and algorithms. Dyna's algorithms are reactive---a
+change to an item's value efficiently propagates throughout the dynabase so that
+all equations are satisfied.
 
-Building
---------
 
-First, ensure that you have the Haskell platform 2012.2 or later installed,
-either through your favorite package manager or by installing it stand-alone.
-You'll want to have the following programs installed:
+Quick Start
+-----------
 
-    * Python 2.7 or compatible
-    * graphviz
+First, ensure that you have the Haskell platform 2012.2 or later installed
+either through your favorite package manager (e,g, `apt-get install
+haskell-platform`) or by installing it stand-alone from the haskell homepage.
+
+This is enough to get you the compiler up and running. In order execute
+programs, you'll need to set up the Python backend up. For that you'll need to
+have the following:
+
+    * Python 2.7+
 
 The python modules required
 
-    $ easy_install numpy ipython pygments path.py matplotlib
+    $ easy_install ipython
 
-You should probably run
+Optionally, installing the following will enable certain extension
 
-    cabal update
+    $ easy_install pygments matplotlib numpy ipython
+    $ apt-get install graphviz
 
-before proceeding, just to make sure that your package database is
-up-to-date.  Running
+Now you're ready to build.
 
     make
 
-will then build dependencies and the Dyna executable.  Run the test harness,
-just to make sure things built and are working OK:
+this will build dependencies and the Dyna compiler executable.  Run the test
+harness, just to make sure things built and are working:
 
     make tests
 
@@ -47,20 +46,13 @@ And read up on the documentation:
 
     make sphinxdoc
 
-At this point, the code is still rather "in the works" so you probably want
-to...
+Now you're ready to run a Dyna program. We've included a few for you to play
+with in the `examples/` directory.
 
 * Run the python backend interactively (leave off the "-i" for bulk operation):
 
         ./dyna -i examples/papa2.dyna
 
-* Produce visualizations of some of the internal stages of our compiler
-
-        ./debug examples/papa2.dyna
-
-* load some module in GHCi; for example:
-
-        ghci -isrc Dyna.ParserHS.Parser
 
 Disclaimer
 ----------

@@ -4,10 +4,24 @@
 TODO
 ====
 
- - TODO: @nwf remove comments from rule source
-
  - More info in crash handler. (stack trace, repl transcript, cmd-line args,
    version control info, and dyna source is enough)
+
+   - hooks to call a crash script
+
+ - dyna syntax which just gets passed to the backend:
+
+   - running repl commands, loaders, post-procesors
+
+   - hook for python imports? or maybe an arbirary preamble/epilogue.
+
+     :- python "from bar import foo, baz"
+
+   - sheebang?
+
+
+ - TODO: @nwf remove comments from rule source
+
 
  - vbench: a script which tracks performace over time (= git commits).
 
@@ -27,62 +41,19 @@ TODO
    handlers, and indices (as Jason points out indices are just memoized
    queries).
 
- - hook for python imports? or maybe an arbirary preamble/epilogue.
-
-   :- python: from numpy import exp, sqrt, log
-
  - Subscriptions:
-
    - TODO: users are automatically be subscribed to errors.
-
    - everything
    - functor
    - ignore variable
-
    - show diffs
 
-   Maybe subscription to diff is a different beast, only available as a
-   procedural world.
-
  - TODO: True and 1 are equivalent. This sometimes leads to strange behavior.
-
- - New syntax for doing repl stuff (@nwf): load, subscribe, post-process
-
-   - sheebang
-
- - loader for importing rules
-
- - Errors:
-
-   - Should errors be maintained by dyna? I guess that's an (implicit?) program
-     transform where all items in a rule have a side conditions that they are
-     not in an error state.
-
- - crash handler
-
-   - where do errors go?
-
-     - @nwf suggests temporary measure for LSA students: time-stamped file
-       sitting in the users home directory,
-       e.g. ~/.dyna/crash/2013-06-19.crash.tar.gz
 
  - Hide all *.plan.py files
 
  - multi-line input in REPL. Consider using a fancier library such as cmd2 or
    ipython's.
-
-BUGS
-====
-
- - TODO: write all files to ~/.dyna
-
- - TODO: (@nwf) String quoting (see example/stringquote.py)
-
- - TODO: (@nwf) mode planning failures are slient
-
- - TODO: make sure interpreter uses the right exceptions. The codegen catches a
-   few things -- I think assertionerror is one them... we should probably do
-   whatever this is doing with a custom exception.
 
 
 FASTER
@@ -123,10 +94,6 @@ USERS
 
  - user-defined priorities (blocked: back-chaining)
 
- - filter / bulk loader; post-processing (e.g. serialization and plotting)
-
-    - How should we pass arguments to pre/post-processors?
-
  - Catch typos! Warn the user if they write a predicate that is not defined on
    the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
    [mode analysis will help with this].
@@ -142,38 +109,6 @@ NOTES
 
  - `None` does not propagate, eventually it will because of the `?` prefix
    operator.
-
- - Term values should only be aggregated with ``=`` or ``:=`` maybe even
-   ``set=``. We should disallow ``a += &b.``
-
-     Equals aggregation only one value allowed, mult. >0 on single value. The
-     following program has one FP of `c` end `e` are mutually exclusive.
-
-       a = b for c
-       a = d for e
-
-     This might not be the case during computation -- this is the same as the
-     error problem.
-
- - Numeric precision is an issue with BAggregators.
-
-     timv: Are we sure we have this bug?
-
-     a[0.1] += 1
-     a[0.1 + eps] -= 1
-
-   Approaches:
-
-    - arbitrary precision arithmetic
-
-    - approximate deletion ("buckets"), find the nearest neighbor and delete it.
-
-    - hybrid: maintain streaming sum parallel to the BAggregator and check
-      periodically for quality and null.
-
-    - numeric approximations, stream folding (fails to get null)
-
-    - delete/add the hyperedge explicitly
 
 
 JUST FOR FUN

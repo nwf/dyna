@@ -3,17 +3,10 @@
 """
 TODO: unsubscribe
 
-TODO: query should probably remove the new rule after we get the results.
-
 TODO: subscriptions probably should only show "changes"
-
-TODO: queries are all maintained... should probably toss out the query rule. If
-users want queries to be kept up-to-date user should subscribe instead.
 
 TODO: help should print call signature of loads and post-processors in addition
 to help.
-
-TODO: $include load rules from a file.
 """
 
 import os, cmd, readline
@@ -181,7 +174,7 @@ class REPL(cmd.Cmd, object):
         for val, bindings in results:
             #if not bindings:
             #    print '   ', _repr(val)
-            print '   ', _repr(val), 'where', drepr(dict(bindings))
+            print '  ', _repr(val), 'where', drepr(dict(bindings))
         print
 
     def do_query(self, q):
@@ -215,7 +208,7 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for term, result in sorted((subst(q, dict(result.variables)), result) for result in results):
-            print '   ', _repr(result.value), '←', term
+            print '  ', _repr(result.value), '=*', term
         print
 
     def default(self, line, show_changed=True):
