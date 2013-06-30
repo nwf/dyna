@@ -32,6 +32,7 @@ import           Dyna.ParserHS.Parser
 import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
+import           Dyna.XXX.DataUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           Text.Parser.LookAhead
 import           Text.Trifecta
@@ -97,7 +98,7 @@ update_pcs_dt,
 update_pcs_dt = pcs_dt_cache <~
                 liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
 
-update_pcs_ot = pcs_ot_cache <~ (flip mkEOT True <$> (use pcs_operspec))
+update_pcs_ot = pcs_ot_cache <~ (flip mkEOT False <$> (use pcs_operspec))
 
 dtmk :: String -> DisposTabOver -> DisposTab
 dtmk "dyna"      = disposTab_dyna
@@ -129,7 +130,7 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_modemap   = mempty -- XXX
 
              , _pcs_operspec  = defOperSpec
-             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) True
+             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) False
 
              , _pcs_ruleix    = 0
              }
@@ -173,9 +174,15 @@ pcsProcPragma (PMode (PNWA n as) pmf pmt :~ s) = do
       $ M.lookup n mm
 pcsProcPragma (PRuleIx r :~ _) = pcs_ruleix .= r
 
-pcsProcPragma (p@(POperAdd _ _ _) :~ s) = sorryPragma p s
-pcsProcPragma (p@(POperDel _) :~ s) = sorryPragma p s
+pcsProcPragma (POperAdd fx prec sym :~ _) = do
+  pcs_operspec %= mapInOrCons (BU.toString sym) (prec,fx)
+  update_pcs_ot
 
+pcsProcPragma (POperDel sym :~ _) = do
+  pcs_operspec %= M.filterWithKey (\k _ -> k /= (BU.toString sym))
+  update_pcs_ot
+
+sorryPragma :: Pragma -> Span -> a
 sorryPragma p s = dynacSorry $ "Cannot handle pragma"
                              PP.<//> (PP.text $ show p)
                              PP.<//> "at"

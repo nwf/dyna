@@ -109,9 +109,13 @@ mkEOT s0 f0 = EOT $ addFailSafe $ interpSpec M.empty $ M.toList s0
    where
     go (p,f) = mapInOrCons p (interpret f o)
 
-  interpret (PFIn a) = flip Infix a . bf . spanned . bsf . symbol
-  interpret PFPre    = Prefix       . uf . spanned . bsf . symbol
-  interpret PFPost   = Postfix      . uf . spanned . bsf . symbol
+  interpret (PFIn a) = flip Infix a . bf . interpCore
+  interpret PFPre    = Prefix       . uf . interpCore
+  interpret PFPost   = Postfix      . uf . interpCore
+
+  -- Make operators use the longest match
+  interpCore s = try (spanned (bsf (symbol s))
+                      <* notFollowedBy (oneOfSet usualpunct))
 
   addFailSafe = if f0 then (++ failSafe) else id
 
@@ -243,11 +247,11 @@ dynaPfxOperStyle = IdentifierStyle
 -- dual purpose as an operator and rule separator.
 -- Comma similarly has special handling due to its
 -- nature as term and subgoal separator.
-dynaOperStyle :: TokenParsing m => IdentifierStyle m
+dynaOperStyle :: (TokenParsing m, Monad m) => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
   { _styleName = "Infix Operator"
   , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".,"
-  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleLetter  = oneOfSet (usualpunct CS.\\ CS.fromList ".")
   , _styleReserved = mempty
   , _styleHighlight = Operator
   , _styleReservedHighlight = ReservedOperator
@@ -329,20 +333,44 @@ term = token $ choice
         ,       nakedbrak
         ,       spanned $ parenfunc
         ]
+        <?> "Term"
  where
+  mkta ty te = TAnnot (AnnType ty) te
+
   parenfunc = TFunctor <$> parseFunctor
                        <*> parens (tlexpr `sepBy` symbolic ',')
 
-  nakedbrak = listify <$> spanned (brackets (tlexpr `sepBy` symbolic ','))
+  nakedbrak = listify <$> tlist
    where
-    listify (xs :~ s) = 
-      let (xs' :~ s') = foldr (\a@(_ :~ sa) b@(_ :~ sb) -> TFunctor "cons" [a,b] :~ (sa <> sb))
-                              (TFunctor "nil" [] :~ r s)
+    tlist = spanned (brackets ((,) <$> (tlistexpr `sepEndBy` symbolic ',')
+                                       <*> (optional (symbolic '|' *> tlexpr))
+                                  ))
+
+    listify ((xs,ml) :~ s) =
+      let (xs' :~ s') = foldr (\a@(_ :~ sa) b@(_ :~ sb) ->
+                                TFunctor "cons" [a,b] :~ (sa <> sb))
+                              (maybe (TFunctor "nil" [] :~ r s) id ml)
                               xs
       in (xs' :~ (s <> s'))
     r (Span _ e b) = Span e e b
 
-  mkta ty te = TAnnot (AnnType ty) te
+
+  -- XXX Ick ick ick ick... there must be a more general answer, even if
+  -- involves patching ekmett-parsers to understand something more like
+  -- DOPP.
+  --
+  -- XREF:TLEXPR
+  tlistexpr = do
+    ot <- asks dlc_opertab
+    (buildExpressionParser (maskPipe (unEOT ot)) term) <?> "List Expression"
+   where
+    maskPipe ot = fmap (fmap mkpf) ot
+
+    mkpf (Infix m a) = Infix (nfp >> m) a
+    mkpf (Prefix m)  = Prefix (nfp >> m)
+    mkpf (Postfix m)  = Postfix (nfp >> m)
+
+  nfp = notFollowedBy (symbolic '|' *> notFollowedBy (oneOfSet usualpunct))
 
 -- | Sometimes we require that a character not be followed by whitespace
 -- and satisfy some additional predicate before we pass it off to some other parser.
@@ -397,17 +425,18 @@ bf f = do
   (x:~spx)  <- f
   pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
 
-
+-- XREF:TLEXPR
 tlexpr :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
        => m (Spanned Term)
-tlexpr = asks dlc_opertab >>= flip buildExpressionParser term . unEOT
+tlexpr = (asks dlc_opertab >>= flip buildExpressionParser term . unEOT)
+         <?> "Core Expression"
 
 moreETable :: (LookAheadParsing m, DeltaParsing m) => [[Operator m (Spanned Term)]]
-moreETable = [ [ Infix  (bf (spanned $ bsf $ symbol "is"      )) AssocNone  ]
-             , [ Infix  (bf (spanned $ bsf $ symbol ","       )) AssocRight ]
+moreETable = [ [ Infix  (bf (spanned $ bsf $ symbol dynaEvalAssignOper)) AssocNone  ]
+             , [ Infix  (bf (spanned $ bsf $ symbol dynaConjOper      )) AssocRight ]
              -- , [ Infix  (bf (spanned $       commaOper        )) AssocRight ]
-             , [ Infix  (bf (spanned $ bsf $ symbol "whenever")) AssocNone
-               , Infix  (bf (spanned $ bsf $ symbol "for"     )) AssocNone  ]
+             , map (\x -> Infix  (bf (spanned $ bsf $ symbol x)) AssocNone)
+                   dynaRevConjOpers
              ]
 
 -- | Full Expression
@@ -563,8 +592,8 @@ pragmaBody = token $ choice
                         <*  symbol "=="
                         <*> parseInst
 
-  parseOper = choice [ try $ symbol "add" *> parseOperAdd
-                     , try $ symbol "del" *> parseOperDel
+  parseOper = choice [ symbol "add" *> parseOperAdd
+                     , symbol "del" *> parseOperDel
                      , parseOperAdd
                      ]
 
@@ -572,8 +601,10 @@ pragmaBody = token $ choice
       parseOperAdd = do
                (fx,n) <- fixity
                prec   <- natural
+               when (prec > fromIntegral (maxBound :: Int))
+                    $ unexpected "huge number"
                sym    <- n
-               return $ POperAdd fx prec sym
+               return $ POperAdd fx (fromIntegral prec) sym
 
       parseOperDel = POperDel <$> afx
                          

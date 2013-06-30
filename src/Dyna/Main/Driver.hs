@@ -101,9 +101,9 @@ dumpOpts nos =
 ------------------------------------------------------------------------}}}
 -- DynacConfiguration                                                   {{{
 
-data DynacConfig = DynacConfig { dcfg_backend :: Backend
-                               , dcfg_dumps   :: DumpMap
-                               , dcfg_outFile :: Maybe FilePath
+data DynacConfig = DynacConfig { dcfg_backend :: !Backend
+                               , dcfg_dumps   :: !DumpMap
+                               , dcfg_outFile :: !(Maybe FilePath)
                                }
 
 
