@@ -155,8 +155,8 @@ case_colonFunctor = e @=? (term pvv)
        :~ Span (Columns 0 0) (Columns 17 17) pvv
   pvv = "possible(Var:Val)"
 
-case_bracketTuple :: Assertion
-case_bracketTuple = e @=? (term s)
+case_list :: Assertion
+case_list = e @=? (term s)
  where
   e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
@@ -172,6 +172,25 @@ case_bracketTuple = e @=? (term s)
         ]
        :~ Span (Columns 0 0) (Columns 7 7) s
   s = "[1,2+3]"
+
+case_list_bar :: Assertion
+case_list_bar = e @=? (term s)
+ where
+  e = TFunctor "cons"
+        [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
+        , TFunctor "cons"
+		    [ TFunctor "+"
+                [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
+                , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
+                ]
+               :~ Span (Columns 3 3) (Columns 6 6) s
+			, TVar "X" :~ Span (Columns 7 7) (Columns 8 8) s
+			]
+           :~ Span (Columns 3 3) (Columns 8 8) s
+        ]
+       :~ Span (Columns 0 0) (Columns 8 8) s
+  s = "[1,2+3|X]"
+
 
 -- case_nullaryStar :: Assertion
 -- case_nullaryStar = e @=? (term gs)
