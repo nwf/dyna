@@ -32,6 +32,7 @@ import           Dyna.ParserHS.Parser
 import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
+import           Dyna.XXX.DataUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           Text.Parser.LookAhead
 import           Text.Trifecta
@@ -173,9 +174,15 @@ pcsProcPragma (PMode (PNWA n as) pmf pmt :~ s) = do
       $ M.lookup n mm
 pcsProcPragma (PRuleIx r :~ _) = pcs_ruleix .= r
 
-pcsProcPragma (p@(POperAdd _ _ _) :~ s) = sorryPragma p s
-pcsProcPragma (p@(POperDel _) :~ s) = sorryPragma p s
+pcsProcPragma (POperAdd fx prec sym :~ _) = do
+  pcs_operspec %= mapInOrCons (BU.toString sym) (prec,fx)
+  update_pcs_ot
 
+pcsProcPragma (POperDel sym :~ _) = do
+  pcs_operspec %= M.filterWithKey (\k _ -> k /= (BU.toString sym))
+  update_pcs_ot
+
+sorryPragma :: Pragma -> Span -> a
 sorryPragma p s = dynacSorry $ "Cannot handle pragma"
                              PP.<//> (PP.text $ show p)
                              PP.<//> "at"

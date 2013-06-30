@@ -134,12 +134,14 @@ Adding an operator
 
 The ``:-oper add`` pragma takes three arguments: the fixity, priority, and
 lexeme that makes up the operator.  Fixities are specified as ``pre``,
-``post`` or ``in``.  Priorities are natural numbers, with higher numbers
-binding tighter.  Lexemes are either bare words or singly-quoted functors.
+``post`` or ``in``.  In the case of ``in``, one of ``left``, ``right``, or
+``non`` must be specified for the associativity.  Priorities are natural
+numbers, with higher numbers binding tighter.  Lexemes are either bare words
+or singly-quoted functors.
 
 Examples::
 
-  :-oper add in 6 + .
+  :-oper add in left 6 + .
   :-oper add pre 9 - .
 
 Removing an operator

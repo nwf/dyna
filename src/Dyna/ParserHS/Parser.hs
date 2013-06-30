@@ -247,11 +247,11 @@ dynaPfxOperStyle = IdentifierStyle
 -- dual purpose as an operator and rule separator.
 -- Comma similarly has special handling due to its
 -- nature as term and subgoal separator.
-dynaOperStyle :: TokenParsing m => IdentifierStyle m
+dynaOperStyle :: (TokenParsing m, Monad m) => IdentifierStyle m
 dynaOperStyle = IdentifierStyle
   { _styleName = "Infix Operator"
   , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".,"
-  , _styleLetter  = oneOfSet $ usualpunct
+  , _styleLetter  = oneOfSet (usualpunct CS.\\ CS.fromList ".")
   , _styleReserved = mempty
   , _styleHighlight = Operator
   , _styleReservedHighlight = ReservedOperator
@@ -592,8 +592,8 @@ pragmaBody = token $ choice
                         <*  symbol "=="
                         <*> parseInst
 
-  parseOper = choice [ try $ symbol "add" *> parseOperAdd
-                     , try $ symbol "del" *> parseOperDel
+  parseOper = choice [ symbol "add" *> parseOperAdd
+                     , symbol "del" *> parseOperDel
                      , parseOperAdd
                      ]
 
@@ -601,8 +601,10 @@ pragmaBody = token $ choice
       parseOperAdd = do
                (fx,n) <- fixity
                prec   <- natural
+               when (prec > fromIntegral (maxBound :: Int))
+                    $ unexpected "huge number"
                sym    <- n
-               return $ POperAdd fx prec sym
+               return $ POperAdd fx (fromIntegral prec) sym
 
       parseOperDel = POperDel <$> afx
                          

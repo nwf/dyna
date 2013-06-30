@@ -76,7 +76,7 @@ data Pragma = PBackchain DFunctAr
                     ParsedModeInst
                 -- ^ Declare a mode: name, input, and output
 
-            | POperAdd Fixity Integer B.ByteString
+            | POperAdd Fixity Int B.ByteString
                 -- ^ Add an operator
 
             | POperDel B.ByteString
