@@ -17,17 +17,32 @@ class Chart(object):
         return aggregator(self.agg_name)
 
     def __repr__(self):
-
         rows = [term for term in self.intern.values() if term.value is not None]
-
         if not rows:
             return ''
-
         if self.arity == 0:
+            [term] = rows
             return '%s := %s' % (term, _repr(term.value))
+        p = [(_repr(term), _repr(term.value)) for term in sorted(rows)]
 
-        x = '\n'.join('%-30s := %s' % (term, _repr(term.value)) for term in sorted(rows))
-        return '%s\n%s\n%s\n' % (self.name, '='*len(self.name), x)
+        lines = [self.name, '='*len(self.name)]  # heading
+
+        for term, value in p:
+            lines.append('%-30s := %s' % (term, value))
+
+#        terms, values = zip(*p)
+#        widths = map(len, terms)
+#        fmt = '%%-%ds => %%s.' % max(widths)
+#        if max(widths) > 50:
+#            for term, value in zip(terms, values):
+#                lines.append(term)
+#                lines.append('   => %s.' % value)
+#        else:
+#            for term, value in zip(terms, values):
+#                lines.append(fmt % (term, value))
+
+        lines.append('')
+        return '\n'.join(lines)
 
     def __getitem__(self, s):
         assert len(s) == self.arity + 1, \

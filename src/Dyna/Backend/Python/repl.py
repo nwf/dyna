@@ -57,6 +57,9 @@ class REPL(cmd.Cmd, object):
         :- c += a*b.
 
         :- rules
+
+        Rules
+        =====
           0: a += 1.
           1: b += 1.
           2: c += a * b.

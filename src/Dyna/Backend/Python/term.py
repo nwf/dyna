@@ -1,5 +1,7 @@
 from errors import notimplemented
 from utils import _repr
+from defn import Aggregator
+
 
 # TODO: codegen should output a derived Term instance for each functor
 class Term(object):
@@ -52,6 +54,7 @@ class Cons(Term):
         self.tail = tail
         assert isinstance(tail, (Cons, _Nil)), tail
         Term.__init__(self, 'cons/2', (head, tail))
+        self.aggregator = Aggregator()
     def tolist(self):
         return [self.head] + self.tail.tolist()
     def __repr__(self):
@@ -65,6 +68,8 @@ class Cons(Term):
 class _Nil(Term):
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
+        self.aggregator = Aggregator()
+
     def tolist(self):
         return []
     def __repr__(self):

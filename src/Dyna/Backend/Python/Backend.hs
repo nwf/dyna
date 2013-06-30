@@ -53,6 +53,7 @@ aggrs = S.fromList
   , "+=" , "*="
   , "and=" , "or=" , "&=" , "|="
   , ":-"
+  , "="
   , "majority=" , "set=" , "bag="
   , ":="
   , "dict="
@@ -152,7 +153,6 @@ constants = go
   go ("split", _)   = Just $ PDBS $ call "split" []
   go ("float", _)   = Just $ PDBS $ call "float" []
   go ("int", _)     = Just $ PDBS $ call "int" []
-  go ("getattr", _) = Just $ PDBS $ call "getattr" []
   go ("pycall", _)  = Just $ PDBS $ call "pycall" []
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="

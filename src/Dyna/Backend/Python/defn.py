@@ -3,10 +3,14 @@ from __future__ import division
 # TODO: codegen should produce specialized Term with inc/dec methods baked
 # in. This seems nicer than having a separate aggregator object.
 
+# TODO: aggregators might want a reference to the item they are associated with.
+
 import operator
 from collections import Counter
 from utils import drepr, _repr
+from errors import AggregatorError
 
+"""
 class Aggregator(object):
     def fold(self):
         raise NotImplementedError
@@ -16,6 +20,24 @@ class Aggregator(object):
         raise NotImplementedError
     def clear(self):
         raise NotImplementedError
+"""
+
+class NoAggregatorError(Exception):
+    """
+    raised when an item doesn't have an aggregator.
+    """
+    pass
+
+
+class Aggregator(object):
+    def fold(self):
+        raise AggregatorError("item doesn't have an aggregator.")
+    def inc(self, _val, _ruleix, _variables):
+        pass
+    def dec(self, _val, _ruleix, _variables):
+        pass
+    def clear(self):
+        pass
 
 
 class BAggregator(Counter, Aggregator):
@@ -51,6 +73,19 @@ class ColonEquals(BAggregator):
         vs = [v for v, cnt in self.iteritems() if cnt > 0]
         if vs:
             return max(vs)[1]
+
+
+class Equals(BAggregator):
+    def inc(self, val, _ruleix, _variables):
+        self[val] += 1
+    def dec(self, val, _ruleix, _variables):
+        self[val] -= 1
+    def fold(self):
+        vs = [v for v, cnt in self.iteritems() if cnt > 0]
+        if len(vs) != 1:
+            vs.sort()   # for stability
+            raise AggregatorError('`=` got conflicting values %s' % (vs,))
+        return vs[0]
 
 
 def user_vars(variables):
@@ -171,6 +206,9 @@ def aggregator(name):
 
     if name == ':=':
         return ColonEquals()
+
+    elif name == '=':
+        return Equals()
 
     elif name == 'dict=':
         return DictEquals()

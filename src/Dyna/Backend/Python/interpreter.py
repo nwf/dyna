@@ -19,10 +19,6 @@ TODO
 
    - sheebang?
 
-
- - TODO: @nwf remove comments from rule source
-
-
  - vbench: a script which tracks performace over time (= git commits).
 
  - profiler workflow
@@ -139,7 +135,7 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import crash_handler, DynaInitializerException
+from errors import crash_handler, DynaInitializerException, AggregatorError
 
 
 class Rule(object):
@@ -165,6 +161,10 @@ class foo(dict):
         self.agg_name = agg_name
         super(foo, self).__init__()
     def __missing__(self, fn):
+
+        if fn == 'contains/2':
+            return Contains()
+
         arity = int(fn.split('/')[-1])
         self[fn] = c = Chart(fn, arity, self.agg_name[fn])
         return c
@@ -174,7 +174,37 @@ def none():
     return None
 
 
-import os
+class Contains(object):
+
+    def __init__(self):
+        self.name = 'contains'
+        self.arity = 2
+
+    def __repr__(self):
+        return 'contains/2'
+
+    def __getitem__(self, s):
+        assert len(s) == self.arity + 1, \
+            'Chart %r: item width mismatch: arity %s, item %s' % (self.name, self.arity, len(s))
+        [x, xs], val = s[:-1], s[-1]
+        #assert val is True
+        if isinstance(x, slice):
+            assert not isinstance(xs, slice)
+            for a in xs.tolist():
+                term = Term('contains/2', (a, xs))
+                term.value = True
+                yield term, term.args, term.value
+
+        else:
+            # all bound membership test
+            assert not isinstance(x, slice) and not isinstance(xs, slice)
+            term = Term('contains/2', (x, xs))
+            term.value = (x in xs.tolist())
+            yield term, term.args, term.value
+
+    def insert(self, args):
+        assert False
+
 
 class Interpreter(object):
 
@@ -277,8 +307,14 @@ class Interpreter(object):
         print >> out
 
     def dump_rules(self):
+        if not self.rules:
+            return
+        print
+        print 'Rules'
+        print '====='
         for i in sorted(self.rules):
             print '%3s: %s' % (i, self.rules[i].src)
+        print
 
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
@@ -345,9 +381,22 @@ class Interpreter(object):
             was = item.value
             try:
                 now = item.aggregator.fold()
+            except AggregatorError as e:
+                error[item] = ('failed to aggregate item `%r` because %s' % (item, e), [(e, None)])
+
+                now = self.build('$error/0')
+                changed[item] = now
+                item.value = now
+                continue
+
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
                 error[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
+
+                now = self.build('$error/0')
+                changed[item] = now
+                item.value = now
                 continue
+
             if was == now:
                 continue
             was_error = False
@@ -603,7 +652,7 @@ def main():
 
         if args.plan:
             # copy plan to tmp directory
-            plan = tmp / args.source.read_hexhash('sha1') + '.plan.py'
+            plan = interp.tmp / args.source.read_hexhash('sha1') + '.plan.py'
             args.source.copy(plan)
 
         else:

@@ -4,6 +4,6 @@ echo -e "
 a += 1.
 a." |./dyna > $0.out
 
-diff <(sed -e 's/[ -][^ -]*\/\.dyna/ /g' $0.expect) \
-     <(sed -e 's/[ -][^ -]*\/\.dyna/ /g' $0.out)    \
+diff <(sed -e 's/[ -][^ -]*\.dyna/ /g' $0.expect) \
+     <(sed -e 's/[ -][^ -]*\.dyna/ /g' $0.out)    \
  && echo pass

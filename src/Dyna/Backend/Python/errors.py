@@ -8,6 +8,9 @@ class DynaCompilerError(Exception):
     pass
 
 
+class AggregatorError(Exception):
+    pass
+
 class DynaInitializerException(Exception):
     def __init__(self, exception, init):
         rule = parse_attrs(init)['rule']

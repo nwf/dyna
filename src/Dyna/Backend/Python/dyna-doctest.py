@@ -7,7 +7,7 @@ from interpreter import Interpreter
 from repl import REPL
 from cStringIO import StringIO
 
-from utils import red, green
+from utils import red, green, strip_comments
 
 
 def extract(code):
@@ -21,6 +21,9 @@ def run(code):
     repl = REPL(interp)
 
     for cmd, expect in extract(code):
+        if not cmd.strip():
+            print
+            continue
         print ':-', cmd
         sys.stdout = x = StringIO()
         try:
@@ -29,7 +32,7 @@ def run(code):
             sys.stdout = sys.__stdout__
         got = x.getvalue().strip()
         expect = expect.strip()
-        if expect != got:
+        if strip_comments(expect) != strip_comments(got):
             print green % expect
             print red % got
         else:
