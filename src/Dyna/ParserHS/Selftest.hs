@@ -50,6 +50,8 @@ _tNumeric = TBase . TNumeric
 
 defDLC :: DLCfg
 defDLC = DLC (mkEOT defOperSpec True) genericAggregators
+-- quasiDLC :: DLCfg
+-- quasiDLC = DLC (mkEOT defOperSpec False) genericAggregators
 
 term :: ByteString -> Spanned Term
 term = unsafeParse (testTerm defDLC <* eof)

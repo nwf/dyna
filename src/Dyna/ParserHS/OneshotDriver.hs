@@ -97,7 +97,7 @@ update_pcs_dt,
 update_pcs_dt = pcs_dt_cache <~
                 liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
 
-update_pcs_ot = pcs_ot_cache <~ (flip mkEOT True <$> (use pcs_operspec))
+update_pcs_ot = pcs_ot_cache <~ (flip mkEOT False <$> (use pcs_operspec))
 
 dtmk :: String -> DisposTabOver -> DisposTab
 dtmk "dyna"      = disposTab_dyna
@@ -129,7 +129,7 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_modemap   = mempty -- XXX
 
              , _pcs_operspec  = defOperSpec
-             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) True
+             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) False
 
              , _pcs_ruleix    = 0
              }
