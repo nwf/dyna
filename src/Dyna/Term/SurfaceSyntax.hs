@@ -42,6 +42,9 @@ dynaRevConjOpers = ["whenever","for"]
 dynaUnitTerm :: (IsString s) => s
 dynaUnitTerm = "true"
 
+dynaUnifOpers :: (IsString s) => [s]
+dynaUnifOpers = [ "=", "==" ]
+
 ------------------------------------------------------------------------}}}
 -- Operators                                                            {{{
 

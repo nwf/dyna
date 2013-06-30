@@ -56,6 +56,7 @@ import           Dyna.Analysis.Mode.Execution.Context
 import           Dyna.Analysis.Mode.Execution.Functions
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
+import           Dyna.Term.SurfaceSyntax
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
 import           Dyna.XXX.MonadContext
@@ -216,6 +217,32 @@ possible fp bcs co lf cr =
     -- XXX Indirect evaluation is not yet supported
     Left (_, CEval _ _) -> throwError UFExDomain
 
+    -- Evaluation of unification.  The distinction between the unification
+    -- operators has, at this point, been eliminated through ANF, so they
+    -- both execute the same way.
+    --
+    -- XXX Special casing ought not be necessary!
+    Left (_, CCall vo [va,vb] funct) | funct `elem` dynaUnifOpers -> do
+      pfx <- fgn vo (return (OPWrap vo [] dynaUnitTerm))
+                    (return (OPPeel [] vo dynaUnitTerm DetSemi))
+                    (throwError UFExDomain)
+      unif <- fgn va (fgn vb (throwError UFExDomain)
+                             (bind va >> return [OPAsgn va (NTVar vb)])
+                             (throwError UFExDomain))
+                     (fgn vb (bind vb >> return [OPAsgn vb (NTVar va)])
+                             (gencall)
+                             (throwError UFExDomain))
+                     (throwError UFExDomain)
+      return (pfx:unif)
+
+     where
+      gencall = do
+        is <- mapM mkMV [va,vb]
+        o  <- mkMV vo
+        case fp (funct,is,o) of
+          Right (BAct a m) -> runbact m >> return a
+          Left _ -> dynacPanic "Backend failed to generate unification call"
+
     -- Evaluation
     Left (_, CCall vo vis funct) -> do
       is <- mapM mkMV vis 
@@ -248,10 +275,7 @@ possible fp bcs co lf cr =
         Left True        -> throwError UFExDomain
 
           -- Builtin called in accessible mode; apply bindings and return
-        Right (BAct a m) -> do forM_ m $ \(v,vn) ->
-                                 runReaderT (unifyUnaliasedNV vn v)
-                                           (UnifParams (lf v) True)
-                               return a
+        Right (BAct a m) -> runbact m >> return a
  where
      mf = nHide IFree
      mo = nHide (IUniv UShared)
@@ -264,6 +288,9 @@ possible fp bcs co lf cr =
                            (return ())
                            (throwError UFExDomain)
      bind x = runReaderT (unifyVU x) (UnifParams (lf x) False)
+
+     runbact m = forM_ m $ \(v,vn) -> runReaderT (unifyUnaliasedNV vn v)
+                                                 (UnifParams (lf v) True)
 
 ------------------------------------------------------------------------}}}
 -- Costing Plans                                                        {{{
