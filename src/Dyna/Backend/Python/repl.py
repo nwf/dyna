@@ -10,7 +10,7 @@ to help.
 """
 
 import os, cmd, readline
-from utils import dynac, ip, lexer, subst, drepr, _repr
+from utils import dynac, ip, lexer, subst, drepr, _repr, get_module
 from errors import DynaCompilerError, DynaInitializerException
 from config import dotdynadir
 from errors import show_traceback
@@ -73,7 +73,7 @@ class REPL(cmd.Cmd, object):
 
         Solution
         ========
-        b := 1.
+        b => 1.
 
         """
         self.interp.retract_rule(int(idx))
@@ -241,7 +241,7 @@ class REPL(cmd.Cmd, object):
             return
         print '============='
         for x, v in sorted(changed.items()):
-            print '%s := %s' % (x, _repr(v))
+            print '%s => %s.' % (x, _repr(v))
 
     def _changed_subscriptions(self, changed):
 
@@ -316,7 +316,7 @@ class REPL(cmd.Cmd, object):
                 [cmd, sub] = mod
                 if cmd in ('load', 'post'):
                     try:
-                        exec 'from %s.%s import %s as m' % (cmd, sub, sub)
+                        m = get_module(cmd, sub)
                         print m.__doc__
                     except (ImportError, KeyError, AttributeError):
                         print 'No help available for "%s %s"' % (cmd, sub)
@@ -346,12 +346,12 @@ class REPL(cmd.Cmd, object):
         ========
         data/3
         ======
-        data(2,"cow","boy")            := true
+        data(2,"cow","boy") => true.
 
         data/4
         ======
-        data(0,"a","b","3.0")          := true
-        data(1,"c","d","4.0")          := true
+        data(0,"a","b","3.0") => true.
+        data(1,"c","d","4.0") => true.
 
         """
         try:
