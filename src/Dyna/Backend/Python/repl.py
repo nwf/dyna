@@ -380,6 +380,37 @@ class REPL(cmd.Cmd, object):
             show_traceback()
             readline.write_history_file(self.hist)
 
+    def do_trace(self, q):
+
+        if q.endswith('.'):
+            print "Queries don't end with a dot."
+            return
+
+        self.interp.new_rules = set()
+
+        try:
+            query = "$trace dict= _ is %s, &(%s)." % (q,q)
+            self.default(query, show_changed=False)
+            try:
+                [(_, _, results)] = self.interp.chart['$trace/0'][:,]
+            except ValueError:
+                print 'no items matching `%s`.' % q
+                return
+
+            from post.trace import Tracer
+            tracer = Tracer(self.interp)
+            for item, _ in results:
+                print
+                tracer(item)
+
+        finally:
+            # cleanup:
+            # retract newly added rules.
+            for r in self.interp.new_rules:
+                self.interp.retract_rule(r)
+            # drop $out chart
+            del self.interp.chart['$trace/0']
+
 
     do_load.__doc__ = do_load.__doc__.format(load=', '.join(load.available))
     do_post.__doc__ = do_post.__doc__.format(post=', '.join(post.available))

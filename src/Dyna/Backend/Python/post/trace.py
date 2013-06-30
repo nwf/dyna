@@ -2,7 +2,8 @@
 """
 Examine solution as an outline of computation.
 
-TODO: backchained stuff
+TODO: shared substructure.
+
 """
 
 import re
@@ -24,15 +25,28 @@ class trace(object):
         self.interp = interp
 
     def main(self):
-        es = infer_edges(self.interp)
+        tracer = Tracer(self.interp)
+        for item in tracer.items:
+            print
+            print tracer(item)
 
+
+class Tracer(object):
+
+    def __init__(self, interp):
+        self.interp = interp
+        self.edges = infer_edges(self.interp)
         # group edges by head then ruleindex
-        groups = groupby(lambda x: x[0], es)
+        groups = groupby(lambda x: x[0], self.edges)
         for a in groups:
             groups[a] = groupby(lambda x: x[1], groups[a])
+        self.items = groups
 
-        for head in groups:
-            print '\n'.join(dig(head, set(), groups, self.interp))
+    def __call__(self, item):
+        if item not in self.items:
+            print
+            print 'no trace for', item
+        print '\n'.join(dig(item, set(), self.items, self.interp))
 
 
 def groupby(key, data):
@@ -40,7 +54,6 @@ def groupby(key, data):
     for x in data:
         g[key(x)].append(x)
     return dict(g)
-
 
 
 def dig(head, visited, groups, interp):
@@ -72,7 +85,6 @@ def dig(head, visited, groups, interp):
 
 
 def branch(xs):
-
     ys = []
     for i, x in enumerate(xs):
         first = i == 0
@@ -85,16 +97,12 @@ def branch(xs):
             h = '├─ '
         else:
             h = '├─ '
-
         if not x:
             continue
-
         ys.append(h + x[0])
-
         indent = '│  ' if not last else '   '
         for a in x[1:]:
             ys.append(indent + a)
-
     return ys
 
 
@@ -155,7 +163,7 @@ class Crux(object):
             if not g.incoming[x]:  # input variable
                 return self.values(x)
             if len(g.incoming[x]) > 1:
-                return 'UNIF ' + ' === '.join(self.get_function(e) + (red % '=%s' % self.values(e.head)) for e in g.incoming[x])
+                return 'UNIFICATION ' + ' === '.join(self.get_function(e) + (red % '=%s' % self.values(e.head)) for e in g.incoming[x])
             [e] = g.incoming[x]
 
             if e.label == '=':
