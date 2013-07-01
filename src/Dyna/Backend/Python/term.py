@@ -61,12 +61,15 @@ class Cons(Term):
     def __repr__(self):
         return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
-#    def __iter__(self):
-#        for a in self.aslist:
-#            if not isinstance(a, Term):
-#                yield a, (None,), a
-#            else:
-#                yield a, (None,), a
+    def __contains__(self, x):
+        return x in self.aslist
+
+    def __iter__(self):
+        for a in self.aslist:
+            if not isinstance(a, Term):
+                yield a, (None,), a
+            else:
+                yield a, (None,), a
 
     def __eq__(self, other):
         try:

@@ -77,6 +77,8 @@ defOperSpec = foldr (\(k,v) -> mapInOrCons k v) def more
     , ("%"  ,[(7,PFIn AssocLeft )            ])
     , ("+"  ,[(6,PFIn AssocLeft )            ])
 
+    , ("in" ,[(4,PFIn AssocNone )            ])
+
     , ("<=" ,[(4,PFIn AssocNone )            ])
     , ("<"  ,[(4,PFIn AssocNone )            ])
     , ("="  ,[(4,PFIn AssocNone )            ])

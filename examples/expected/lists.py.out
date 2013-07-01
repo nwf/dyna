@@ -2,12 +2,29 @@
 Solution
 ========
 a = [1, 2].
+b = true.
+c = true.
+d = false.
+things = [1, [2, 2], [3, 4]].
+
+d/1
+===
+d(2) = true.
+d(4) = true.
 
 f/1
 ===
 f([1, 2]) = true.
 
+foo/1
+=====
+foo("a") = true.
+
 goal/1
 ======
 goal([2]) = true.
+
+goo/1
+=====
+goo([1, 2]) = true.
 

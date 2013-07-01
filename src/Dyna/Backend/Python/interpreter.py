@@ -7,8 +7,6 @@ TODO
  - More info in crash handler. (stack trace, repl transcript, cmd-line args,
    version control info, and dyna source is enough)
 
-   - hooks to call a crash script
-
  - dyna syntax which just gets passed to the backend:
 
    - running repl commands, loaders, post-procesors
@@ -88,7 +86,7 @@ STRONGER (robustness)
 USERS
 =====
 
- - user-defined priorities (blocked: back-chaining)
+ - user-defined priorities
 
  - Catch typos! Warn the user if they write a predicate that is not defined on
    the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
@@ -266,7 +264,7 @@ class Interpreter(object):
             print >> out,  'because %r is %s:' % (item, _repr(val))
             for e, h in es:
                 if h is not None:
-                    r = h.dyna_rule
+                    r = h.rule
                     print >> out, '    %s\n        in rule %s\n            %s' % (e, r.span, r.src)
         print >> out
 
@@ -287,19 +285,14 @@ class Interpreter(object):
             return True
         if fn == 'false/0':
             return False
-
         if fn == 'cons/2':
             return Cons(*args)
         if fn == 'nil/0':
             return Nil
-
-
-        # FIXME:
         if fn not in self.agg_name:
             # item has no aggregator (e.g purely structural stuff) -- what
             # happens if we add one later?
             self.new_fn(fn, None)
-
         return self.chart[fn].insert(args)
 
 #    def retract_item(self, item):
@@ -342,14 +335,17 @@ class Interpreter(object):
         agenda = self.agenda
         error = self.error
         while agenda:
+
             item = agenda.pop_smallest()
             was = item.value
+
             try:
                 now = item.aggregator.fold()
+
             except AggregatorError as e:
                 error[item] = ('failed to aggregate item `%r` because %s' % (item, e), [(e, None)])
 
-                now = self.build('$error/0')
+                now = self.build('$error/0')   # XXX: should go an agenda or run delete?
                 changed[item] = now
                 item.value = now
                 continue
@@ -357,27 +353,33 @@ class Interpreter(object):
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
                 error[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
 
-                now = self.build('$error/0')
+                now = self.build('$error/0')   # XXX: should go an agenda or run delete?
                 changed[item] = now
                 item.value = now
                 continue
 
             if was == now:
                 continue
+
             was_error = False
             if item in error:    # clear error
                 was_error = True
                 del error[item]
+
             # TODO: handle `was` and `now` at the same time to avoid the two passes.
             # TODO: will need to propagate was=None when we have question mark
             if was is not None and not was_error:
                 # if `was` is marked as an error we know it didn't propagate.
                 # Thus, we can skip the delete-updates.
                 self.update_dispatcher(item, was, delete=True)
+
             item.value = now
+
             if now is not None:
                 self.update_dispatcher(item, now, delete=False)
+
             changed[item] = now
+
         return changed
 
     def update_dispatcher(self, item, val, delete):

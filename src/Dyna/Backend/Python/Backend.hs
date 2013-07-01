@@ -120,7 +120,6 @@ builtins (f,is,o) = case () of
                                [(x^.mv_var, nuniv)]
          _ -> Left True
 
-  {-
   -- XXX Argh, same as above.
   _ | f == "in"
     -> case is of
@@ -140,7 +139,6 @@ builtins (f,is,o) = case () of
                                                  cmod
                             else Left True
          _ -> Left True
-  -}
 
   _ | MA.isJust (constants (f,length is)) -> Left True
   _ -> Left False
@@ -169,16 +167,16 @@ constants = go
   go ("abs",1)   = Just $ PDBS $ call "abs" []
   go ("log",_)   = Just $ PDBS $ call "log" []
   go ("exp",1)   = Just $ PDBS $ call "exp" []
-  go ("sqrt",1)     = Just $ PDBS $ call "sqrt" []
-  go ("getattr", _) = Just $ PDBS $ call "getattr" []
-  go ("uniform", _) = Just $ PDBS $ call "uniform" []
+  go ("sqrt",1)    = Just $ PDBS $ call "sqrt" []
+  go ("getattr",_) = Just $ PDBS $ call "getattr" []
+  go ("uniform",_) = Just $ PDBS $ call "uniform" []
 
-  go ("split", _)   = Just $ PDBS $ call "split" []
-  go ("float", _)   = Just $ PDBS $ call "float" []
-  go ("int", _)     = Just $ PDBS $ call "int" []
-  go ("pycall", _)  = Just $ PDBS $ call "pycall" []
+  go ("split",_)   = Just $ PDBS $ call "split" []
+  go ("float",_)   = Just $ PDBS $ call "float" []
+  go ("int",_)     = Just $ PDBS $ call "int" []
+  go ("pycall",_)  = Just $ PDBS $ call "pycall" []
 
---  go ("in",2)    = Just $ PDBS $ call " in " []
+  go ("in",2)    = Just $ PDBS $ infixOp " in "
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
