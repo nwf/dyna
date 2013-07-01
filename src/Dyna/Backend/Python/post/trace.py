@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-Examine solution as an outline of computation.
-
-TODO: shared substructure.
-
-"""
 
 import re
-from utils import yellow, green, cyan, red, _repr, drepr
-import debug, defn
-
-from draw_circuit import infer_edges
 from collections import defaultdict
+
+import debug, defn
+from draw_circuit import infer_edges
+from utils import yellow, green, cyan, red, _repr
 
 
 class trace(object):
     """
-    Examine solution as an outline of computation.
+    Examine solution as an outline of computation. Essentially it computes
+    `trace` for every term in the current solution.
+
+    See `help trace` for more information on `trace`.
     """
 
     def __init__(self, interp):

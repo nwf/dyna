@@ -5,6 +5,7 @@ from debug import Hypergraph
 from cStringIO import StringIO
 from utils import lexer, subst
 
+
 def circuit(edges):
     # create hypergraph object
     g = Hypergraph()

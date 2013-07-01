@@ -422,7 +422,6 @@ class REPL(cmd.Cmd, object):
             > b :- c.
             > c.
 
-
         In our solution we see that `a` is true.
 
             > sol
@@ -481,7 +480,7 @@ class REPL(cmd.Cmd, object):
         The way trace lets you know that it has omitted something is with a
         message `item: shared structure see above` or `item: *cycle*`.
 
-          > trace bar(10,10)
+          > trace bar(10, 10)
 
           bar(10,10) = 220
           |
@@ -495,11 +494,17 @@ class REPL(cmd.Cmd, object):
           │
           │        foo(X=10) = (X=10 + 1)=11.
           │
+          │
           └─ += 110
 
              bar(A=10, B=10) += (A=10 * foo(B=10)=11)=110.
              |
-             └─ foo(10): shared structure see above
+             └─ foo(10) = 11
+                |
+                └─ continue as before (shared structure)
+
+
+        Now, let's have a look at the geometric series, `a`.
 
           > trace a
 
@@ -508,11 +513,14 @@ class REPL(cmd.Cmd, object):
           ├─ += 1
           │
           │  a += 1.
+          │
           └─ += 1.0
 
              a += (a=2.0 / 2)=1.0.
              |
-             └─ a: *cycle*
+             └─ a = 2.0
+                |
+                └─ continue as before (cyclic structure, will continue forever)
 
         """
 
