@@ -72,8 +72,10 @@ def dynac(f, out, anf=None, compiler_args=()):
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
+        # hide our temporary file's ugly sha1 file names from users.
+        ugly_file_name = dotdynadir + '[a-z0-9/.]+\.dyna\S*'
+        stderr = re.sub(ugly_file_name, '', stderr)
         raise DynaCompilerError(stderr)
-
 
 
 def lexer(term):
