@@ -47,6 +47,7 @@ class Term(object):
 
     __add__ = __sub__ = __mul__ = notimplemented
 
+from term import Term
 
 class Cons(Term):
     def __init__(self, head, tail):
@@ -59,6 +60,17 @@ class Cons(Term):
         return [self.head] + self.tail.tolist()
     def __repr__(self):
         return repr(self.tolist())
+
+    def __iter__(self):
+#        return iter([(x,(x,),x) for x in self.tolist()])
+        for a in self.tolist():
+
+            if not isinstance(a, Term):
+                yield a, (None,), a
+
+            else:
+                yield a, (None,), a
+
     def __eq__(self, other):
         try:
             return self.tolist() == other.tolist()

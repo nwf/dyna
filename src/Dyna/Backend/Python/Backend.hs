@@ -119,6 +119,28 @@ builtins (f,is,o) = case () of
                                [(x^.mv_var, nuniv)]
          _ -> Left True
 
+  {-
+  -- XXX Argh, same as above.
+  _ | f == "in"
+    -> case is of
+         [x,y] | isFree x && isGround y
+               -> let
+                    call _ vs = "iter" <> (parens $ sepBy comma $ mpv vs) <> colon -- for some reason on colon get put at the end of this line.
+                    cdop = [OPIter x [y] "iter" DetNon (Just $ PDBS call)]
+                    cmod = [(x^.mv_var, nuniv)]
+                  in if isFree o
+                      then Right $ BAct (OPWrap (o^.mv_var) [] "true" : cdop)
+                                        ((o^.mv_var, nuniv) : cmod)
+                      else if isGround o
+                            then let _chk = "_chk"
+                                 in Right $ BAct ( OPWrap _chk [] "true"
+                                                 : OPCheq _chk (o^.mv_var)
+                                                 : cdop)
+                                                 cmod
+                            else Left True
+         _ -> Left True
+  -}
+
   _ | MA.isJust (constants (f,length is)) -> Left True
   _ -> Left False
 
@@ -154,6 +176,8 @@ constants = go
   go ("float", _)   = Just $ PDBS $ call "float" []
   go ("int", _)     = Just $ PDBS $ call "int" []
   go ("pycall", _)  = Just $ PDBS $ call "pycall" []
+
+--  go ("in",2)    = Just $ PDBS $ call " in " []
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
@@ -248,6 +272,15 @@ pdope_ _ (OPWrap v vs f) = return $ pretty v
 pdope_ _ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
                                      <+> c v vs
+
+pdope_ _ (OPIter v vs _ DetNon (Just (PDBS c))) = do
+      i <- incState
+      return $ "for" <+> "d" <> pretty i
+                      <> comma
+                      <> piterate vs
+                      <> comma
+                      <> (ground2underscore v)
+                <+> "in" <+> c v vs
 
 pdope_ _ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
            "Unexpected determinism flag (at python code gen):"

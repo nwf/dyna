@@ -84,7 +84,7 @@ def lexer(term):
                       '|[^(), ]+', term)      # everything else
 
 
-def subst(term, v):
+def subst(term, v, show_vars=False):
     """
     >>> subst('f("asdf",*g(1,X, Y), X+1)', {'X': 1234})
     'f("asdf",*g(1,1234, Y), 1234+1)'
@@ -97,6 +97,10 @@ def subst(term, v):
 
     """
     assert isinstance(v, dict)
+
+    if show_vars:
+        return ''.join((x + (red % ('=' + _repr(v[x]))) if x in v else x) for x in lexer(term))
+
     return ''.join((_repr(v[x]) if x in v else x) for x in lexer(term))
 
 

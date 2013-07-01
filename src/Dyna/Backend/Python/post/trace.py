@@ -7,7 +7,7 @@ TODO: shared substructure.
 """
 
 import re
-from utils import yellow, green, red, _repr, drepr
+from utils import yellow, green, cyan, red, _repr, drepr
 import debug, defn
 from cStringIO import StringIO
 from utils import lexer, subst
@@ -28,7 +28,7 @@ class trace(object):
         tracer = Tracer(self.interp)
         for item in tracer.items:
             print
-            print tracer(item)
+            tracer(item)
 
 
 class Tracer(object):
@@ -46,7 +46,7 @@ class Tracer(object):
         if item not in self.items:
             print
             print 'no trace for', item
-        print '\n'.join(dig(item, set(), self.items, self.interp))
+        print '\n'.join(dig(item, set(), tuple(), self.items, self.interp))
 
 
 def groupby(key, data):
@@ -56,10 +56,13 @@ def groupby(key, data):
     return dict(g)
 
 
-def dig(head, visited, groups, interp):
+def dig(head, visited, tail, groups, interp):
+
+    if head in tail:
+        return [yellow % head + ': ' + red % '*cycle*']
 
     if head in visited:
-        return [red % '*CYCLE*']
+        return [yellow % head + ': ' + red % 'shared structure see above']
 
     if head not in groups:
         return []
@@ -72,14 +75,14 @@ def dig(head, visited, groups, interp):
         for (_, _, body, vs) in groups[head][ruleix]:
 
             crux = Crux(head, interp.rules[ruleix], body, dict(vs))
-            block = branch([dig(x, visited, groups, interp) for x in body])
+            block = branch([dig(x, visited, tail + (head,), groups, interp) for x in body])
 
             if block:
                 contribs.append(crux.format() + ['|'] + block)
             else:
                 contribs.append(crux.format())
 
-    return ['%s = %s' % (yellow % head, _repr(head.value))] \
+    return ['%s => %s' % (yellow % head, cyan % _repr(head.value))] \
         + ['|'] \
         + branch(contribs) + ['']
 
@@ -125,16 +128,31 @@ class Crux(object):
 
     def format(self):
         rule = self.rule
-        src = rule.src.replace('\n',' ').strip()
+        #src = rule.src.replace('\n',' ').strip()
         graph = self.graph
-        user_vars = dict(defn.user_vars(self.vs.items()))
-        side = ['side:   ' + self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]
-        return [('%s %s' % (red % rule.anf.agg, self.values(rule.anf.result))),
-                (green % ('# %s' % src)),
-                (green % ('# %s where %s' % (subst(src, user_vars), drepr(user_vars)))),
-                ('head:   %s' % self.get_function(rule.anf.head)),
-                ('result: %s' % self.get_function(rule.anf.result))] \
-                + side
+        #user_vars = dict(defn.user_vars(self.vs.items()))
+
+        side = [self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]
+
+        explode = ('%s %s %s' % (self.get_function(rule.anf.head)[1:],  # drop quote on head
+                                 green % rule.anf.agg,
+                                 self.get_function(rule.anf.result)))
+
+        if side:
+            side = '    ' + ', '.join('%s %s' % ('for', x,) for x in side) + '.'
+            explode += ','
+        else:
+            explode += '.'
+
+        lines = ['%s %s' % (green % rule.anf.agg, self.values(rule.anf.result)),
+                 '',
+                 explode]
+
+        if side:
+            lines.append(side)
+
+        return lines
+
 
     def get_function(self, x):
         """
@@ -154,16 +172,19 @@ class Crux(object):
                 return label
 
             fn_args = [self.get_function(y) for y in x.body]
-            if not label.isalpha() and not label.startswith('& ') and len(fn_args) == 2:  # infix
+            if not label.isalpha() and not label.startswith('&') and len(fn_args) == 2:  # infix
                 [a,b] = fn_args
                 return '(%s %s %s)' % (a, label, b)
             return '%s(%s)' % (label, ', '.join(fn_args))
 
         else:
-            if not g.incoming[x]:  # input variable
+            if not g.incoming[x]:  # input
+                if re.match('u[A-Z].*', x):                          # user variable
+                    return x[1:] + (cyan % '=%s' % self.values(x))
                 return self.values(x)
+
             if len(g.incoming[x]) > 1:
-                return 'UNIFICATION ' + ' === '.join(self.get_function(e) + (red % '=%s' % self.values(e.head)) for e in g.incoming[x])
+                return ' = '.join('(%s%s)' % (self.get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
             [e] = g.incoming[x]
 
             if e.label == '=':
@@ -172,4 +193,4 @@ class Crux(object):
             if e.label.startswith('&'):
                 return self.get_function(e)
 
-            return self.get_function(e) + (red % '=%s' % self.values(x))
+            return self.get_function(e) + (cyan % '=%s' % self.values(x))

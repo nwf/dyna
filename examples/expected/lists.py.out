@@ -9,5 +9,5 @@ f([1, 2]) => true.
 
 goal/1
 ======
-goal([2])                      := true
+goal([2]) => true.
 
