@@ -1,0 +1,2 @@
+value(&z) := 0.
+value(&s(X)) := 1+value(X) for value(X) < 10.
