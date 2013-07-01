@@ -387,10 +387,13 @@ processFile fileName = bracket openOut hClose go
                        tus = nHide $ IUniv UShared
                        tf  = nHide IFree
 
-            cqPlans = map (\(fa,r,e) -> (fa,r,check e)) qPlans
+            cqPlans = map check qPlans
                        where
-                        check (Right p) = p
-                        check (Left  _) = dynacPanic $ "Backchaining planner failed"
+                        check (f,r,Right p) = (f,r,p)
+                        check (_,r,Left  _) = dynacUserErr $
+						  "Unable to plan backchaining for rule"
+						  <//> (prettySpanLoc (r_span r))
+						  <> dot
 
         in do
             -- Do this before forcing cInitializers, cuPlans, etc.,
@@ -440,7 +443,7 @@ processFile fileName = bracket openOut hClose go
   parse aggs = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
     case pr of
-      TR.Failure td -> dynacUserANSIErr $ PPA.align ("Parser error" PPA.<$> td)
+      TR.Failure td -> dynacParseErr $ PPA.align td
       TR.Success rs -> return rs
 
 
@@ -464,10 +467,10 @@ main = catches (getArgs >>= main_)
   printerr x = pe x >> exitFailure
 
   pe (UserProgramError d) = do
-    PP.hPutDoc stderr (upeMsg <> line <> PP.indent 1 d)
+    PP.hPutDoc stderr (upeMsg <> line <> PP.indent 1 d <//> upePostfix)
     hPutStrLn stderr ""
-  pe (UserProgramANSIError d) = do
-    PPA.hPutDoc stderr (upeMsg <> PPA.line <> PPA.indent 1 d)
+  pe (UserProgramParseError d) = do
+    PPA.hPutDoc stderr (parseMsg <> PPA.line <> PPA.indent 1 d)
     hPutStrLn stderr ""
   pe (InvocationError d) = do
     PP.hPutDoc stderr ("Invocation error:" <> line <> PP.indent 1 d)
@@ -489,7 +492,13 @@ main = catches (getArgs >>= main_)
     hPutStrLn stderr ""
 
   upeMsg :: (IsString s) => s
-  upeMsg = "FATAL: Encountered error in input program:"
+  upeMsg = "Encountered error in input program:"
+
+  upePostfix :: Doc e
+  upePostfix =      "Everything was syntactically valid, but we could not"
+               <//> "see it through."
+
+  parseMsg = "Could not parse:"
 
   sorryMsg :: (IsString s) => s
   sorryMsg = "Terribly sorry, but you've hit an unsupported feature"

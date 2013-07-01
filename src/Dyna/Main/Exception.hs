@@ -24,8 +24,8 @@ data DynacException =
     -- | The user program contains an error
     UserProgramError (PP.Doc TP.Effect)
 
-    -- | Same as 'UserProgramError' but with ANSI documentation
-  | UserProgramANSIError PPA.Doc
+    -- | Parser errors get their own branch for convenience of printout
+  | UserProgramParseError PPA.Doc
 
     -- | Something went wrong when trying to understand arguments
   | InvocationError (PP.Doc TP.Effect)
@@ -55,8 +55,8 @@ dynacPanicStr = throw . Panic . PP.text
 
 -- | Throw an ANSI error; this is used inside the parser, primarily, due to
 -- trifecta's movement to the ANSI prettyprinter.
-dynacUserANSIErr :: PPA.Doc -> a
-dynacUserANSIErr = throw . UserProgramANSIError
+dynacParseErr :: PPA.Doc -> a
+dynacParseErr = throw . UserProgramParseError
 
 -- | A type-restricted version of 'throw'
 dynacThrow :: DynacException -> a
