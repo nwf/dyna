@@ -54,7 +54,8 @@ aggrs = S.fromList
   , "and=" , "or=" , "&=" , "|="
   , ":-"
   , "="
-  , "majority=" , "set=" , "bag="
+  , "majority=" , "mean="
+  , "set=" , "bag="
   , ":="
   , "dict="
   ]

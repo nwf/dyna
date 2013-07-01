@@ -47,43 +47,39 @@ class Term(object):
 
     __add__ = __sub__ = __mul__ = notimplemented
 
-from term import Term
 
 class Cons(Term):
+
     def __init__(self, head, tail):
         self.head = head
         self.tail = tail
         assert isinstance(tail, (Cons, _Nil)), tail
         Term.__init__(self, 'cons/2', (head, tail))
         self.aggregator = Aggregator()
-    def tolist(self):
-        return [self.head] + self.tail.tolist()
+        self.aslist = [self.head] + self.tail.aslist
+
     def __repr__(self):
-        return repr(self.tolist())
+        return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
-    def __iter__(self):
-#        return iter([(x,(x,),x) for x in self.tolist()])
-        for a in self.tolist():
-
-            if not isinstance(a, Term):
-                yield a, (None,), a
-
-            else:
-                yield a, (None,), a
+#    def __iter__(self):
+#        for a in self.aslist:
+#            if not isinstance(a, Term):
+#                yield a, (None,), a
+#            else:
+#                yield a, (None,), a
 
     def __eq__(self, other):
         try:
-            return self.tolist() == other.tolist()
+            return self.aslist == other.aslist
         except AttributeError:
             return False
+
 
 class _Nil(Term):
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
         self.aggregator = Aggregator()
-
-    def tolist(self):
-        return []
+        self.aslist = []
     def __repr__(self):
         return '[]'
 

@@ -11,16 +11,28 @@ except ImportError:                       # XXX: should probably issue a warning
         return _random() * (b - a) + a
 
 def split(s, delim='\s+'):
-    return _todynalist(re.split(delim, s))
+    return todynalist(re.split(delim, s))
 
 def pycall(name, *args):
     """
     Temporary foreign function interface - call Python functions from dyna!
     """
+    args = tuple(topython(x) for x in args)
     x = eval(name)(*args)
-    if isinstance(x, list):
-        return _todynalist(x)
+    return todyna(x)
+
+def todyna(x):
+    if isinstance(x, (list, tuple)):
+        return todynalist(x)
     return x
+
+def topython(x):
+    if isinstance(x, (Cons, Nil)):
+        return x.aslist
+    return x
+
+def todynalist(x):
+    return _todynalist(list(x))
 
 def _todynalist(x):
     if not x:

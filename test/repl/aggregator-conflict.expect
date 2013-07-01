@@ -1,5 +1,8 @@
-> > =============
+> > 
+Changes
+=======
 a = 1.
+
 > DynaCompilerError:
 Encountered error in input program:
  Conflicting aggregators; rule <repl>

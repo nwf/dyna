@@ -120,8 +120,17 @@ class DictEquals(BAggregator):
 
 class majority_equals(BAggregator):
     def fold(self):
-        [(k,_)] = self.most_common(1)
-        return k
+        [(k,c)] = self.most_common(1)
+        if c > 0:
+            return k
+
+class mean_equals(BAggregator):
+    def fold(self):
+        # TODO: support negative multiplicity or throw an error
+        s = [k*m for k, m in self.iteritems() if m > 0]
+        if len(s):
+            n = sum(m for _, m in self.iteritems() if m > 0)
+            return reduce(operator.add, s) / n
 
 class max_equals(BAggregator):
     def fold(self):
@@ -173,13 +182,15 @@ class b_or_equals(BAggregator):
 
 class set_equals(BAggregator):
     def fold(self):
+        from stdlib import todynalist
         s = {x for x, m in self.iteritems() if m > 0}
         if len(s):
-            return s
+            return todynalist(s)
 
 class bag_equals(BAggregator):
     def fold(self):
-        return Counter(self)
+        from stdlib import todynalist
+        return todynalist(Counter(self).elements())
 
 
 # map names to functions
@@ -196,6 +207,7 @@ defs = {
     'majority=': majority_equals,
     'set=': set_equals,
     'bag=': bag_equals,
+    'mean=': mean_equals,
 }
 
 def aggregator(name):

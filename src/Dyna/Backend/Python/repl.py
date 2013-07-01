@@ -87,9 +87,12 @@ class REPL(cmd.Cmd, object):
         except ValueError:
             print 'Please specify an integer. Type `help retract_rule` to read more.'
         else:
-            if self.interp.retract_rule(idx) is None:
+            changes = self.interp.retract_rule(idx)
+            if changes is None:
                 print 'List available by typing `rules`'
                 print
+            else:
+                self._changed(changes)
 
     def do_exit(self, _):
         """
@@ -201,9 +204,7 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         for val, bindings in results:
-            #if not bindings:
-            #    print '   ', _repr(val)
-            print '  ', _repr(val), 'where', drepr(dict(bindings))
+            print _repr(val), 'where', drepr(dict(bindings))
         print
 
     def do_query(self, q):
@@ -269,9 +270,13 @@ class REPL(cmd.Cmd, object):
     def _changed(self, changed):
         if not changed:
             return
-        print '============='
+
+        print
+        print 'Changes'
+        print '======='
         for x, v in sorted(changed.items()):
             print '%s = %s.' % (x, _repr(v))
+        print
 
 #    def _changed_subscriptions(self, changed):
 #

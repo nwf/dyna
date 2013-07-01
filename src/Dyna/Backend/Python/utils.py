@@ -81,12 +81,12 @@ def dynac(f, out, anf=None, compiler_args=()):
 def lexer(term):
     return re.findall('"[^"]*"'               # string
                       '|[a-z][a-zA-Z_0-9]*'   # functor
-                      '|[A-Z][a-zA-Z0-9_]*'   # variable
-                      '|[(), ]+'              # parens and comma
+                      '|[A-Z_][a-zA-Z0-9_]*'   # variable
+                      '|[(), \[\]|]+'         # parens and comma
                       '|[^(), ]+', term)      # everything else
 
 
-def subst(term, v, show_vars=False):
+def subst(term, v):
     """
     >>> subst('f("asdf",*g(1,X, Y), X+1)', {'X': 1234})
     'f("asdf",*g(1,1234, Y), 1234+1)'
@@ -99,10 +99,6 @@ def subst(term, v, show_vars=False):
 
     """
     assert isinstance(v, dict)
-
-    if show_vars:
-        return ''.join((x + (red % ('=' + _repr(v[x]))) if x in v else x) for x in lexer(term))
-
     return ''.join((_repr(v[x]) if x in v else x) for x in lexer(term))
 
 
