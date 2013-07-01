@@ -1,11 +1,11 @@
 
 Solution
 ========
-a => 0.
-b => 0.
-by_evl_cross => true.
-by_evl_refl => true.
-by_is_0a => true.
-by_syn_cross => false.
-by_syn_refl => true.
+a = 0.
+b = 0.
+by_evl_cross = true.
+by_evl_refl = true.
+by_is_0a = true.
+by_syn_cross = false.
+by_syn_refl = true.
 

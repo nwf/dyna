@@ -1,13 +1,13 @@
 
 Solution
 ========
-a => [1, 2].
+a = [1, 2].
 
 f/1
 ===
-f([1, 2]) => true.
+f([1, 2]) = true.
 
 goal/1
 ======
-goal([2]) => true.
+goal([2]) = true.
 
