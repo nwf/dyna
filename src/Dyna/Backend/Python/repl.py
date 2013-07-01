@@ -52,31 +52,44 @@ class REPL(cmd.Cmd, object):
         """
         Retract rule from program by rule index.
 
-        > a += 1.
-        > b += 1.
-        > c += a*b.
+          > a += 1.
+          > b += 1.
+          > c += a*b.
 
-        > rules
+        In order to retract a rule we need to know it's index, for that we use
+        the command `rules`.
 
-        Rules
-        =====
-          0: a += 1.
-          1: b += 1.
-          2: c += a * b.
+          > rules
 
-        > retract_rule 0
+          Rules
+          =====
+            0: a += 1.
+            1: b += 1.
+            2: c += a * b.
+
+        Now let's remove a rule:
+
+          > retract_rule 0
 
         This removes rule 0 from the program. Now, let's inspect the changes to
         the solution.
 
-        > sol
+          > sol
 
-        Solution
-        ========
-        b => 1.
+          Solution
+          ========
+          b = 1.
 
         """
-        self.interp.retract_rule(int(idx))
+
+        try:
+            idx = int(idx)
+        except ValueError:
+            print 'Please specify an integer. Type `help retract_rule` to read more.'
+        else:
+            if self.interp.retract_rule(idx) is None:
+                print 'List available by typing `rules`'
+                print
 
     def do_exit(self, _):
         """
@@ -154,20 +167,28 @@ class REPL(cmd.Cmd, object):
         self.interp.new_rules = set()
 
         try:
-            query = "$out(%s) dict= %s." % (self.lineno, q)
+            query = "$query dict= %s." % q
             self.default(query, show_changed=False)
             try:
-                [(_, _, results)] = self.interp.chart['$out/1'][self.lineno,:]
+                [(_, _, results)] = self.interp.chart['$query/0'][:,]
                 return results
             except ValueError:
                 return []
         finally:
+
             # cleanup:
             # retract newly added rules.
             for r in self.interp.new_rules:
                 self.interp.retract_rule(r)
-            # drop $out chart
-            del self.interp.chart['$out/1']
+
+            try:
+                # drop $out chart
+                del self.interp.chart['$query/0']
+            except KeyError:
+                # query must have failed.
+                pass
+
+        self.interp.new_rules = set()
 
     def do_vquery(self, q):
         """
@@ -199,14 +220,14 @@ class REPL(cmd.Cmd, object):
          - `vquery` shows variable bindings
 
             > vquery f(X)
-                1 where {X=1}
-                4 where {X=1}
+            1 where {X=1}
+            4 where {X=1}
 
          - `query` shows variable bindings applied to query
 
             > query f(X)
-                1 =* f(1)
-                4 =* f(2)
+            f(1) = 1.
+            f(2) = 4.
 
          - `trace` is an introspection tool for visualizing the derivation of an
            item and its value. Type `help trace` for more information.
@@ -218,8 +239,9 @@ class REPL(cmd.Cmd, object):
         if len(results) == 0:
             print 'No results.'
             return
+        print
         for term, result in sorted((subst(q, dict(result.variables)), result) for result in results):
-            print '  ', _repr(result.value), '=*', term
+            print term, '=', _repr(result.value)
         print
 
     def default(self, line, show_changed=True):
@@ -238,7 +260,7 @@ class REPL(cmd.Cmd, object):
         except (DynaInitializerException, DynaCompilerError) as e:
             print type(e).__name__ + ':'
             print e
-            print '> new rule(s) were not added to program.'
+            print 'new rule(s) were not added to program.'
             print
         else:
             if show_changed:
@@ -249,7 +271,7 @@ class REPL(cmd.Cmd, object):
             return
         print '============='
         for x, v in sorted(changed.items()):
-            print '%s => %s.' % (x, _repr(v))
+            print '%s = %s.' % (x, _repr(v))
 
 #    def _changed_subscriptions(self, changed):
 #
@@ -354,12 +376,12 @@ class REPL(cmd.Cmd, object):
         ========
         data/3
         ======
-        data(2,"cow","boy") => true.
+        data(2,"cow","boy") = true.
 
         data/4
         ======
-        data(0,"a","b","3.0") => true.
-        data(1,"c","d","4.0") => true.
+        data(0,"a","b","3.0") = true.
+        data(1,"c","d","4.0") = true.
 
         """
         try:
@@ -404,27 +426,27 @@ class REPL(cmd.Cmd, object):
         In our solution we see that `a` is true.
 
             > sol
-            a => true.
-            b => true.
-            c => true.
+            a = true.
+            b = true.
+            c = true.
 
         Now we want to find out why
 
             > trace a
 
-            a => true
+            a = true
             |
             └─ :- true
 
                a :- b=true.
                |
-               └─ b => true
+               └─ b = true
                   |
                   └─ :- true
 
                      b :- c=true.
                      |
-                     └─ c => true
+                     └─ c = true
                         |
                         └─ |= true
 
@@ -461,13 +483,13 @@ class REPL(cmd.Cmd, object):
 
           > trace bar(10,10)
 
-          bar(10,10) => 220
+          bar(10,10) = 220
           |
           ├─ += 110
           │
           │  bar(A=10, B=10) += (foo(A=10)=11 * B=10)=110.
           │  |
-          │  └─ foo(10) => 11
+          │  └─ foo(10) = 11
           │     |
           │     └─ = 11
           │
@@ -481,7 +503,7 @@ class REPL(cmd.Cmd, object):
 
           > trace a
 
-          a => 2.0
+          a = 2.0
           |
           ├─ += 1
           │
@@ -524,8 +546,15 @@ class REPL(cmd.Cmd, object):
             # retract newly added rules.
             for r in self.interp.new_rules:
                 self.interp.retract_rule(r)
-            # drop $out chart
-            del self.interp.chart['$trace/0']
+
+            try:
+                # drop $out chart
+                del self.interp.chart['$trace/0']
+            except KeyError:
+                # query must have failed.
+                pass
+
+        self.interp.new_rules = set()
 
 
     do_load.__doc__ = do_load.__doc__.format(load=', '.join(load.available))

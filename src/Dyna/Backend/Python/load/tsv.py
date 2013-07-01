@@ -13,13 +13,13 @@ class tsv(object):
     > sol
     row/4
     =====
-    row(0,"0","S","NP VP")         => true.
-    row(1,"1.58","ROOT","S .")     => true.
-    row(2,"1.58","ROOT","S !")     => true.
-    row(3,"1.58","ROOT","VP !")    => true.
-    row(4,"3.81","VP","V")         => true.
-    row(5,"3.81","VP","V NP")      => true.
-    row(6,"1.49","VP","V VP")      => true.
+    row(0,"0","S","NP VP")      = true.
+    row(1,"1.58","ROOT","S .")  = true.
+    row(2,"1.58","ROOT","S !")  = true.
+    row(3,"1.58","ROOT","VP !") = true.
+    row(4,"3.81","VP","V")      = true.
+    row(5,"3.81","VP","V NP")   = true.
+    row(6,"1.49","VP","V VP")   = true.
        ...
 
     """

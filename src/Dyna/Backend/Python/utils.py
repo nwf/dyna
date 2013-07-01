@@ -74,7 +74,7 @@ def dynac(f, out, anf=None, compiler_args=()):
         assert not stdout.strip(), [stdout, stderr]
         # hide our temporary file's ugly sha1 file names from users.
         ugly_file_name = dotdynadir + '[a-z0-9/.]+\.dyna\S*'
-        stderr = re.sub(ugly_file_name, '', stderr)
+        stderr = re.sub(ugly_file_name, '<repl>', stderr)
         raise DynaCompilerError(stderr)
 
 

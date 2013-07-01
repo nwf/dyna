@@ -9,8 +9,6 @@ TODO: shared substructure.
 import re
 from utils import yellow, green, cyan, red, _repr, drepr
 import debug, defn
-from cStringIO import StringIO
-from utils import lexer, subst
 
 from draw_circuit import infer_edges
 from collections import defaultdict
@@ -59,10 +57,14 @@ def groupby(key, data):
 def dig(head, visited, tail, groups, interp):
 
     if head in tail:
-        return [yellow % head + ': ' + red % '*cycle*']
+        return ['%s = %s' % (yellow % head, head.value)] \
+            + ['|'] \
+            + branch([[red % 'continue as before (cyclic structure, will continue forever)']])
 
     if head in visited:
-        return [yellow % head + ': ' + red % 'shared structure see above']
+        return ['%s = %s' % (yellow % head, head.value)] \
+            + ['|'] \
+            + branch([[red % 'continue as before (shared structure)']])
 
     if head not in groups:
         return []
@@ -80,9 +82,9 @@ def dig(head, visited, tail, groups, interp):
             if block:
                 contribs.append(crux.format() + ['|'] + block)
             else:
-                contribs.append(crux.format())
+                contribs.append(crux.format() + [''])
 
-    return ['%s => %s' % (yellow % head, cyan % _repr(head.value))] \
+    return ['%s = %s' % (yellow % head, cyan % _repr(head.value))] \
         + ['|'] \
         + branch(contribs) + ['']
 

@@ -15,8 +15,8 @@ class sexpr(object):
     ========
     trees/1
     =======
-    trees(0) => node("a", node("b", "c"), node("d", "e"))
-    trees(1) => node("a", "b", "c")
+    trees(0) = node("a", node("b", "c"), node("d", "e"))
+    trees(1) = node("a", "b", "c")
 
     """
 

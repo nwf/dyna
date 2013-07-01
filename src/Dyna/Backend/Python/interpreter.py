@@ -272,6 +272,7 @@ class Interpreter(object):
 
     def dump_rules(self):
         if not self.rules:
+            print 'No rules found.'
             return
         print
         print 'Rules'
