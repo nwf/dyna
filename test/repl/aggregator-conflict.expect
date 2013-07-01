@@ -1,10 +1,10 @@
-:- :- =============
+> > =============
 a => 1.
-:- DynaCompilerError:
+> DynaCompilerError:
 FATAL: Encountered error in input program:
- Conflicting aggregators; rule /home/timv/.dyna/tmp/6676/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:1-/home/timv/.dyna/tmp/6676/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:3
+ Conflicting aggregators; rule /home/timv/.dyna/tmp/25930/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:1-/home/timv/.dyna/tmp/25930/966093dc38b755a6f17b02774b5c656931163a3a.dyna:5:3
  uses '|=' for a/0 but I had been lead to expect '+='.
 
 > new rule(s) were not added to program.
 
-:- exit
+> exit
