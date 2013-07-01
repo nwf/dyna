@@ -284,8 +284,8 @@ class REPL(cmd.Cmd, object):
 #
 #        For example,
 #
-#            : subscribe f(X,X)
-#            :- f(1,1) := 1. f(1,2) := 2. f(2,2) := 3.
+#            > subscribe f(X,X)
+#            > f(1,1) := 1. f(1,2) := 2. f(2,2) := 3.
 #            Changes
 #            =======
 #            f(X,X):
@@ -293,7 +293,7 @@ class REPL(cmd.Cmd, object):
 #
 #        To view all subscriptions:
 #
-#            :- subscriptions
+#            > subscriptions
 #            f(X):
 #               1 where {X=1}
 #               2 where {X=2}
@@ -344,12 +344,12 @@ class REPL(cmd.Cmd, object):
         For more information about a particular loader type the following (in
         this case we get help for the `tsv` loader):
 
-            :- help load tsv
+            > help load tsv
 
         Examples:
 
-        :- load data = tsv("examples/data/data.csv", delim=',')
-        :- sol
+        > load data = tsv("examples/data/data.csv", delim=',')
+        > sol
         Solution
         ========
         data/3
@@ -379,7 +379,7 @@ class REPL(cmd.Cmd, object):
         For more information about a particular post processor (in this case
         `save`)
 
-            :- help post save
+            > help post save
 
         """
         try:
@@ -396,21 +396,21 @@ class REPL(cmd.Cmd, object):
 
         We'll start with something very simple:
 
-            :- a :- b.
-            :- b :- c.
-            :- c.
+            > a :- b.
+            > b :- c.
+            > c.
 
 
         In our solution we see that `a` is true.
 
-            :- sol
+            > sol
             a => true.
             b => true.
             c => true.
 
         Now we want to find out why
 
-            :- trace a
+            > trace a
 
             a => true
             |
@@ -459,7 +459,7 @@ class REPL(cmd.Cmd, object):
         The way trace lets you know that it has omitted something is with a
         message `item: shared structure see above` or `item: *cycle*`.
 
-          :- trace bar(10,10)
+          > trace bar(10,10)
 
           bar(10,10) => 220
           |
@@ -479,7 +479,7 @@ class REPL(cmd.Cmd, object):
              |
              └─ foo(10): shared structure see above
 
-          :- trace a
+          > trace a
 
           a => 2.0
           |

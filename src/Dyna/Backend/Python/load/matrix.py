@@ -11,8 +11,8 @@ class matrix(object):
     $ echo       >> /tmp/foo
     $ echo 6 7   >> /tmp/foo
 
-    :- load m = matrix("/tmp/foo")
-    :- sol
+    > load m = matrix("/tmp/foo")
+    > sol
 
     Solution
     ========
@@ -31,8 +31,8 @@ class matrix(object):
     different type simple passing a function which will convert strings to the
     appropriate time (e.g. str, int, float).
 
-    :- load m = matrix("/tmp/foo", astype=str)
-    :- sol
+    > load m = matrix("/tmp/foo", astype=str)
+    > sol
 
     Solution
     ========

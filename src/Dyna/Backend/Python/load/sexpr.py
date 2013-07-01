@@ -8,8 +8,8 @@ class sexpr(object):
 
     $ echo '(a (b c) (d e)) (a b (c))' > /tmp/foo
     $ ./dyna
-    :- load trees = sexpr("/tmp/foo")
-    :- sol
+    > load trees = sexpr("/tmp/foo")
+    > sol
 
     Solution
     ========

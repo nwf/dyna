@@ -9,8 +9,8 @@ class tsv(object):
     """
     Load tab-delimited files.
 
-    :- load row = tsv("test/repl/english.gr")
-    :- sol
+    > load row = tsv("test/repl/english.gr")
+    > sol
     row/4
     =====
     row(0,"0","S","NP VP")         => true.
