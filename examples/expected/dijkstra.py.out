@@ -1,35 +1,35 @@
 
 Solution
 ========
-end := "MyHouse"
-goal := 2410
-start := "FriendHouse"
+end => "MyHouse".
+goal => 2410.
+start => "FriendHouse".
 
 edge/2
 ======
-edge("BOS","JFK")              := 187
-edge("BOS","MIA")              := 1258
-edge("DFW","LAX")              := 1235
-edge("DFW","ORD")              := 802
-edge("FriendHouse","BOS")      := 10
-edge("JFK","DFW")              := 1391
-edge("JFK","MIA")              := 1090
-edge("JFK","SFO")              := 2582
-edge("LAX","ORD")              := 1749
-edge("MIA","DFW")              := 1121
-edge("MIA","LAX")              := 2342
-edge("ORD","DFW")              := 802
-edge("ORD","MyHouse")          := 20
+edge("BOS","JFK")         => 187.
+edge("BOS","MIA")         => 1258.
+edge("DFW","LAX")         => 1235.
+edge("DFW","ORD")         => 802.
+edge("FriendHouse","BOS") => 10.
+edge("JFK","DFW")         => 1391.
+edge("JFK","MIA")         => 1090.
+edge("JFK","SFO")         => 2582.
+edge("LAX","ORD")         => 1749.
+edge("MIA","DFW")         => 1121.
+edge("MIA","LAX")         => 2342.
+edge("ORD","DFW")         => 802.
+edge("ORD","MyHouse")     => 20.
 
 path/1
 ======
-path("BOS")                    := 10
-path("DFW")                    := 1588
-path("FriendHouse")            := 0
-path("JFK")                    := 197
-path("LAX")                    := 2823
-path("MIA")                    := 1268
-path("MyHouse")                := 2410
-path("ORD")                    := 2390
-path("SFO")                    := 2779
+path("BOS")         => 10.
+path("DFW")         => 1588.
+path("FriendHouse") => 0.
+path("JFK")         => 197.
+path("LAX")         => 2823.
+path("MIA")         => 1268.
+path("MyHouse")     => 2410.
+path("ORD")         => 2390.
+path("SFO")         => 2779.
 

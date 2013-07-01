@@ -135,7 +135,7 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import crash_handler, DynaInitializerException, AggregatorError
+from errors import crash_handler, DynaInitializerException, AggregatorError, DynaCompilerError
 
 
 class Rule(object):
@@ -161,10 +161,6 @@ class foo(dict):
         self.agg_name = agg_name
         super(foo, self).__init__()
     def __missing__(self, fn):
-
-        if fn == 'contains/2':
-            return Contains()
-
         arity = int(fn.split('/')[-1])
         self[fn] = c = Chart(fn, arity, self.agg_name[fn])
         return c
@@ -172,38 +168,6 @@ class foo(dict):
 
 def none():
     return None
-
-
-class Contains(object):
-
-    def __init__(self):
-        self.name = 'contains'
-        self.arity = 2
-
-    def __repr__(self):
-        return 'contains/2'
-
-    def __getitem__(self, s):
-        assert len(s) == self.arity + 1, \
-            'Chart %r: item width mismatch: arity %s, item %s' % (self.name, self.arity, len(s))
-        [x, xs], val = s[:-1], s[-1]
-        #assert val is True
-        if isinstance(x, slice):
-            assert not isinstance(xs, slice)
-            for a in xs.tolist():
-                term = Term('contains/2', (a, xs))
-                term.value = True
-                yield term, term.args, term.value
-
-        else:
-            # all bound membership test
-            assert not isinstance(x, slice) and not isinstance(xs, slice)
-            term = Term('contains/2', (x, xs))
-            term.value = (x in xs.tolist())
-            yield term, term.args, term.value
-
-    def insert(self, args):
-        assert False
 
 
 class Interpreter(object):
@@ -569,6 +533,7 @@ class Interpreter(object):
         self.files.append(filename)
 
         out = self.tmp / filename.read_hexhash('sha1') + '.plan.py'
+#        out = filename + '.plan.py'
 
         dynac(filename, out)
         self.files.append(out)
@@ -628,8 +593,8 @@ def main():
                         help='run post-processor.')
     parser.add_argument('--load', nargs='*',
                         help='run loaders.')
-    parser.add_argument('--profile', action='store_true',
-                        help='run profiler.')
+#    parser.add_argument('--profile', action='store_true',
+#                        help='run profiler.')
 
     args = parser.parse_args()
 
@@ -658,25 +623,35 @@ def main():
         else:
             #plan = args.source + '.plan.py'
             #interp.dynac(args.source, plan)
-            plan = interp.dynac(args.source)
 
-        if args.profile:
-            # When profiling, its common practice to disable the garbage collector.
-            import gc
-            gc.disable()
+            try:
+                plan = interp.dynac(args.source)
+            except DynaCompilerError as e:
+                print e
+                exit(1)
 
-            from cProfile import Profile
-            p = Profile()
-            p.runctx('interp.do(plan)', globals(), locals())
-            p.dump_stats('prof')
+#        if args.profile:
+#            # When profiling, its common practice to disable the garbage collector.
+#            import gc
+#            gc.disable()
+#
+#            from cProfile import Profile
+#            p = Profile()
+#            p.runctx('interp.do(plan)', globals(), locals())
+#            p.dump_stats('prof')
+#
+#            interp.dump_charts()
+#
+#            os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
+#            os.system('pkill snakeviz; snakeviz prof &')
+#            return
 
-            interp.dump_charts()
+        try:
+            interp.do(plan)
+        except DynaInitializerException as e:
+            print e
+            exit(1)
 
-            os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
-            os.system('pkill snakeviz; snakeviz prof &')
-            return
-
-        interp.do(plan)
         interp.dump_charts(args.output)      # should be a post-processor
 
     if args.load:

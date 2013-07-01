@@ -10,7 +10,7 @@ to help.
 """
 
 import os, cmd, readline
-from utils import dynac, ip, lexer, subst, drepr, _repr
+from utils import dynac, ip, lexer, subst, drepr, _repr, get_module
 from errors import DynaCompilerError, DynaInitializerException
 from config import dotdynadir
 from errors import show_traceback
@@ -40,7 +40,7 @@ class REPL(cmd.Cmd, object):
 
     @property
     def prompt(self):
-        return ':- '
+        return '> '
 
     def do_rules(self, _):
         """
@@ -52,11 +52,11 @@ class REPL(cmd.Cmd, object):
         """
         Retract rule from program by rule index.
 
-        :- a += 1.
-        :- b += 1.
-        :- c += a*b.
+        > a += 1.
+        > b += 1.
+        > c += a*b.
 
-        :- rules
+        > rules
 
         Rules
         =====
@@ -64,16 +64,16 @@ class REPL(cmd.Cmd, object):
           1: b += 1.
           2: c += a * b.
 
-        :- retract_rule 0
+        > retract_rule 0
 
         This removes rule 0 from the program. Now, let's inspect the changes to
         the solution.
 
-        :- sol
+        > sol
 
         Solution
         ========
-        b := 1.
+        b => 1.
 
         """
         self.interp.retract_rule(int(idx))
@@ -112,26 +112,26 @@ class REPL(cmd.Cmd, object):
         """Do nothing on empty input line"""
         pass
 
-    def do_ip(self, _):
-        """
-        Development tool. Jump into an interactive python shell.
-        """
-        ip()
+#    def do_ip(self, _):
+#        """
+#        Development tool. Jump into an interactive python shell.
+#        """
+#        ip()
 
-    def do_debug(self, line):
-        """
-        Development tool. Used for view Dyna's intermediate representations.
-        """
-        import debug
-        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
-            f.write(line)
-        debug.main(f.name)
+#    def do_debug(self, line):
+#        """
+#        Development tool. Used for view Dyna's intermediate representations.
+#        """
+#        import debug
+#        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
+#            f.write(line)
+#        debug.main(f.name)
 
     def do_run(self, filename):
         """
         Load dyna rules from `filename`.
 
-        :- run examples/papa.dyna
+        > run examples/papa.dyna
 
         """
         try:
@@ -142,6 +142,11 @@ class REPL(cmd.Cmd, object):
             self._changed(changed)
 
     def _query(self, q):
+
+        if not q.strip():
+            print 'No query specified. Type `help query` for usage.'
+            return
+
         if q.endswith('.'):
             print "Queries don't end with a dot."
             return
@@ -186,22 +191,25 @@ class REPL(cmd.Cmd, object):
 
         Consider the following example;
 
-          :- f(1) := 1.
-          :- f(2) := 4.
+          > f(1) := 1.
+          > f(2) := 4.
 
         There a few versions of query:
 
          - `vquery` shows variable bindings
 
-            :- vquery f(X)
+            > vquery f(X)
                 1 where {X=1}
                 4 where {X=1}
 
          - `query` shows variable bindings applied to query
 
-            :- query f(X)
+            > query f(X)
                 1 =* f(1)
                 4 =* f(2)
+
+         - `trace` is an introspection tool for visualizing the derivation of an
+           item and its value. Type `help trace` for more information.
 
         """
         results = self._query(q)
@@ -241,23 +249,23 @@ class REPL(cmd.Cmd, object):
             return
         print '============='
         for x, v in sorted(changed.items()):
-            print '%s := %s' % (x, _repr(v))
+            print '%s => %s.' % (x, _repr(v))
 
-    def _changed_subscriptions(self, changed):
-
-        # TODO: this doesn't show changes - it redumps everything.
-
-        if not changed:
-            return
-        for x, _ in sorted(changed.items()):
-            if x.fn == '$subscribed/2':
-                [i, q] = x.args
-                if x.value:
-                    print '%s: %s' % (i, q)
-                    for result in x.value:
-                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
-        print
-        self.interp.dump_errors()
+#    def _changed_subscriptions(self, changed):
+#
+#        # TODO: this doesn't show changes - it redumps everything.
+#
+#        if not changed:
+#            return
+#        for x, _ in sorted(changed.items()):
+#            if x.fn == '$subscribed/2':
+#                [i, q] = x.args
+#                if x.value:
+#                    print '%s: %s' % (i, q)
+#                    for result in x.value:
+#                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
+#        print
+#        self.interp.dump_errors()
 
     def cmdloop(self, _=None):
         try:
@@ -270,42 +278,42 @@ class REPL(cmd.Cmd, object):
         finally:
             readline.write_history_file(self.hist)
 
-    def do_subscribe(self, line):
-        """
-        Establish a subscription to the results of a query.
-
-        For example,
-
-            :- subscribe f(X,X)
-            :- f(1,1) := 1. f(1,2) := 2. f(2,2) := 3.
-            Changes
-            =======
-            f(X,X):
-                1 where {X=1}
-
-        To view all subscriptions:
-
-            :- subscriptions
-            f(X):
-               1 where {X=1}
-               2 where {X=2}
-
-        """
-        if line.endswith('.'):
-            print "Queries don't end with a dot."
-            return
-        # subscriptions are maintained via forward chaining.
-        query = '$subscribed(%s, %s) dict= %s.' % (self.lineno, _repr(line), line)
-        self.default(query)
-
-    def do_subscriptions(self, _):
-        "List subscriptions. See subscribe."
-        for (_, [_, q], results) in self.interp.chart['$subscribed/2'][:,:,:]:
-            if results:
-                print q
-                for result in results:
-                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
-        print
+#    def do_subscribe(self, line):
+#        """
+#        Establish a subscription to the results of a query.
+#
+#        For example,
+#
+#            : subscribe f(X,X)
+#            :- f(1,1) := 1. f(1,2) := 2. f(2,2) := 3.
+#            Changes
+#            =======
+#            f(X,X):
+#                1 where {X=1}
+#
+#        To view all subscriptions:
+#
+#            :- subscriptions
+#            f(X):
+#               1 where {X=1}
+#               2 where {X=2}
+#
+#        """
+#        if line.endswith('.'):
+#            print "Queries don't end with a dot."
+#            return
+#        # subscriptions are maintained via forward chaining.
+#        query = '$subscribed(%s, %s) dict= %s.' % (self.lineno, _repr(line), line)
+#        self.default(query)
+#
+#    def do_subscriptions(self, _):
+#        "List subscriptions. See subscribe."
+#        for (_, [_, q], results) in self.interp.chart['$subscribed/2'][:,:,:]:
+#            if results:
+#                print q
+#                for result in results:
+#                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
+#        print
 
     def do_help(self, line):
         mod = line.split()
@@ -316,7 +324,7 @@ class REPL(cmd.Cmd, object):
                 [cmd, sub] = mod
                 if cmd in ('load', 'post'):
                     try:
-                        exec 'from %s.%s import %s as m' % (cmd, sub, sub)
+                        m = get_module(cmd, sub)
                         print m.__doc__
                     except (ImportError, KeyError, AttributeError):
                         print 'No help available for "%s %s"' % (cmd, sub)
@@ -346,12 +354,12 @@ class REPL(cmd.Cmd, object):
         ========
         data/3
         ======
-        data(2,"cow","boy")            := true
+        data(2,"cow","boy") => true.
 
         data/4
         ======
-        data(0,"a","b","3.0")          := true
-        data(1,"c","d","4.0")          := true
+        data(0,"a","b","3.0") => true.
+        data(1,"c","d","4.0") => true.
 
         """
         try:
@@ -381,6 +389,114 @@ class REPL(cmd.Cmd, object):
             readline.write_history_file(self.hist)
 
     def do_trace(self, q):
+        """
+        Trace helps you answer the question "why does the item have this
+        value". It is a debugging and introspection tool. The easiest way to
+        understand what trace does is by example:
+
+        We'll start with something very simple:
+
+            :- a :- b.
+            :- b :- c.
+            :- c.
+
+
+        In our solution we see that `a` is true.
+
+            :- sol
+            a => true.
+            b => true.
+            c => true.
+
+        Now we want to find out why
+
+            :- trace a
+
+            a => true
+            |
+            └─ :- true
+
+               a :- b=true.
+               |
+               └─ b => true
+                  |
+                  └─ :- true
+
+                     b :- c=true.
+                     |
+                     └─ c => true
+                        |
+                        └─ |= true
+
+                           c |= &true.
+
+
+        The trace shows which rules fired and contributed to the value we
+        eventually get for `a`.
+
+
+        Trace does a few interesting things when substructure is present or
+        programs involve cyclic computation.
+
+
+        Consider the following dyna program:
+
+          % shared substructure
+          :- backchain foo/1.
+          :- backchain bar/2.
+          foo(X) = X+1.
+          bar(A,B) += foo(A)*B.
+          bar(A,B) += A*foo(B).
+
+          % geometric series
+          a += 1.
+          a += a/2.
+
+        Now if we run the example interactively and inspect our results with
+        trace we see a that rather than print in an infinite loop or print the
+        same derivation over and over, only prints one derivation.
+
+        The way trace lets you know that it has omitted something is with a
+        message `item: shared structure see above` or `item: *cycle*`.
+
+          :- trace bar(10,10)
+
+          bar(10,10) => 220
+          |
+          ├─ += 110
+          │
+          │  bar(A=10, B=10) += (foo(A=10)=11 * B=10)=110.
+          │  |
+          │  └─ foo(10) => 11
+          │     |
+          │     └─ = 11
+          │
+          │        foo(X=10) = (X=10 + 1)=11.
+          │
+          └─ += 110
+
+             bar(A=10, B=10) += (A=10 * foo(B=10)=11)=110.
+             |
+             └─ foo(10): shared structure see above
+
+          :- trace a
+
+          a => 2.0
+          |
+          ├─ += 1
+          │
+          │  a += 1.
+          └─ += 1.0
+
+             a += (a=2.0 / 2)=1.0.
+             |
+             └─ a: *cycle*
+
+        """
+
+        if not q.strip():
+            print 'No query specified. Type `help trace` for usage information.'
+            return
 
         if q.endswith('.'):
             print "Queries don't end with a dot."

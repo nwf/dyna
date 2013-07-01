@@ -22,25 +22,14 @@ class Chart(object):
             return ''
         if self.arity == 0:
             [term] = rows
-            return '%s := %s' % (term, _repr(term.value))
+            return '%s => %s.' % (term, _repr(term.value))
         p = [(_repr(term), _repr(term.value)) for term in sorted(rows)]
-
         lines = [self.name, '='*len(self.name)]  # heading
-
-        for term, value in p:
-            lines.append('%-30s := %s' % (term, value))
-
-#        terms, values = zip(*p)
-#        widths = map(len, terms)
-#        fmt = '%%-%ds => %%s.' % max(widths)
-#        if max(widths) > 50:
-#            for term, value in zip(terms, values):
-#                lines.append(term)
-#                lines.append('   => %s.' % value)
-#        else:
-#            for term, value in zip(terms, values):
-#                lines.append(fmt % (term, value))
-
+        terms, values = zip(*p)
+        widths = map(len, terms)
+        fmt = '%%-%ds => %%s.' % min(max(widths), 40)
+        for term, value in zip(terms, values):
+            lines.append(fmt % (term, value))
         lines.append('')
         return '\n'.join(lines)
 
