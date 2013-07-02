@@ -71,11 +71,11 @@ class Cons(Term):
             else:
                 yield a, (None,), a
 
-    def __eq__(self, other):
+    def __cmp__(self, other):
         try:
-            return self.aslist == other.aslist
+            return cmp(self.aslist, other.aslist)
         except AttributeError:
-            return False
+            return 1
 
 
 class _Nil(Term):

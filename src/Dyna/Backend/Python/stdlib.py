@@ -1,5 +1,6 @@
 import re
 from term import Term, Cons, Nil
+from collections import Counter
 
 try:
     from numpy import log, exp, sqrt
@@ -27,7 +28,7 @@ def pycall(name, *args):
     return todyna(x)
 
 def todyna(x):
-    if isinstance(x, (set, list, tuple)):
+    if isinstance(x, (list, tuple, set, Counter)):
         return todynalist(x)
     return x
 
@@ -37,6 +38,10 @@ def topython(x):
     return x
 
 def todynalist(x):
+    if isinstance(x, (set, Counter)):
+        x = list(x)
+        x.sort()
+        return todynalist(x)
     return _todynalist(list(x))
 
 def _todynalist(x):

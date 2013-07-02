@@ -24,3 +24,13 @@ foo(A) := true for &f(A) in [1,2,&f("a"),3].
 
 % this one checks if the value of f(A) is in the list, (note: 1 == True, in python).
 goo(A) := true for f(A) in [1,2,&f("a"),3].
+
+thingsbag bag= "three".
+thingsbag bag= 1.
+thingsbag bag= 1.
+thingsbag bag= 2.
+
+thingset set= "three".
+thingset set= 1.
+thingset set= 1.
+thingset set= 2.
