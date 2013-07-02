@@ -207,6 +207,7 @@ class Interpreter(object):
         self.do(self.dynac_code(code), initialize=False)
 
     def new_fn(self, fn, agg):
+
         # check for aggregator conflict.
         if self.agg_name[fn] is None:
             self.agg_name[fn] = agg
@@ -453,7 +454,21 @@ class Interpreter(object):
     def delete_emit(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
 
-    def emit(self, item, val, ruleix, variables, delete):
+    def emit(self, item, val, ruleix, variables, delete): #, aggregator_to_inherit=None):
+
+#        if item.fn == 'cons/2':
+#            assert isinstance(val, Term) \
+#                and val.fn == 'cons/2' \
+#                and len(val.aslist) == len(item.aslist)
+#            # recurse.
+#            for x, v in zip(item.aslist, val.aslist):
+#                self.emit(x, v, ruleix, variables, delete,
+#                          aggregator_to_inherit=self.rules[ruleix].anf.agg)
+#            return
+#        assert item.fn != 'cons/2' and item.fn != 'nil/0'
+#        if item.aggregator is None:
+#            self.new_fn(item.fn, aggregator_to_inherit)
+
         if delete:
             item.aggregator.dec(val, ruleix, variables)
         else:
@@ -476,7 +491,14 @@ class Interpreter(object):
         """
         assert os.path.exists(filename)
 
+
+
         env = imp.load_source('dynamically_loaded_module', filename)
+
+        if path(filename + '.anf').exists():       # XXX: should have codegen provide this in plan.py
+            with file(filename + '.anf') as f:
+                for anf in read_anf(f.read()):
+                    self.rules[anf.ruleix].anf = anf
 
         for k,v in [('chart', self.chart),
                     ('build', self.build),
@@ -523,11 +545,6 @@ class Interpreter(object):
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
-
-        if path(filename + '.anf').exists():       # XXX: should have codegen provide this in plan.py
-            with file(filename + '.anf') as f:
-                for anf in read_anf(f.read()):
-                    self.rules[anf.ruleix].anf = anf
 
         return self.go()
 

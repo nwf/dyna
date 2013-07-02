@@ -144,6 +144,24 @@ class min_equals(BAggregator):
         if len(s):
             return min(s)
 
+
+class argmax_equals(max_equals):
+    def fold(self):
+        m = max_equals.fold(self)
+        if m:
+            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
+                raise AggregatorError("argmax expects a pair of values")
+            return m.aslist[1]
+
+class argmin_equals(min_equals):
+    def fold(self):
+        m = min_equals.fold(self)
+        if m:
+            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
+                raise AggregatorError("argmin expects a pair of values")
+            return m.aslist[1]
+
+
 class plus_equals(BAggregator):
     def fold(self):
         s = [k*m for k, m in self.iteritems() if m != 0]
@@ -208,6 +226,8 @@ defs = {
     'set=': set_equals,
     'bag=': bag_equals,
     'mean=': mean_equals,
+    'argmax=': argmax_equals,
+    'argmin=': argmin_equals,
 }
 
 def aggregator(name):

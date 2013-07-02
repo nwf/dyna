@@ -43,3 +43,6 @@ def _todynalist(x):
     if not x:
         return Nil
     return Cons(x[0], _todynalist(x[1:]))
+
+def get(x, i):
+    return x[i]
