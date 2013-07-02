@@ -171,18 +171,22 @@ class REPL(cmd.Cmd, object):
 
         try:
             query = "$query dict= %s." % q
+
             self.default(query, show_changed=False)
+
             try:
                 [(_, _, results)] = self.interp.chart['$query/0'][:,]
                 return results
             except ValueError:
                 return []
+
         finally:
 
             # cleanup:
             # retract newly added rules.
             for r in self.interp.new_rules:
-                self.interp.retract_rule(r)
+                if r in self.interp.rules:
+                    self.interp.retract_rule(r)
 
             try:
                 # drop $out chart
@@ -203,7 +207,7 @@ class REPL(cmd.Cmd, object):
         if len(results) == 0:
             print 'No results.'
             return
-        for val, bindings in results:
+        for val, bindings in sorted(results):
             print _repr(val), 'where', drepr(dict(bindings))
         print
 
@@ -541,7 +545,9 @@ class REPL(cmd.Cmd, object):
 
         try:
             query = "$trace dict= _ is %s, &(%s)." % (q,q)
+
             self.default(query, show_changed=False)
+
             try:
                 [(_, _, results)] = self.interp.chart['$trace/0'][:,]
             except ValueError:
@@ -558,7 +564,8 @@ class REPL(cmd.Cmd, object):
             # cleanup:
             # retract newly added rules.
             for r in self.interp.new_rules:
-                self.interp.retract_rule(r)
+                if r in self.interp.rules:
+                    self.interp.retract_rule(r)
 
             try:
                 # drop $out chart

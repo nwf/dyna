@@ -56,12 +56,14 @@ def dig(head, visited, tail, groups, interp):
     if head in tail:
         return ['%s = %s' % (yellow % head, head.value)] \
             + ['|'] \
-            + branch([[red % 'continue as before (cyclic structure, will continue forever)']])
+            + branch([[red % 'continue as before (cyclic structure, will continue forever)']]) \
+            + ['']
 
     if head in visited:
         return ['%s = %s' % (yellow % head, head.value)] \
             + ['|'] \
-            + branch([[red % 'continue as before (shared structure)']])
+            + branch([[red % 'continue as before (shared structure)']]) \
+            + ['']
 
     if head not in groups:
         return []
@@ -83,7 +85,8 @@ def dig(head, visited, tail, groups, interp):
 
     return ['%s = %s' % (yellow % head, cyan % _repr(head.value))] \
         + ['|'] \
-        + branch(contribs) + ['']
+        + branch(contribs) #\
+#        + ['']
 
 
 def branch(xs):
@@ -171,12 +174,16 @@ class Crux(object):
                 return label
 
             fn_args = [self.get_function(y) for y in x.body]
-            if not label.isalpha() and not label.startswith('&') and len(fn_args) == 2:  # infix
+
+            # infix
+            if (not label.isalpha() and not label.startswith('&') and len(fn_args) == 2) \
+                    or label in ('in', 'and', 'or'):
                 [a,b] = fn_args
                 return '(%s %s %s)' % (a, label, b)
             return '%s(%s)' % (label, ', '.join(fn_args))
 
         else:
+
             if not g.incoming[x]:  # input
                 if re.match('u[A-Z].*', x):                          # user variable
                     return x[1:] + (cyan % '=%s' % self.values(x))
@@ -184,10 +191,24 @@ class Crux(object):
 
             if len(g.incoming[x]) > 1:
                 return ' = '.join('(%s%s)' % (self.get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
+
             [e] = g.incoming[x]
 
             if e.label == '=':
                 return self.get_function(e)
+
+            # handle lists
+            if e.label == '& cons':
+                _e = e
+                a = []
+                while e.label == '& cons':
+                    x, xs = e.body
+                    [e] = g.incoming[xs]
+                    a.append(self.get_function(x))
+                if e.label == '& nil':
+                    return '[%s]' % ', '.join(a)
+                else:
+                    return self.get_function(_e)          # malformed list.
 
             if e.label.startswith('&'):
                 return self.get_function(e)

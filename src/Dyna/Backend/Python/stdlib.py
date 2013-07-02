@@ -13,6 +13,11 @@ except ImportError:                       # XXX: should probably issue a warning
 def split(s, delim='\s+'):
     return todynalist(re.split(delim, s))
 
+def crash():
+    class Crasher(Exception):
+        pass
+    raise Crasher('Hey, you asked for it!')
+
 def pycall(name, *args):
     """
     Temporary foreign function interface - call Python functions from dyna!
@@ -22,12 +27,12 @@ def pycall(name, *args):
     return todyna(x)
 
 def todyna(x):
-    if isinstance(x, (list, tuple)):
+    if isinstance(x, (set, list, tuple)):
         return todynalist(x)
     return x
 
 def topython(x):
-    if isinstance(x, (Cons, Nil)):
+    if isinstance(x, Cons) or x is Nil:
         return x.aslist
     return x
 
