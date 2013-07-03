@@ -122,7 +122,7 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 from prioritydict import prioritydict
 from config import dotdynadir
 from errors import crash_handler, DynaInitializerException, AggregatorError, DynaCompilerError
-
+from stdlib import todyna
 
 class Rule(object):
     def __init__(self, idx):
@@ -235,6 +235,10 @@ class Interpreter(object):
         if nullary:
             print >> out
         for x in others:
+
+            if x.startswith('$rule/'):
+                continue
+
             y = str(self.chart[x])   # skip empty chart
             if y:
                 print >> out, y
@@ -249,12 +253,52 @@ class Interpreter(object):
         print >> out
         print >> out, 'Errors'
         print >> out, '======'
+
+        I = defaultdict(lambda: defaultdict(list))
+        E = defaultdict(lambda: defaultdict(list))
         for item, (val, es) in self.error.items():
-            print >> out,  'because %r is %s:' % (item, _repr(val))
             for e, h in es:
-                if h is not None:
-                    r = h.rule
-                    print >> out, '    %s\n        in rule %s\n            %s' % (e, r.span, r.src)
+                if h is None:
+                    I[item.fn][type(e)].append((e, item, val))
+                else:
+                    E[h.rule][type(e)].append((e, item, val))
+
+        # aggregation errors
+        for r in I:
+            print >> out, 'Error(s) aggregating %s:' % r
+            for etype in I[r]:
+                print >> out, '  %s:' % etype.__name__
+                for i, (e, item, value) in enumerate(sorted(I[r][etype])):                       # todo: probably don't want to show ten million errors
+                    if i >= 5:
+                        print >> out, '    %s more ...' % (len(I[r][etype]) - i)
+                        break
+                    print >> out, '    when `%s` = %s' % (item, _repr(value))
+                    print >> out, '      %s' % (e)
+                print >> out
+
+        # errors pertaining to rules
+        for r in E:
+            print >> out, 'Error(s) in rule:', r.span
+            print >> out
+            for line in r.src.split('\n'):
+                print >> out, '   ', line
+            print >> out
+            for etype in E[r]:
+                print >> out, '  %s:' % etype.__name__
+                for i, (e, item, value) in enumerate(sorted(E[r][etype])):                       # todo: probably don't want to show ten million errors
+                    if i >= 5:
+                        print >> out, '    %s more ...' % (len(E[r][etype]) - i)
+                        break
+                    print >> out, '    when `%s` = %s' % (item, _repr(value))
+                    print >> out, '      %s' % (e)
+                print >> out
+
+#        for item, (val, es) in self.error.items():
+#            print >> out,  'because %r is %s:' % (item, _repr(val))
+#            for e, h in es:
+#                if h is not None:
+#                    r = h.rule
+#                    print >> out, '    %s\n        in rule %s\n            %s' % (e, r.span, r.src)
         print >> out
 
     def dump_rules(self):
@@ -300,6 +344,11 @@ class Interpreter(object):
         except KeyError:
             print 'Rule %s not found.' % idx
             return
+
+        # remove $rule
+        if hasattr(rule, 'item'):
+            self.delete_emit(rule.item, True, ruleix=None, variables=None)
+
         # Step 1: remove update handlers
         for u in rule.updaters:
             for xs in self.updaters.values():
@@ -309,9 +358,11 @@ class Interpreter(object):
         # Step 2: run initializer in delete mode
         if rule.init is not None:
             rule.init(emit=self.delete_emit)
-            # Step 3; go!
-            return self.go()
         # TODO: probably have to blast any memos from BC computations
+
+        # Step 3; go!
+        return self.go()
+
 
     def go(self):
         try:
@@ -334,7 +385,7 @@ class Interpreter(object):
                 now = item.aggregator.fold()
 
             except AggregatorError as e:
-                error[item] = ('failed to aggregate item `%r` because %s' % (item, e), [(e, None)])
+                error[item] = (None, [(e, None)])
 
                 now = self.build('$error/0')   # XXX: should go an agenda or run delete?
                 changed[item] = now
@@ -342,7 +393,7 @@ class Interpreter(object):
                 continue
 
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
-                error[item] = ('failed to aggregate %r' % item.aggregator, [(e, None)])
+                error[item] = (None, [(e, None)])
 
                 now = self.build('$error/0')   # XXX: should go an agenda or run delete?
                 changed[item] = now
@@ -481,8 +532,6 @@ class Interpreter(object):
         """
         assert os.path.exists(filename)
 
-
-
         env = imp.load_source('dynamically_loaded_module', filename)
 
         if path(filename + '.anf').exists():       # XXX: should have codegen provide this in plan.py
@@ -535,6 +584,21 @@ class Interpreter(object):
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
+
+        # ------ $rule for fun and profit -------
+        interp = self
+        def rule(ix, *a):
+            fn = '$rule/%s' % (len(a) + 1)
+            if interp.agg_name[fn] is None:
+                interp.new_fn(fn, ':=')
+            item = interp.build(fn, ix, *a)
+            interp.emit(item, True, ruleix=None, variables=None, delete=False)
+            return item
+        for i in new_rules:
+            r = self.rules[i]
+            agg, head, evals, unifs, result = r.anf[2:]
+            r.item = rule(i, r.src, todyna([head, agg, result, evals, unifs]), r.init, r.query)
+        #-----------------------------------------
 
         return self.go()
 

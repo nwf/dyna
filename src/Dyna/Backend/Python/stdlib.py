@@ -27,31 +27,28 @@ def pycall(name, *args):
     x = eval(name)(*args)
     return todyna(x)
 
-def todyna(x):
-    if isinstance(x, (list, tuple, set, Counter)):
-        return todynalist(x)
-    return x
-
 def topython(x):
     if isinstance(x, Cons) or x is Nil:
         return x.aslist
     return x
 
-def todynalist(x):
+
+def todynalist(x):    # TODO: get rid of this.
+    return todyna(x)
+
+def todyna(x):
     if isinstance(x, (set, Counter)):
         x = list(x)
         x.sort()
-        return todynalist(x)
-    return _todynalist(list(x))
+        return todyna(x)
+    elif isinstance(x, (list, tuple)):
+        c = Nil
+        for y in reversed(x):
+            c = Cons(todyna(y), c)
+        return c
+    else:
+        return x
 
-def _todynalist(x):
-#    if not x:
-#        return Nil
-#    return Cons(x[0], _todynalist(x[1:]))
-    c = Nil
-    for y in reversed(x):
-        c = Cons(y, c)
-    return c
 
 def get(x, i):
     return x[i]

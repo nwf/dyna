@@ -279,6 +279,8 @@ class REPL(cmd.Cmd, object):
         print 'Changes'
         print '======='
         for x, v in sorted(changed.items()):
+            if x.fn.startswith('$rule/'):
+                continue
             print '%s = %s.' % (x, _repr(v))
         print
 

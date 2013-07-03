@@ -24,6 +24,14 @@ def drepr(vs):
     return '{%s}' %  ', '.join('%s=%s' % (k, _repr(v)) for k,v in vs.iteritems())
 
 
+def user_vars(variables):
+    "Post process the variables past to emit (which passes them to aggregator)."
+    # remove the 'u' prefix on user variables 'uX'
+    # Note: We also ignore user variables with an underscore prefix
+    return tuple((name[1:], val) for name, val in variables
+                 if name.startswith('u') and not name.startswith('u_'))
+
+
 # interactive IPython shell
 ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
 
