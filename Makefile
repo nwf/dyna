@@ -102,5 +102,6 @@ profbuild:
 		 -outputdir dist/pb \
 		 -main-is $(MAINMOD) $(MAINFILE)
 
+.PHONY: tags TAGS
 tags TAGS:
 	hasktags -b src
