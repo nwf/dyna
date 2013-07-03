@@ -596,8 +596,9 @@ class Interpreter(object):
             return item
         for i in new_rules:
             r = self.rules[i]
-            agg, head, evals, unifs, result = r.anf[2:]
-            r.item = rule(i, r.src, todyna([head, agg, result, evals, unifs]), r.init, r.query)
+            if hasattr(r, 'anf'):   # XXX: all rules should have ANF!
+                agg, head, evals, unifs, result = r.anf[2:]
+                r.item = rule(i, r.src, todyna([head, agg, result, evals, unifs]), r.init, r.query)
         #-----------------------------------------
 
         return self.go()
