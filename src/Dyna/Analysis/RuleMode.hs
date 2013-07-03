@@ -60,7 +60,6 @@ import           Dyna.Term.SurfaceSyntax
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
 import           Dyna.XXX.MonadContext
-import           Dyna.XXX.Trifecta (prettySpanLoc)
 -- import           Dyna.XXX.TrifectaTest
 import           Text.PrettyPrint.Free
 
@@ -348,6 +347,7 @@ pp_liveVars :: PartialPlan fbs -> S.Set DVar
 pp_liveVars p = allCruxVars (pp_cruxes p)
 
 -- XXX This certainly belongs elsewhere
+renderPartialPlan :: (Actions t -> Doc e) -> PartialPlan t -> Doc e
 renderPartialPlan rd (PP crs bs c pl) =
   vcat [ text "cost=" <> pretty c
        , text "pendingCruxes:" <//> indent 2 (renderCruxes crs)
@@ -665,45 +665,6 @@ planBackchain bp bc (f,qm) r =
 
   tf  = nHide IFree
 
-------------------------------------------------------------------------}}}
--- Update plan combination                                              {{{
-
-type UpdateEvalMap fbs = M.Map (Maybe DFunctAr)
-                               [(Rule, Int, Cost, DVar, DVar, Actions fbs)]
-
--- | Return all plans for each functor/arity
---
--- XXX This may still belong elsewhere.
---
--- XXX This guy wants span information; he's got it now use it.
---
--- timv: might want to fuse these into one circuit
---
-combineUpdatePlans :: [(Rule,[( Int,
-                                Either a (Cost, DVar, DVar, Actions fbs))])]
-                   -> UpdateEvalMap fbs  
-combineUpdatePlans = go (M.empty)
- where
-  go m []             = m
-  go m ((fr,cmca):xs) = go' xs fr cmca m
-
-  go' xs _  []           m = go m xs
-  go' xs fr ((n,mca):ys) m =
-    case mca of
-      Left _ -> dynacUserErr
-                       $ "No update plan for"
-                          <+> maybe "indirection"
-                                    (\(f,a) -> pretty f <> char '/' <> pretty a)
-                                    fa
-                          <+> "in rule at"
-                          <> line <> indent 2 (prettySpanLoc $ r_span fr)
-      Right (c,v1,v2,a) -> go' xs fr ys $ mapInOrCons fa (fr,n,c,v1,v2,a) m
-   where
-    fa = evalCruxFA ev
-    ev = maybe (dynacPanic $ "Eval index without eval crux in rule:"
-                             <//> (renderANF fr))
-               id
-               (IM.lookup n (r_ecruxes fr))
 
 ------------------------------------------------------------------------}}}
 -- Adorned Queries                                                      {{{

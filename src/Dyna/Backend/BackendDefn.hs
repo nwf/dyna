@@ -11,9 +11,7 @@ import qualified Data.Set                         as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
 import           Dyna.Analysis.DOpAMine (BackendRenderDopIter)
-import           Dyna.Analysis.RuleMode (
-                    Actions, BackendPossible, Cost,
-                    UpdateEvalMap {-, QueryEvalMap -})
+import           Dyna.Analysis.RuleMode (Actions, BackendPossible, Cost)
 import           Dyna.Term.TTerm (DFunctAr,DVar)
 import           System.IO (Handle)
 import qualified Text.PrettyPrint.Free            as PP
@@ -23,8 +21,9 @@ import qualified Text.PrettyPrint.Free            as PP
 -- plans, but that's not really how we should be doing it.  The right
 -- answer, of course, is to use update mode information, once we have it.
 
-type BackendDriver bs = AggMap                    -- ^ Aggregation
-                      -> UpdateEvalMap bs         -- ^ Rule update
+type BackendDriver bs = AggMap                       -- ^ Aggregation
+                      -> [(Rule,[(Int,Maybe DFunctAr -- ^ Rule update
+                                 , Cost, DVar, DVar, Actions bs)])]
                       -> [(Rule,Cost,Actions bs)] -- ^ Initializers
                       -> S.Set DFunctAr           -- ^ Ground backchains
                       -> [(DFunctAr,Rule,([DVar],(Cost,Actions bs)))] -- ^ GBC plans

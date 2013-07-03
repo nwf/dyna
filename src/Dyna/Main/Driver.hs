@@ -19,6 +19,7 @@ import           Control.Exception
 import qualified Data.ByteString.UTF8         as BU
 import           Data.Either
 import qualified Data.Map                     as M
+import qualified Data.IntMap                  as IM
 import qualified Data.Maybe                   as MA
 import qualified Data.Set                     as S
 import           Data.String
@@ -257,9 +258,11 @@ procArgs argv = do
 renderDop :: BackendRenderDopIter bs e -> Actions bs -> Doc e
 renderDop ddi dop = vsep $ map (renderDOpAMine ddi) dop
 
-renderDopUpds :: BackendRenderDopIter bs e -> UpdateEvalMap bs -> Doc e
-renderDopUpds ddi um = vsep $ flip map (M.toList um) $ \(fa,ps) ->
-    vsep $ flip map ps $ \(r,n,c,vi,vo,act) ->
+renderDopUpds :: BackendRenderDopIter bs e
+              -> [(Rule,[(Int,Maybe DFunctAr,Cost,DVar,DVar,Actions bs)])]
+              -> Doc e
+renderDopUpds ddi us = vsep $ flip map us $ \(r,ps) ->
+    vsep $ flip map ps $ \(n,fa,c,vi,vo,act) ->
         planHeader r fa n c (vi,vo) `above` indent 2 (renderDop ddi act)
  where
   planHeader r (fa :: Maybe DFunctAr) n c (vi,vo) =
@@ -376,8 +379,6 @@ processFile fileName = bracket openOut hClose go
   
             uPlans = map (\x -> (x, planEachEval be_b gbcs be_c x)) fcrules
 
-            cuPlans = combineUpdatePlans uPlans
-
             qPlans = map (\(fa@(f,a),r) -> (fa,r,
                                             planBackchain be_b gbcs (f,mkqm a) r))
                          bcrules
@@ -391,12 +392,12 @@ processFile fileName = bracket openOut hClose go
                        where
                         check (f,r,Right p) = (f,r,p)
                         check (_,r,Left  _) = dynacUserErr $
-						  "Unable to plan backchaining for rule"
-						  <//> (prettySpanLoc (r_span r))
-						  <> dot
+                          "Unable to plan backchaining for rule"
+                          <//> (prettySpanLoc (r_span r))
+                          <> dot
 
         in do
-            -- Do this before forcing cInitializers, cuPlans, etc.,
+            -- Do this before forcing cInitializers, uPlans, etc.,
             -- as those will panic and stop the pipeline.
             dump DumpFailedPlans $
               let rend = renderDop be_ddi
@@ -420,8 +421,8 @@ processFile fileName = bracket openOut hClose go
 
             -- Force evaluation of a lot of the work of the compiler,
             -- even if the backend and dump flags won't do it for us.
-            cInitializers' <- evaluate $ cInitializers
-            cuPlans'      <- evaluate $ cuPlans
+            cInitializers' <- mapM evaluate cInitializers
+            uPlans' <- evaluate (forceUpdatePlans uPlans)
 
             let noInitErrGbcs = filter (\(r,_) ->
                     maybe True
@@ -435,10 +436,10 @@ processFile fileName = bracket openOut hClose go
                                      map (prettySpanLoc . r_span . fst) xs)
 
             dump DumpDopIni (renderDopInis be_ddi cInitializers')
-            dump DumpDopUpd (renderDopUpds be_ddi cuPlans')
+            dump DumpDopUpd (renderDopUpds be_ddi uPlans')
 
             -- Invoke the backend code generator
-            be_d aggm cuPlans' cInitializers' gbcs cqPlans pp out
+            be_d aggm uPlans' cInitializers' gbcs cqPlans pp out
 
   parse aggs = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
@@ -446,6 +447,32 @@ processFile fileName = bracket openOut hClose go
       TR.Failure td -> dynacParseErr $ PPA.align td
       TR.Success rs -> return rs
 
+  forceUpdatePlans :: [(Rule,[(Int,
+                               Either a (Cost, DVar, DVar, Actions fbs))])]
+                   -> [(Rule,[(Int,
+                               Maybe DFunctAr, Cost, DVar, DVar, Actions fbs)])]
+
+  forceUpdatePlans = map goRule
+   where
+    goRule (r,l) = let mps = map (goEvalix r) l in mps `seq` (r,mps)
+
+    goEvalix r (i,efp) = fa `seq` c `seq` (i,fa,c,ii,iv,p)
+     where
+      (c,ii,iv,p) = case efp of
+        Left _ -> dynacUserErr
+                         $ "No update plan for"
+                            <+> maybe "indirection"
+                                      (\(f,a) -> pretty f <> char '/' <> pretty a)
+                                      fa
+                            <+> "in rule at"
+                            <> line <> indent 2 (prettySpanLoc $ r_span r)
+        Right x -> x
+
+      fa = evalCruxFA ev
+      ev = maybe (dynacPanic $ "Eval index without eval crux in rule:"
+                               <//> (renderANF r))
+                 id
+                 (IM.lookup i (r_ecruxes r))
 
 ------------------------------------------------------------------------}}}
 -- Main                                                                 {{{

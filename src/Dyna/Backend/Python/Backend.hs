@@ -417,7 +417,7 @@ printQuery fh bc (f,a) rule vs cost dope = do
 -- Driver                                                               {{{
 
 driver :: BackendDriver PyDopeBS
-driver am um is bc qp pr fh = do
+driver am ups is bc qp pr fh = do
 
   hPutStrLn fh "from __future__ import division"
   hPutStrLn fh "from stdlib import *"
@@ -445,11 +445,11 @@ driver am um is bc qp pr fh = do
   hPutStrLn fh ""
   hPutStrLn fh $ "# ==Updates=="
 
-  -- plans aggregated by functor/arity
-  forM_ (M.toList um) $ \(fa, ps) -> do
+  forM_ ups $ \(r,rps) -> do
      hPutStrLn fh ""
-     hPutStrLn fh $ "# " ++ show fa
-     forM_ ps $ \(r,n,c,vi,vo,act) -> do
+     hPutStrLn fh $ "# rix=" ++ (show $ r_index r)
+     forM_ rps $ \(n,fa,c,vi,vo,act) -> do
+       hPutStrLn fh $ "# " ++ show fa
        printUpdate fh bc r c n fa (vi,vo) act
 
   hPutStrLn fh ""
