@@ -51,3 +51,8 @@ def _todynalist(x):
 
 def get(x, i):
     return x[i]
+
+def iter_cons(x):
+    if not (isinstance(x, Cons) or x is Nil):
+        raise TypeError("Attemping to iterate something which isn't a list.")
+    return x

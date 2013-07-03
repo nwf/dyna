@@ -125,7 +125,7 @@ builtins (f,is,o) = case () of
     -> case is of
          [x,y] | isFree x && isGround y
                -> let
-                    call _ vs = "iter" <> (parens $ sepBy comma $ mpv vs) <> colon -- for some reason on colon get put at the end of this line.
+                    call _ vs = "iter_cons" <> (parens $ sepBy comma $ mpv vs) <> colon -- for some reason on colon get put at the end of this line.
                     cdop = [OPIter x [y] "iter" DetNon (Just $ PDBS call)]
                     cmod = [(x^.mv_var, nuniv)]
                   in if isFree o
