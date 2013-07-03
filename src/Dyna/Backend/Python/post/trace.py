@@ -89,8 +89,7 @@ def dig(head, visited, tail, groups, interp):
 
     return ['%s = %s' % (yellow % head, cyan % _repr(head.value))] \
         + ['|'] \
-        + branch(contribs) #\
-#        + ['']
+        + branch(contribs)
 
 
 def branch(xs):
@@ -135,9 +134,9 @@ class Crux(object):
     def format(self):
         rule = self.rule
         #src = rule.src.replace('\n',' ').strip()
-        graph = self.graph
         #user_vars = dict(defn.user_vars(self.vs.items()))
 
+        graph = self.graph
         side = [self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]
 
         explode = ('%s %s %s' % (self.get_function(rule.anf.head)[1:],  # drop quote on head
@@ -158,7 +157,6 @@ class Crux(object):
             lines.append(side)
 
         return lines
-
 
     def get_function(self, x):
         """

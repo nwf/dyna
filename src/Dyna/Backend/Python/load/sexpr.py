@@ -1,6 +1,6 @@
 from cStringIO import StringIO
 from utils import parse_sexpr
-from stdlib import todynalist
+from stdlib import todyna
 
 
 class sexpr(object):
@@ -33,20 +33,14 @@ class sexpr(object):
         def obj(*a):
             fn = '%s/%s' % (name, len(a))
             if interp.agg_name[fn] is None:
-                interp.new_fn(fn, ':=')
+                interp.new_fn(fn, '=')
             return interp.build(fn, *a)
-
-        def t(xs):
-            if isinstance(xs, basestring):
-                return xs
-            else:
-                return todynalist([t(x) for x in xs])
 
         contents = file(filename).read()
 
         for i, x in enumerate(parse_sexpr(contents)):
             interp.emit(obj(i),
-                        t(x),
+                        todyna(x),
                         ruleix=None,
                         variables=None,
                         delete=False)

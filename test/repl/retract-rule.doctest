@@ -1,32 +1,50 @@
-:- a += 1.
-=============
-a := 1
+> a += 1.
 
-:- b += 1.
-=============
-b := 1
+Changes
+=======
+a = 1.
 
-:- a += 1.
-=============
-a := 2
+> b += 1.
 
-:- rules
+Changes
+=======
+b = 1.
 
-0: a += 1.
+> a += 1.
+
+Changes
+=======
+a = 2.
+
+> rules
+
+Rules
+=====
+  0: a += 1.
   1: b += 1.
   2: a += 1.
 
-:- sol
+> sol
 
 Solution
 ========
-a := 2
-b := 1
+a = 2.
+b = 1.
 
-:- retract_rule 0
-:- retract_rule 1
-:- sol
+> retract_rule 0
+
+Changes
+=======
+a = 1.
+
+> retract_rule 1
+
+Changes
+=======
+b = null.
+
+> sol
 
 Solution
 ========
-a := 1
+a = 1.

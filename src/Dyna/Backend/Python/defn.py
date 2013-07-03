@@ -7,7 +7,7 @@ from __future__ import division
 
 import operator
 from collections import Counter
-from utils import drepr, _repr
+from utils import drepr, _repr, user_vars
 from errors import AggregatorError
 
 """
@@ -43,36 +43,43 @@ class Aggregator(object):
 class BAggregator(Counter, Aggregator):
 #    def __init__(self):
 #        super(BAggregator, self).__init__()
-    def inc(self, val, ruleix, variables):
+    def inc(self, val, _ruleix, _variables):
         self[val] += 1
-    def dec(self, val, ruleix, variables):
+    def dec(self, val, _ruleix, _variables):
         self[val] -= 1
     def fromkeys(self, *_):
         assert False, "This method should never be called."
 
 
-class PlusEquals(object):
-    __slots__ = 'pos', 'neg'
-    def __init__(self):
-        self.pos = 0
-        self.neg = 0
-    def inc(self, val, ruleix, variables):
-        self.pos += val
-    def dec(self, val, ruleix, variables):
-        self.neg += val
-    def fold(self):
-        return self.pos - self.neg
+#class PlusEquals(object):
+#    __slots__ = 'pos', 'neg'
+#    def __init__(self):
+#        self.pos = 0
+#        self.neg = 0
+#    def inc(self, val, ruleix, variables):
+#        self.pos += val
+#    def dec(self, val, ruleix, variables):
+#        self.neg += val
+#    def fold(self):
+#        return self.pos - self.neg
 
 
 class ColonEquals(BAggregator):
-    def inc(self, val, ruleix, variables):
+    def inc(self, val, ruleix, _variables):
         self[ruleix, val] += 1
-    def dec(self, val, ruleix, variables):
+    def dec(self, val, ruleix, _variables):
         self[ruleix, val] -= 1
     def fold(self):
-        vs = [v for v, cnt in self.iteritems() if cnt > 0]
+        vs = [v for v, m in self.iteritems() if m > 0]
         if vs:
-            return max(vs)[1]
+            [i, v] = max(vs)
+            vs = {v for (r, v) in vs if r == i}   # filter down to max rule index
+            if len(vs) == 1:
+                return v
+            else:
+                vs = list(vs)   # for stability
+                vs.sort()
+                raise AggregatorError('`:=` got conflicting values %s for rule index %s' % (vs, i))
 
 
 class Equals(BAggregator):
@@ -82,18 +89,14 @@ class Equals(BAggregator):
         self[val] -= 1
     def fold(self):
         vs = [v for v, cnt in self.iteritems() if cnt > 0]
-        if len(vs) != 1:
+        if len(vs) == 0:
+            return
+        if len(vs) == 1:
+            return vs[0]
+        else:
             vs.sort()   # for stability
             raise AggregatorError('`=` got conflicting values %s' % (vs,))
-        return vs[0]
 
-
-def user_vars(variables):
-    "Post process the variables past to emit (which passes them to aggregator)."
-    # remove the 'u' prefix on user variables 'uX'
-    # Note: We also ignore user variables with an underscore prefix
-    return tuple((name[1:], val) for name, val in variables
-                 if name.startswith('u') and not name.startswith('u_'))
 
 
 from collections import namedtuple
@@ -104,13 +107,12 @@ class Result(namedtuple('Result', 'value variables')):
 
 class DictEquals(BAggregator):
 
-    def inc(self, val, ruleix, variables):
-        # I think we only want user variables -- XXX: are we guaranteed to have
-        # all of the user variables?
+    def inc(self, val, _ruleix, variables):
+        # I think we only want user variables
         vs = user_vars(variables)
         self[val, vs] += 1
 
-    def dec(self, val, ruleix, variables):
+    def dec(self, val, _ruleix, variables):
         vs = user_vars(variables)
         self[val, vs] -= 1
 
@@ -200,15 +202,15 @@ class b_or_equals(BAggregator):
 
 class set_equals(BAggregator):
     def fold(self):
-        from stdlib import todynalist
+        from stdlib import todyna
         s = {x for x, m in self.iteritems() if m > 0}
         if len(s):
-            return todynalist(s)
+            return todyna(s)
 
 class bag_equals(BAggregator):
     def fold(self):
-        from stdlib import todynalist
-        return todynalist(Counter(self).elements())
+        from stdlib import todyna
+        return todyna(list(Counter(self).elements()))
 
 
 # map names to functions

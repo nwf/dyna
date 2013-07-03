@@ -28,7 +28,10 @@ def infer_edges(interp):
 
     for r in interp.rules.values():
         if r.init is not None:
-            r.init(emit=_emit)
+            try:
+                r.init(emit=_emit)
+            except (TypeError, ValueError, AssertionError, ZeroDivisionError):
+                pass
         else:
             assert r.query is not None
 
