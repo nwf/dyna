@@ -15,7 +15,7 @@ def _repr(x):
         return 'null'
     elif isinstance(x, basestring):
         # dyna doesn't accept single-quoted strings
-        return '"%s"' % x.replace('"', r'\"')
+        return '"%s"' % repr(x)[1:-1].replace('"', r'\"')
     else:
         return repr(x)
 

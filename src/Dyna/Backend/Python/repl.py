@@ -394,10 +394,12 @@ class REPL(cmd.Cmd, object):
 
         """
         try:
-            load.run(self.interp, line)
+            changed = load.run(self.interp, line)
         except:
             show_traceback()
             readline.write_history_file(self.hist)
+        else:
+            self._changed(changed)
 
     def do_post(self, line):
         """
@@ -414,10 +416,12 @@ class REPL(cmd.Cmd, object):
 
         """
         try:
-            post.run(self.interp, line)
+            changed = post.run(self.interp, line)
         except:
             show_traceback()
             readline.write_history_file(self.hist)
+        else:
+            self._changed(changed)
 
     def do_trace(self, q):
         """

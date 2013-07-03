@@ -1,142 +1,34 @@
-sentence(0) :=
-    &t("S", &t("NP-SBJ", &t("NNP", "Rolls-Royce"),
-                         &t("@NP-SBJ", &t("NNP", "Motor"),
-                                       &t("@@NP-SBJ", &t("NNPS", "Cars"),
-                                                      &t("NNP", "Inc.")))),
-            &t("@S", &t("VP", &t("VBD", "said"),
-                              &t("SBAR", &t("-NONE-", "0"),
-                                         &t("S", &t("NP-SBJ", &t("PRP", "it")),
-                                                 &t("VP", &t("VBZ", "expects"),
-                                                          &t("S", &t("NP-SBJ", &t("PRP$", "its"),
-                                                                               &t("@NP-SBJ", &t("NNP", "U.S."),
-                                                                                             &t("NNS", "sales"))),
-                                                                  &t("VP", &t("TO", "to"),
-                                                                           &t("VP", &t("VB", "remain"),
-                                                                                    &t("@VP", &t("ADJP-PRD", &t("JJ", "steady")),
-                                                                                              &t("@@VP", &t("PP-LOC-CLR", &t("IN", "at"),
-                                                                                                                          &t("NP", &t("QP", &t("IN", "about"),
-                                                                                                                                            &t("CD", "1,200")),
-                                                                                                                                   &t("NNS", "cars"))),
-                                                                                                         &t("PP-TMP", &t("IN", "in"),
-                                                                                                                      &t("NP", &t("CD", "1990")))))))))))),
-                     &t(".", "."))).
-
-sentence(1) :=
-    &t("S", &t("NP-SBJ", &t("DT", "The"),
-                         &t("@NP-SBJ", &t("NN", "luxury"),
-                                       &t("@@NP-SBJ", &t("NN", "auto"),
-                                                      &t("NN", "maker")))),
-            &t("@S", &t("NP-TMP", &t("JJ", "last"),
-                                  &t("NN", "year")),
-                     &t("VP", &t("VBD", "sold"),
-                              &t("@VP", &t("NP", &t("CD", "1,214"),
-                                                 &t("NNS", "cars")),
-                                        &t("PP-LOC", &t("IN", "in"),
-                                                     &t("NP", &t("DT", "the"),
-                                                              &t("NNP", "U.S."))))))).
-
-sentence(2) :=
-    &t("S", &t("NP-SBJ", &t("NP", &t("NNP", "Howard"),
-                                  &t("NNP", "Mosher")),
-                         &t("@NP-SBJ", &t(",", ","),
-                                       &t("@@NP-SBJ", &t("NP", &t("NP", &t("NN", "president")),
-                                                               &t("@NP", &t("CC", "and"),
-                                                                         &t("NP", &t("JJ", "chief"),
-                                                                                  &t("@NP", &t("NN", "executive"),
-                                                                                            &t("NN", "officer"))))),
-                                                      &t(",", ",")))),
-            &t("@S", &t("VP", &t("VBD", "said"),
-                              &t("SBAR", &t("-NONE-", "0"),
-                                         &t("S", &t("NP-SBJ", &t("PRP", "he")),
-                                                 &t("VP", &t("VBZ", "anticipates"),
-                                                          &t("NP", &t("NP", &t("NN", "growth")),
-                                                                   &t("@NP", &t("PP", &t("IN", "for"),
-                                                                                      &t("NP", &t("DT", "the"),
-                                                                                               &t("@NP", &t("NN", "luxury"),
-                                                                                                         &t("@@NP", &t("NN", "auto"),
-                                                                                                                    &t("NN", "maker"))))),
-                                                                             &t("PP-LOC", &t("PP", &t("IN", "in"),
-                                                                                                   &t("NP", &t("NNP", "Britain"),
-                                                                                                            &t("@NP", &t("CC", "and"),
-                                                                                                                      &t("NNP", "Europe")))),
-                                                                                          &t("@PP-LOC", &t(",", ","),
-                                                                                                        &t("@@PP-LOC", &t("CC", "and"),
-                                                                                                                       &t("PP", &t("IN", "in"),
-                                                                                                                                &t("NP", &t("ADJP", &t("JJ", "Far"),
-                                                                                                                                                    &t("JJ", "Eastern")),
-                                                                                                                                         &t("NNS", "markets")))))))))))),
-                     &t(".", "."))).
-
-%toString(A) :=
-%  needs(A),
-%  A.
-%
-%toString(&t(A)) :=
-%  needs(&t(A)),
-%  A.
-%
-%toString(&t(A,B)) :=
-%  needs(&t(A,B)),
-%  mod("(%s %s)",
-%      tuple(toString(A),
-%            toString(B))).
-%
-%toString(&t(A,B,C)) :=
-%  needs(&t(A,B,C)),
-%  mod("(%s %s %s)",
-%      tuple(toString(A),
-%            toString(B),
-%            toString(C))).
-
-needs(A) |= needs(&t(A,B)).
-needs(B) |= needs(&t(A,B)).
-
-needs(A) |= needs(&t(A,B,C)).
-needs(B) |= needs(&t(A,B,C)).
-needs(C) |= needs(&t(A,B,C)).
-
-%needs(sentence(0)).
-%needs(sentence(1)).
-%needs(sentence(2)).
-
-%zzz(0) := toString(sentence(0)).
-%zzz(1) := toString(sentence(1)).
-%zzz(2) := toString(sentence(2)).
-
-%sym(&t(X,_)) := X.
-%sym(&t(X,_,_)) := X.
-
 % the following rule order is important bc we use :=.
-sym(A) := needs(A), A.
-sym(&t(A,B)) := needs(&t(A,B)), A.
-sym(&t(A,B,C)) := needs(&t(A,B,C)), A.
+:- backchain sym/1.
+sym(A) := A.
+sym([A|_]) := A.
 
 % rule used to create top-level subtree
-rules(&t(X,Y)) := needs(&t(X,Y)), &r(X, sym(Y)).
-rules(&t(X,Y,Z)) := needs(&t(X,Y,Z)), needs(Z), &r(X, sym(Y), sym(Z)).
-
-:- dispos &t(&).
-:- dispos &t(&,&).
-:- dispos &t(&,&,&).
+:- backchain rule/1.
+rule([X,Y]) := &r(X, sym(Y)).
+rule([X,Y,Z]) := &r(X, sym(Y), sym(Z)).
 
 % count the number of words in a subtree
 :- backchain numwords/1.
 numwords(X) := 1.
-numwords(t(X,Y)) := numwords(Y).
-numwords(t(X,Y,Z)) := numwords(Y) + numwords(Z).
+numwords([X,Y]) := numwords(Y).
+numwords([X,Y,Z]) := numwords(Y) + numwords(Z).
 
 % extract word and it's position in tree
 :- backchain word/2.
 word(0, X) := X.
-word(I, t(X,Y)) := word(I, Y).
-word(I, t(X,Y,Z)) := I < numwords(Y), word(I, Y).
-word(I, t(X,Y,Z)) := I >= numwords(Y), word(I-numwords(Y), Z).
-
-%senword(S, I) := word(I, sentence(S)), between(0,I,numwords(S)).
+word(I, [X,Y]) := word(I, Y).
+word(I, [X,Y,Z]) := I < numwords(Y), word(I, Y).
+word(I, [X,Y,Z]) := I >= numwords(Y), word(I-numwords(Y), Z).
 
 % unnormalized
-c(X,Y) += r(X,Y) is rules(&t(X1,Y1)), 1.
-c(X,Y,Z) += r(X,Y,Z) is rules(&t(X1,Y1,Z1)), 1.
+c(X,Y) += 1
+  for &r(X,Y) in f(T),
+      T is b(tree(_)).
+
+c(X,Y,Z) += 1
+  for &r(X,Y,Z) in f(T),
+      T is b(tree(_)).
 
 % normalizing constants
 n(X) += c(X,Y).
@@ -146,13 +38,61 @@ n(X) += c(X,Y,Z).
 p(X,Y) := c(X,Y) / n(X).
 p(X,Y,Z) := c(X,Y,Z) / n(X).
 
-% activate fake backchaining.
-needs(sentence(0)).
-needs(sentence(1)).
-needs(sentence(2)).
+% extract rules in a tree
+:- backchain f/1.
+f([X,Y]) bag= rule([X,Y]).
+f([X,Y,Z]) bag= rule([X,Y,Z]).
+f([X,Y]) bag= A for A in f(X).
+f([X,Y]) bag= A for A in f(Y).
+f([X,Y,Z]) bag= A for A in f(X).
+f([X,Y,Z]) bag= A for A in f(Y).
+f([X,Y,Z]) bag= A for A in f(Z).
 
-% TODO: convert tree structure into word(word, position, sentence).
+%zzz(I) :=
+%  T is b(tree(0)),
+%  I in pycall("range", 0, numwords(T)),
+%  word(I, T).
 
-% TODO: augment CKY rules with sentence index
+% binarize s-expression tree
+:- backchain b/1.
+b(X) := X.
+b([X,Y]) := [X,b(Y)].
+b([X,Y,Z|Xs]) := [X, b(Y), b([&'@'(X), Z|Xs])].
+b([X,Y,Z]) := [X,b(Y),b(Z)].
 
-% TODO: implement constituent recall accuracy measure for two trees
+% CKY parser
+phrase(X,I,K) max= phrase(Y,I,J) * phrase(Z,J,K) * p(X,Y,Z).
+phrase(X,I,K) max= phrase(Y,I,K) * p(X,Y).
+phrase(X,I,I+1) max= 1 for [I,X] in enumerate(sentence).
+
+% backpointers
+bk(X,I,K) argmax= [phrase(Y,I,J) * phrase(Z,J,K) * p(X,Y,Z), [[Y,I,J], [Z,J,K]]].
+bk(X,I,K) argmax= [phrase(Y,I,K) * p(X,Y), [[Y,I,K]]].
+bk(X,I,I+1) argmax= [1, X] for [I,X] in enumerate(sentence).
+
+% extract path from backpointers
+path(X,I,K) := W is bk(X,I,K), W.
+path(X,I,K) := [[Y,I,J], [Z,J,K]] is bk(X,I,K), [X, path(Y,I,J), path(Z,J,K)].
+path(X,I,K) := [[Y,I,K]] is bk(X,I,K), [X, path(Y,I,K)].
+
+% utility function.
+:- backchain enumerate/2.
+:- backchain enumerate/1.
+enumerate(X) = enumerate(X, 0).
+enumerate([], I) = [].
+enumerate([X|Xs], I) = [[I,X] | enumerate(Xs, I+1)].
+
+:- backchain length/1.
+length([]) = 0.
+length([X|Xs]) = 1 + length(Xs).
+
+% declare a sentence.
+sentence = split("George love -s Laura .").
+
+%sentence(S, I) =
+%  T is b(tree(S)),
+%  I in pycall("range", 0, numwords(T)),
+%  word(I, T).
+
+zgoal(sentence) max= phrase("ROOT", 0, length(sentence)).
+zzgoal(sentence) := path("ROOT", 0, length(sentence)).

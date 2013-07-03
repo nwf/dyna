@@ -51,9 +51,10 @@ class Term(object):
 class Cons(Term):
 
     def __init__(self, head, tail):
+        if not (isinstance(tail, Cons) or tail is Nil):
+            raise TypeError('Malformed list')
         self.head = head
         self.tail = tail
-        assert isinstance(tail, (Cons, _Nil)), tail
         Term.__init__(self, 'cons/2', (head, tail))
         self.aggregator = Aggregator()
         self.aslist = [self.head] + self.tail.aslist
@@ -85,5 +86,13 @@ class _Nil(Term):
         self.aslist = []
     def __repr__(self):
         return '[]'
+    def __iter__(self):
+        for a in self.aslist:
+            if not isinstance(a, Term):
+                yield a, (None,), a
+            else:
+                yield a, (None,), a
+    def __contains__(self, x):
+        return False
 
 Nil = _Nil()

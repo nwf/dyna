@@ -18,4 +18,4 @@ def run(interp, line):
 
     m = get_module('load', module)(interp, name)
     exec 'm.main(%s)' % args
-    interp.go()
+    return interp.go()

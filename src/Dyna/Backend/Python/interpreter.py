@@ -44,11 +44,6 @@ TODO
 
  - TODO: True and 1 are equivalent. This sometimes leads to strange behavior.
 
- - Hide all *.plan.py files
-
- - multi-line input in REPL. Consider using a fancier library such as cmd2 or
-   ipython's.
-
 
 FASTER
 ======
@@ -96,13 +91,6 @@ USERS
    statistics explaining what the solver is doing (e.g. repropagation-rate: does
    it have a bad prioritization heuristics is it stuck in a cycle; number of
    items proved: is it counting to infinity?).
-
-
-NOTES
-=====
-
- - `None` does not propagate, eventually it will because of the `?` prefix
-   operator.
 
 
 JUST FOR FUN
@@ -319,9 +307,11 @@ class Interpreter(object):
                     xs.remove(u)
                     assert u not in xs, 'Several occurrences of u in xs'
         # Step 2: run initializer in delete mode
-        rule.init(emit=self.delete_emit)
-        # Step 3; go!
-        return self.go()
+        if rule.init is not None:
+            rule.init(emit=self.delete_emit)
+            # Step 3; go!
+            return self.go()
+        # TODO: probably have to blast any memos from BC computations
 
     def go(self):
         try:
@@ -622,13 +612,6 @@ def main():
 
     crash_handler()
 
-
-#    def pickle_interp():
-#        import subprocess
-#        subprocess.Popen(['tar', 'czf', dotdynadir / 'crash.tar.gz', dotdynadir])
-#    crash_handler.interp = pickle_interp
-
-
     if args.source:
 
         if not os.path.exists(args.source):
@@ -672,8 +655,6 @@ def main():
             print e
             exit(1)
 
-        interp.dump_charts(args.output)      # should be a post-processor
-
     if args.load:
         for cmd in args.load:
             load.run(interp, cmd)
@@ -681,6 +662,9 @@ def main():
     if args.post_process:
         for cmd in args.post_process:
             post.run(interp, cmd)
+
+    if args.load or args.post_process or args.source:
+        interp.dump_charts(args.output)      # should be a post-processor
 
     if args.interactive or not args.source:
         interp.repl()

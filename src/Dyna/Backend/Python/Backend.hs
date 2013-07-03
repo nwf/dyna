@@ -176,7 +176,7 @@ constants = go
   go ("int",_)     = Just $ PDBS $ call "int" []
   go ("pycall",_)  = Just $ PDBS $ call "pycall" []
 
-  go ("in",2)    = Just $ PDBS $ infixOp " in "
+  go ("in",2)    = Just $ PDBS $ call "in_list" []
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"

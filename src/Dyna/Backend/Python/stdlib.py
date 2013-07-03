@@ -45,9 +45,13 @@ def todynalist(x):
     return _todynalist(list(x))
 
 def _todynalist(x):
-    if not x:
-        return Nil
-    return Cons(x[0], _todynalist(x[1:]))
+#    if not x:
+#        return Nil
+#    return Cons(x[0], _todynalist(x[1:]))
+    c = Nil
+    for y in reversed(x):
+        c = Cons(y, c)
+    return c
 
 def get(x, i):
     return x[i]
@@ -56,3 +60,13 @@ def iter_cons(x):
     if not (isinstance(x, Cons) or x is Nil):
         raise TypeError("Attemping to iterate something which isn't a list.")
     return x
+
+def in_list(x, a):
+    if not (isinstance(a, Cons) or a is Nil):
+        raise TypeError("Attemping to iterate something which isn't a list.")
+    return x in a.aslist
+
+# should probably be done with memoized backchaining...
+def read_lines(filename):
+    with file(filename) as f:
+        return f.readlines()
