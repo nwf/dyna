@@ -143,19 +143,19 @@ class REPL(cmd.Cmd, object):
 #            f.write(line)
 #        debug.main(f.name)
 
-    def do_run(self, filename):
-        """
-        Load dyna rules from `filename`.
-
-        > run examples/papa.dyna
-
-        """
-        try:
-            changed = self.interp.do(self.interp.dynac(filename))
-        except DynaCompilerError as e:
-            print e
-        else:
-            self._changed(changed)
+#    def do_run(self, filename):
+#        """
+#        Load dyna rules from `filename`.
+#
+#        > run examples/papa.dyna
+#
+#        """
+#        try:
+#            changed = self.interp.do(self.interp.dynac(filename))
+#        except DynaCompilerError as e:
+#            print e
+#        else:
+#            self._changed(changed)
 
     def _query(self, q):
 
@@ -275,13 +275,16 @@ class REPL(cmd.Cmd, object):
         if not changed:
             return
 
+        changed = [x for x in changed if not x.fn.startswith('$rule/')]
+
+        if not changed:
+            return
+
         print
         print 'Changes'
         print '======='
-        for x, v in sorted(changed.items()):
-            if x.fn.startswith('$rule/'):
-                continue
-            print '%s = %s.' % (x, _repr(v))
+        for x in sorted(changed):
+            print '%s = %s.' % (x, _repr(x.value))
         print
 
 #    def _changed_subscriptions(self, changed):
