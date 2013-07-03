@@ -6,6 +6,8 @@ b = true.
 c = true.
 d = false.
 things = [1, [2, 2], [3, 4]].
+thingsbag = [1, 1, 2, "three"].
+thingset = [1, 2, "three"].
 
 d/1
 ===

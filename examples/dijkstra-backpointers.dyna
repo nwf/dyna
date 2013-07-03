@@ -1,0 +1,37 @@
+% single source shortest path with optimal path extraction.
+path(start) min= 0.
+path(B) min= path(A) + edge(A,B).
+goal min= path(end).
+
+% expensive path
+edge("a","b") := 1.
+edge("b","c") := 1.
+edge("c","d") := 1.
+
+% cheap path
+edge("a","e") := 1.
+edge("e","d") := 1.
+
+% define begining and end.
+start := "a".
+end := "d".
+
+% use argmin to determine backpointers
+b(V) argmin= [path(U) + edge(U,V), U].
+
+% extract cheapest path by following backpointers from each vertex.
+bestpath(start) := [start].
+bestpath(V) := U is b(V), [V | bestpath(U)].
+
+% the optimal path is the one from the `end`.
+optimalpath = reverse(bestpath(end)).
+
+% ---------------------------------------
+% list utilities
+:- backchain reverse/1.
+reverse([]) = [].
+reverse([X|Xs]) = append(reverse(Xs), X).
+
+:- backchain append/2.
+append([], Y) = [Y].
+append([X|Xs], Y) = [X|append(Xs, Y)].
