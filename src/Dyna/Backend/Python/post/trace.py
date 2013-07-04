@@ -58,13 +58,13 @@ def groupby(key, data):
 def dig(head, visited, tail, groups, interp):
 
     if head in tail:
-        return ['%s = %s' % (yellow % head, head.value)] \
+        return ['%s = %s' % (yellow % head, _repr(head.value))] \
             + ['|'] \
             + branch([[red % 'continue as before (cyclic structure, will continue forever)']]) \
             + ['']
 
     if head in visited:
-        return ['%s = %s' % (yellow % head, head.value)] \
+        return ['%s = %s' % (yellow % head, _repr(head.value))] \
             + ['|'] \
             + branch([[red % 'continue as before (shared structure)']]) \
             + ['']
