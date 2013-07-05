@@ -1,0 +1,41 @@
+
+Solution
+========
+end = "d".
+goal = 2.
+optimalpath = ["a", "e", "d"].
+start = "a".
+
+$key/1
+======
+$key(goal)      = end.
+$key(path("a")) = start.
+$key(path("b")) = "a".
+$key(path("c")) = "b".
+$key(path("d")) = "e".
+$key(path("e")) = "a".
+
+bestpath/1
+==========
+bestpath("a") = ["a"].
+bestpath("b") = ["b", "a"].
+bestpath("c") = ["c", "b", "a"].
+bestpath("d") = ["d", "e", "a"].
+bestpath("e") = ["e", "a"].
+
+edge/2
+======
+edge("a","b") = 1.
+edge("a","e") = 1.
+edge("b","c") = 1.
+edge("c","d") = 1.
+edge("e","d") = 1.
+
+path/1
+======
+path("a") = 0.
+path("b") = 1.
+path("c") = 2.
+path("d") = 2.
+path("e") = 1.
+
