@@ -604,10 +604,13 @@ planEachEval bp bc cs r  =
     -- Filter out non-constant evaluations
     --
     -- XXX This instead should look at the update modes of each evaluation
+    --
+    -- XXX Even if we do that, however, we need to be sure that retractable
+    -- items have the right modes.
   $ MA.mapMaybe (\ec -> case ec of
                           (n, CCall _ is f) -> let fa = (f,length is)
                                                in if    not (cs fa)
-                                                     && not (fa `S.member` bc)
+                                                     -- && not (fa `S.member` bc)
                                                    then Just (n, ec)
                                                    else Nothing
                           (n, CEval _ _   ) -> Just (n,ec))
