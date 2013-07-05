@@ -7,7 +7,7 @@ TODO: have ANF output which functors are infix, prefix, nullary, etc.
 import re
 from collections import defaultdict
 
-import debug, defn
+import debug
 from draw_circuit import infer_edges
 from utils import yellow, green, cyan, red, _repr
 
@@ -134,7 +134,7 @@ class Crux(object):
     def format(self):
         rule = self.rule
         #src = rule.src.replace('\n',' ').strip()
-        #user_vars = dict(defn.user_vars(self.vs.items()))
+        #user_vars = dict(user_vars(self.vs.items()))
 
         graph = self.graph
         side = [self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]

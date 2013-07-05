@@ -39,6 +39,7 @@ class Aggregator(object):
     def clear(self):
         pass
 
+NoAggregator = Aggregator()
 
 class BAggregator(Counter, Aggregator):
 #    def __init__(self):
@@ -146,22 +147,25 @@ class min_equals(BAggregator):
         if len(s):
             return min(s)
 
-
-class argmax_equals(max_equals):
+class maxwithkey_equals(max_equals):
     def fold(self):
         m = max_equals.fold(self)
-        if m:
+        self.key = None
+        if m is not None:
             if not hasattr(m, 'aslist') or len(m.aslist) != 2:
                 raise AggregatorError("argmax expects a pair of values")
-            return m.aslist[1]
+            self.key = m.aslist[1]
+            return m.aslist[0]
 
-class argmin_equals(min_equals):
+class minwithkey_equals(min_equals):
     def fold(self):
         m = min_equals.fold(self)
-        if m:
+        self.key = None
+        if m is not None:
             if not hasattr(m, 'aslist') or len(m.aslist) != 2:
                 raise AggregatorError("argmin expects a pair of values")
-            return m.aslist[1]
+            self.key = m.aslist[1]
+            return m.aslist[0]
 
 
 class plus_equals(BAggregator):
@@ -228,11 +232,11 @@ defs = {
     'set=': set_equals,
     'bag=': bag_equals,
     'mean=': mean_equals,
-    'argmax=': argmax_equals,
-    'argmin=': argmin_equals,
+    'argmax=': maxwithkey_equals,
+    'argmin=': minwithkey_equals,
 }
 
-def aggregator(name):
+def aggregator(name, term):
     "Create aggregator by ``name``."
 
     if name is None:

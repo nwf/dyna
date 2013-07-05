@@ -115,7 +115,6 @@ import load, post
 
 from term import Term, Cons, Nil
 from chart import Chart
-from defn import aggregator
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
     ddict, dynac, read_anf, strip_comments, _repr
 
@@ -235,10 +234,8 @@ class Interpreter(object):
         if nullary:
             print >> out
         for x in others:
-
             if x.startswith('$rule/'):
                 continue
-
             y = str(self.chart[x])   # skip empty chart
             if y:
                 print >> out, y
@@ -272,8 +269,7 @@ class Interpreter(object):
                     if i >= 5:
                         print >> out, '    %s more ...' % (len(I[r][etype]) - i)
                         break
-                    print >> out, '    when `%s` = %s' % (item, _repr(value))
-                    print >> out, '      %s' % (e)
+                    print >> out, '    `%s`: %s' % (item, e)
                 print >> out
 
         # errors pertaining to rules
@@ -402,6 +398,17 @@ class Interpreter(object):
 
             if was == now:
                 continue
+
+
+            # aggregator with special key
+            if hasattr(item.aggregator, 'key'):
+                key = self.build('$key/1', item)
+                if key.aggregator is None:
+                    from aggregator import aggregator
+                    key.aggregator = aggregator('=', key)
+                self.delete_emit(key, key.value, None, None)
+                self.emit(key, item.aggregator.key, None, None, delete=False)
+
 
             was_error = False
             if item in error:    # clear error
