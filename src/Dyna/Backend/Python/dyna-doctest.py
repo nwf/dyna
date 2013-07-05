@@ -23,17 +23,21 @@ def extract(code):
         yield '\n'.join(cmd).strip(), '\n'.join(expect).strip()
 
 
+def clean(x):
+    return re.sub('\033\[\d+m', '', strip_comments(x)).strip()
+
+
 def run(code):
     interp = Interpreter()
     repl = REPL(interp)
     errors = []
     for cmd, expect in extract(code):
-        if not strip_comments(cmd).strip():
+        if not clean(cmd):
             print
             continue
         print yellow % '> %s' % cmd
 
-        if strip_comments(cmd) == '*resume*':
+        if clean(cmd) == '*resume*':
             repl.cmdloop()
             continue
 
@@ -42,18 +46,21 @@ def run(code):
             repl.onecmd(cmd)
         finally:
             sys.stdout = sys.__stdout__
-        got = x.getvalue().strip()
-        expect = expect.strip()
 
-        if strip_comments(expect) == '*ignore*':
+        got = clean(x.getvalue())
+        expect = clean(got)
+
+        if clean(expect) == '*ignore*':
             continue
 
-        if strip_comments(expect) != strip_comments(got):
+        if expect != got:
             print green % expect
             print red % got
             errors.append([cmd, expect, got])
         else:
-            print x.getvalue().rstrip()
+            print
+            print got
+
         print
 
     if not errors:

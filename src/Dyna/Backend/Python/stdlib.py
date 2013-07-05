@@ -29,18 +29,22 @@ def pycall(name, *args):
 
 def topython(x):
     if isinstance(x, Cons) or x is Nil:
-        return x.aslist
+        return [topython(y) for y in x.aslist]
     return x
-
 
 def todynalist(x):    # TODO: get rid of this.
     return todyna(x)
 
 def todyna(x):
+
     if isinstance(x, (set, Counter)):
         x = list(x)
         x.sort()
         return todyna(x)
+
+    elif isinstance(x, dict):
+        return todyna(x.items())
+
     elif isinstance(x, (list, tuple)):
         c = Nil
         for y in reversed(x):

@@ -100,10 +100,10 @@ class Equals(BAggregator):
 
 
 
-from collections import namedtuple
-class Result(namedtuple('Result', 'value variables')):
-    def __repr__(self):
-        return 'Result(value=%s, variables=%s)' % (_repr(self.value), drepr(dict(self.variables)))
+#from collections import namedtuple
+#class Result(namedtuple('Result', 'value variables')):
+#    def __repr__(self):
+#        return 'Result(value=%s, variables=%s)' % (_repr(self.value), drepr(dict(self.variables)))
 
 
 class DictEquals(BAggregator):
@@ -118,7 +118,8 @@ class DictEquals(BAggregator):
         self[val, vs] -= 1
 
     def fold(self):
-        return tuple(Result(v, b) for (v, b), cnt in self.iteritems() if cnt > 0)
+        from stdlib import todyna
+        return todyna([b + (('$val', v),) for (v, b), cnt in self.iteritems() if cnt > 0])
 
 
 class majority_equals(BAggregator):

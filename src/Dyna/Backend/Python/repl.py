@@ -11,6 +11,7 @@ to help.
 
 import os, cmd, readline
 from utils import dynac, ip, lexer, subst, drepr, _repr, get_module
+from stdlib import topython
 from errors import DynaCompilerError, DynaInitializerException
 from config import dotdynadir
 from errors import show_traceback
@@ -176,7 +177,9 @@ class REPL(cmd.Cmd, object):
 
             try:
                 [(_, _, results)] = self.interp.chart['$query/0'][:,]
-                return results
+
+                return [dict(r) for r in topython(results)]
+
             except ValueError:
                 return []
 
@@ -207,8 +210,9 @@ class REPL(cmd.Cmd, object):
         if len(results) == 0:
             print 'No results.'
             return
-        for val, bindings in sorted(results):
-            print _repr(val), 'where', drepr(dict(bindings))
+        results = [(b.pop('$val'), b) for b in results]
+        for val, b in sorted(results):
+            print _repr(val), 'where', drepr(b)
         print
 
     def do_query(self, q):
@@ -245,8 +249,8 @@ class REPL(cmd.Cmd, object):
             print 'No results.'
             return
         print
-        for term, result in sorted((subst(q, dict(result.variables)), result) for result in results):
-            print term, '=', _repr(result.value)
+        for term, result in sorted((subst(q, result), result) for result in results):
+            print term, '=', _repr(result['$val'])
         print
 
     def default(self, line, show_changed=True):
@@ -559,13 +563,17 @@ class REPL(cmd.Cmd, object):
 
             try:
                 [(_, _, results)] = self.interp.chart['$trace/0'][:,]
+
+                results = topython(results)
+                results = [dict(r)['$val'] for r in results]
+
             except ValueError:
                 print 'no items matching `%s`.' % q
                 return
 
             from post.trace import Tracer
             tracer = Tracer(self.interp)
-            for item, _ in results:
+            for item in results:
                 print
                 tracer(item)
 

@@ -6,15 +6,22 @@
 | b := f(4).
 | c := f(5).
 
- *ignore*
-
-> sol
-
-Solution
-========
+Changes
+=======
 a = 3.
 b = 5.
 c = 8.
+
+> rules
+
+Rules
+=====
+  0: f(X) := f(X-1) + f(X-2) for X > 1.
+  1: f(1) := 1.
+  2: f(0) := 1.
+  3: a := f(3).
+  4: b := f(4).
+  5: c := f(5).
 
 > retract_rule 0
 
@@ -23,3 +30,20 @@ Changes
 a = null.
 b = null.
 c = null.
+f(2) = null.
+f(3) = null.
+f(4) = null.
+f(5) = null.
+
+> sol
+
+Solution empty.
+
+> :- backchain g/2.
+| g(X,Y) dict= X*Y.
+| h(1,2). h(2,3).
+| f(X,Y) = h(X,Y), g(X,Y).
+
+> query g(1,2)
+> rules
+> retract_rule 6

@@ -123,9 +123,10 @@ from config import dotdynadir
 from errors import crash_handler, DynaInitializerException, AggregatorError, DynaCompilerError
 from stdlib import todyna
 
+
 class Rule(object):
-    def __init__(self, idx):
-        self.idx = idx
+    def __init__(self, index):
+        self.index = index
         self.init = None
         self.updaters = []
         self.query = None
@@ -136,7 +137,7 @@ class Rule(object):
     def src(self):
         return strip_comments(parse_attrs(self.init or self.query)['rule'])
     def __repr__(self):
-        return 'Rule(%s, %r)' % (self.idx, self.src)
+        return 'Rule(%s, %r)' % (self.index, self.src)
 
 
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
@@ -217,27 +218,36 @@ class Interpreter(object):
     def dump_charts(self, out=None):
         if out is None:
             out = sys.stdout
-        print >> out
-        print >> out, 'Solution'
-        print >> out, '========'
         fns = self.chart.keys()
         fns.sort()
         fns = [x for x in fns if x not in self._gbc]  # don't show backchained items
         nullary = [x for x in fns if x.endswith('/0')]
         others = [x for x in fns if not x.endswith('/0')]
+
         # show nullary charts first
-        for x in nullary:
-            y = str(self.chart[x])   # skip empty chart
-            if y:
-                print >> out, y
-        if nullary:
+        nullary = [str(self.chart[x]) for x in nullary]
+        charts = [str(self.chart[x]) for x in others if not x.startswith('$rule/')]
+
+        nullary = filter(None, nullary)
+        charts = filter(None, charts)
+
+        if nullary or charts:
             print >> out
-        for x in others:
-            if x.startswith('$rule/'):
-                continue
-            y = str(self.chart[x])   # skip empty chart
-            if y:
-                print >> out, y
+            print >> out, 'Solution'
+            print >> out, '========'
+        else:
+            print >> out, 'Solution empty.'
+
+        if nullary:
+            for line in nullary:
+                print >> out, line
+            print >> out
+        else:
+            print >> out
+
+        for line in charts:
+            print >> out, line
+
         self.dump_errors(out)
 
     def dump_errors(self, out=None):
@@ -321,17 +331,9 @@ class Interpreter(object):
 
         return self.chart[fn].insert(args)
 
-#    def retract_item(self, item):
-#        """
-#        For the moment we only correctly retract leaves. If you retract a
-#        non-leaf item, you run the risk of it being rederived. In the case of
-#        cyclic programs the derivation might be the same or different.
-#        """
-#        self.emit(item, item.value, None, sys.maxint, delete=True)
-#        return self.go()
-
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
+
         try:
             rule = self.rules.pop(idx)
         except KeyError:
@@ -357,8 +359,13 @@ class Interpreter(object):
             self._gbc[rule.head_fn].remove(rule.query)
             # blast the memo entries for items it helped derive
             if rule.head_fn in self.chart:
-                for x in self.chart.pop(rule.head_fn).intern.itervalues():
-                    self.delete_emit(x, x.value, None, None)
+                for head in self.chart[rule.head_fn].intern.itervalues():
+
+                    def _emit(item, val, ruleix, variables):
+                        item.aggregator.dec(val, ruleix, variables)
+
+                    rule.query(*head.args, emit=_emit)
+                    self.agenda[head] = time()
 
         return self.go()
 
@@ -399,15 +406,13 @@ class Interpreter(object):
                 continue
 
             if hasattr(now, 'fn') and now.fn == 'with_key/2':
-                val, key = now.args
-                now = val
+                now, key = now.args
                 dkey = self.build('$key/1', item)
                 self.delete_emit(dkey, dkey.value, None, None)
                 self.emit(dkey, key, None, None, delete=False)
 
             if was == now:
                 continue
-
 
             was_error = False
             if item in error:    # clear error
@@ -492,31 +497,19 @@ class Interpreter(object):
         rule.query = handler
         handler.rule = rule
         rule.head_fn = fn
+        rule.index = ruleix
 
     def new_initializer(self, ruleix, init):
         rule = self.rules[ruleix]
         assert rule.init is None
         rule.init = init
         init.rule = rule
+        rule.index = ruleix
 
     def delete_emit(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
 
     def emit(self, item, val, ruleix, variables, delete): #, aggregator_to_inherit=None):
-
-#        if item.fn == 'cons/2':
-#            assert isinstance(val, Term) \
-#                and val.fn == 'cons/2' \
-#                and len(val.aslist) == len(item.aslist)
-#            # recurse.
-#            for x, v in zip(item.aslist, val.aslist):
-#                self.emit(x, v, ruleix, variables, delete,
-#                          aggregator_to_inherit=self.rules[ruleix].anf.agg)
-#            return
-#        assert item.fn != 'cons/2' and item.fn != 'nil/0'
-#        if item.aggregator is None:
-#            self.new_fn(item.fn, aggregator_to_inherit)
-
         if delete:
             item.aggregator.dec(val, ruleix, variables)
         else:
