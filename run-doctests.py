@@ -4,6 +4,10 @@ from cStringIO import StringIO
 import sys
 sys.path.append('src/Dyna/Backend/Python')
 
+print
+print 'Doctests'
+print '========'
+
 from dyna_doctest import run
 from utils import red, green
 

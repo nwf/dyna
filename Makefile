@@ -19,7 +19,7 @@ build:
 	cabal build
 
 test tests: build
-	dist/build/dyna-selftests/dyna-selftests
+	( dist/build/dyna-selftests/dyna-selftests ; python run-doctests.py )
 	# cabal test
 
 # Compilation takes a while; for faster iteration while developing,
