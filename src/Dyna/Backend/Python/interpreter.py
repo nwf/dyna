@@ -180,20 +180,6 @@ class Interpreter(object):
             tmp.rmtree()
         tmp.makedirs_p()
 
-    def __getstate__(self):
-        return ((self.chart,
-                 self.agenda,
-                 self.error,
-                 self.agg_name,
-                 self.parser_state),
-                '\n'.join(self.rules[i].src for i in sorted(self.rules)))
-
-    def __setstate__(self, state):
-        ((self.chart, self.agenda, self.error, self.agg_name, self.parser_state), code) = state
-        self.updaters = defaultdict(list)
-        self.rules = ddict(Rule)
-        self.do(self.dynac_code(code), initialize=False)
-
     def new_fn(self, fn, agg):
         # check for aggregator conflict.
         if self.agg_name[fn] is None:
@@ -497,14 +483,12 @@ class Interpreter(object):
         rule.query = handler
         handler.rule = rule
         rule.head_fn = fn
-        rule.index = ruleix
 
     def new_initializer(self, ruleix, init):
         rule = self.rules[ruleix]
         assert rule.init is None
         rule.init = init
         init.rule = rule
-        rule.index = ruleix
 
     def delete_emit(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
