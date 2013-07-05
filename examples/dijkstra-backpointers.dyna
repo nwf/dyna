@@ -1,7 +1,7 @@
 % single source shortest path with optimal path extraction.
-path(start) argmin= [0, start].
-path(B) argmin= [path(A) + edge(A,B), A].
-goal argmin= [path(end), end].
+path(start) min= 0                   with_key start.
+path(B)     min= path(A) + edge(A,B) with_key A.
+goal        min= path(end)           with_key end.
 
 % expensive path
 edge("a","b") := 1.
@@ -18,7 +18,7 @@ end := "d".
 
 % extract cheapest path by following backpointers from each vertex.
 bestpath(start) := [start].
-bestpath(V) := U is $key(&path(V)), [V | bestpath(U)] for V != start.
+bestpath(V) := U is $key(path(V)), [V | bestpath(U)] for V != start.
 
 % the optimal path is the one from the `end`.
 optimalpath = reverse(bestpath(end)).

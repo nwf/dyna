@@ -61,12 +61,13 @@ b([X,Y,Z|Xs]) := [X, b(Y), b([&'@'(X), Z|Xs])].
 b([X,Y,Z]) := [X,b(Y),b(Z)].
 
 % CKY parser
-phrase(X,I,K) argmax= [phrase(Y,I,J) * phrase(Z,J,K) * p(X,Y,Z), [[Y,I,J], [Z,J,K]]].
-phrase(X,I,K) argmax= [phrase(Y,I,K) * p(X,Y), [[Y,I,K]]].
-phrase(X,I,I+1) argmax= [1, X] for [I,X] in enumerate(sentence).
+phrase(X,I,K)   max= phrase(Y,I,J) * phrase(Z,J,K) * p(X,Y,Z) with_key [[Y,I,J], [Z,J,K]].
+phrase(X,I,K)   max= phrase(Y,I,K) * p(X,Y)                   with_key [[Y,I,K]].
+phrase(X,I,I+1) max= 1                                        with_key X
+  for [I,X] in enumerate(sentence).
 
 % backpointers
-bk(X,I,K) = $key(&phrase(X,I,K)).
+bk(X,I,K) = $key(phrase(X,I,K)).
 
 % extract path from backpointers
 path(X,I,K) := W is bk(X,I,K), W.

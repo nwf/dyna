@@ -79,6 +79,8 @@ defOperSpec = foldr (\(k,v) -> mapInOrCons k v) def more
 
     , ("in" ,[(4,PFIn AssocNone )            ])
 
+    , ("with_key" ,[(4,PFIn AssocNone )      ])
+
     , ("<=" ,[(4,PFIn AssocNone )            ])
     , ("<"  ,[(4,PFIn AssocNone )            ])
     , ("="  ,[(4,PFIn AssocNone )            ])
@@ -171,6 +173,9 @@ disposTab_prologish t = DisposTab s a
        , (("pair" ,2),(SDQuote,[ADEval,ADEval]))
        , (("true" ,0),(SDQuote,[]))
        , (("false",0),(SDQuote,[]))
+       -- key
+       , (("$key" ,1),(SDEval,[ADQuote]))
+       , (("with_key",2),(SDQuote,[ADEval, ADQuote]))
        -- lists
        , (("nil",  0),(SDQuote,[]))
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
@@ -201,6 +206,9 @@ disposTab_dyna t = DisposTab s a
        -- lists
        , (("nil",  0),(SDQuote,[]))
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
+       -- key
+       , (("$key" ,1),(SDEval,[ADQuote]))
+       , (("with_key",2),(SDQuote,[ADEval, ADQuote]))
        ]
 
 ------------------------------------------------------------------------}}}

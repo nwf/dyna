@@ -1,5 +1,5 @@
 % A and B are names of matrices
-times(A, B, I, J) += m(A, I, K) * m(B, K, J) whenever _ is product(A,B).
+times(A, B, I, J) += m(A, I, K) * m(B, K, J) for _ is product(A,B).
 
 m(P, I, J) += shape(A,R,C), % pair(R, C) is shape(A),
               shape(B,C,_), % pair(C, D) is shape(B),
