@@ -1,0 +1,25 @@
+> :- backchain f/1.
+| f(X) := f(X-1) + f(X-2) for X > 1.
+| f(1) := 1.
+| f(0) := 1.
+| a := f(3).
+| b := f(4).
+| c := f(5).
+
+ *ignore*
+
+> sol
+
+Solution
+========
+a = 3.
+b = 5.
+c = 8.
+
+> retract_rule 0
+
+Changes
+=======
+a = null.
+b = null.
+c = null.

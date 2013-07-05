@@ -342,20 +342,25 @@ class Interpreter(object):
         if hasattr(rule, 'item'):
             self.delete_emit(rule.item, True, ruleix=None, variables=None)
 
-        # Step 1: remove update handlers
-        for u in rule.updaters:
-            for xs in self.updaters.values():
-                if u in xs:
-                    xs.remove(u)
-                    assert u not in xs, 'Several occurrences of u in xs'
-        # Step 2: run initializer in delete mode
         if rule.init is not None:
+            # remove update handlers
+            for u in rule.updaters:
+                for xs in self.updaters.values():
+                    if u in xs:
+                        xs.remove(u)
+                        assert u not in xs, 'Several occurrences of u in xs'
+            # run initializer in delete mode
             rule.init(emit=self.delete_emit)
-        # TODO: probably have to blast any memos from BC computations
+        else:
+            assert rule.query is not None
+            # remove query handler
+            self._gbc[rule.head_fn].remove(rule.query)
+            # blast the memo entries for items it helped derive
+            if rule.head_fn in self.chart:
+                for x in self.chart.pop(rule.head_fn).intern.itervalues():
+                    self.delete_emit(x, x.value, None, None)
 
-        # Step 3; go!
         return self.go()
-
 
     def go(self):
         try:
@@ -486,6 +491,7 @@ class Interpreter(object):
         assert rule.query is None
         rule.query = handler
         handler.rule = rule
+        rule.head_fn = fn
 
     def new_initializer(self, ruleix, init):
         rule = self.rules[ruleix]
