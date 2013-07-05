@@ -38,12 +38,3 @@ f(5) = null.
 > sol
 
 Solution empty.
-
-> :- backchain g/2.
-| g(X,Y) dict= X*Y.
-| h(1,2). h(2,3).
-| f(X,Y) = h(X,Y), g(X,Y).
-
-> query g(1,2)
-> rules
-> retract_rule 6

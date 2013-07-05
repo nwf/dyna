@@ -80,11 +80,11 @@ test_End_To_End = map mkExample
   [ "simple", "equalities", "fib-limit", "dijkstra", "papa2", "matrixops"
   , "factorial-bc", "geom", "lists", "dijkstra-backpointers" ]
 
-test_REPL :: [Test]
-test_REPL = map (\n -> testProgramRuns n ("./test/repl/"++n) [])
-  [ "aggregator-conflict"
-  , "retract-rule"
-  , "late-aggregator-assignment" ]
+--test_REPL :: [Test]
+--test_REPL = map (\n -> testProgramRuns n ("./test/repl/"++n) [])
+--  [ "aggregator-conflict"
+--  , "retract-rule"
+--  , "late-aggregator-assignment" ]
 
 ------------------------------------------------------------------------}}}
 -- Harness toplevel                                                     {{{

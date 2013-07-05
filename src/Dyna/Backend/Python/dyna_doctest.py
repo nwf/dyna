@@ -33,17 +33,21 @@ def clean(x):
     return re.compile('(\s*)$', re.MULTILINE).sub('', re.sub('\033\[\d+m', '', strip_comments(x)).strip())
 
 
-def run(code):
+def run(code, out=None):
+
+    if out is None:
+        out = sys.stdout
+
     interp = Interpreter()
     repl = REPL(interp)
     errors = 0
     for cmd, expect in extract(code):
 
         if not clean(cmd):
-            print
+            print >> out
             continue
 
-        print yellow % '> %s' % cmd
+        print >> out, yellow % '> %s' % cmd
 
         if clean(cmd) == '*resume*':
             repl.cmdloop()
@@ -62,22 +66,21 @@ def run(code):
             continue
 
         if expect != got:
-            print green % expect
-            print red % got
+            print >> out, green % expect
+            print >> out, red % got
             errors += 1
         else:
-            print
-            print got
+            print >> out
+            print >> out, got
 
-        print
+        print >> out
 
     if not errors:
-        print green % 'PASS!'
-        print
+        print >> out, green % 'PASS!'
+        return 0
     else:
-        print yellow % '>>>', red % '%s errors' % errors
-        print
-        sys.exit(1)
+        print >> out, yellow % '>>>', red % '%s errors' % errors
+        return 1
 
 
 if __name__ == '__main__':

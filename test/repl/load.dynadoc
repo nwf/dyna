@@ -59,5 +59,3 @@ tree(0) = ['ROOT', ['S', ['NP', 'George'], ['VP', ['V', ['V', 'love'], '-s'], ['
 > query sentence_length(10)
 
 sentence_length(10) = 9.
-
-> *resume*
