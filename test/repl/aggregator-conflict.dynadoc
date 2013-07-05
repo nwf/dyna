@@ -1,9 +1,12 @@
-> > 
+
+> a += 1.
+
 Changes
 =======
 a = 1.
 
-> DynaCompilerError:
+> a.
+DynaCompilerError:
 Encountered error in input program:
  Conflicting aggregators; rule <repl>
  uses '|=' for a/0 but I had been lead to expect '+='.
@@ -11,5 +14,3 @@ Everything was syntactically valid, but we could not
 see it through.
 
 new rule(s) were not added to program.
-
-> exit

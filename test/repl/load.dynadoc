@@ -1,0 +1,63 @@
+> :- dispos &cons(&,&).
+| :- dispos &nil.
+|
+| % binary rules
+| rewrite(X, Y, Z) :=
+|     rules_tsv(Linenum, Cost, X, R),
+|     [Y, Z] is split(R, "\\s+"),
+|     float(Cost).
+|
+| % load unary rules
+| rewrite(X, Y) :=
+|     rules_tsv(Linenum, Cost, X, R),
+|     [Y] is split(R, "\\s+"),
+|     float(Cost).
+|
+| phrase(S,X,I,K) += phrase(S,Y,I,K) + rewrite(X,Y).
+| phrase(S,X,I,K) += phrase(S,Y,I,J) + phrase(S,Z,J,K) + rewrite(X,Y,Z).
+| phrase(S,W,I,I+1) += W is token(S,I), 0.
+|
+| sentence_length(S) max= token(S,I), I+1.
+| goal(S) += phrase(S, "ROOT", 0, sentence_length(S)).
+
+
+> load rules_tsv = tsv("test/repl/data/english.gr")
+  *ignore*
+> load token = matrix("test/repl/data/english.sen", astype=str)
+  *ignore*
+> load tree = sexpr("test/repl/data/english.par")
+  *ignore*
+> post dump_solution()
+
+  *ignore*
+
+> vquery goal(X)
+
+16.990000000000002 where {X=14}
+20.97 where {X=7}
+22.97 where {X=0}
+22.97 where {X=1}
+22.97 where {X=2}
+28.169999999999995 where {X=16}
+34.89 where {X=4}
+36.89 where {X=3}
+38.84 where {X=17}
+42.06 where {X=13}
+42.57 where {X=8}
+42.57 where {X=9}
+43.85 where {X=19}
+45.269999999999996 where {X=10}
+53.7 where {X=20}
+87.37 where {X=6}
+91.37 where {X=5}
+137.65 where {X=12}
+
+> query tree(0)
+
+tree(0) = ['ROOT', ['S', ['NP', 'George'], ['VP', ['V', ['V', 'love'], '-s'], ['NP', 'Laura']]], '.'].
+
+> query sentence_length(10)
+
+sentence_length(10) = 9.
+
+> *resume*

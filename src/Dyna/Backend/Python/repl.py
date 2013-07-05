@@ -250,7 +250,7 @@ class REPL(cmd.Cmd, object):
             return
         print
         for term, result in sorted((subst(q, result), result) for result in results):
-            print term, '=', _repr(result['$val'])
+            print '%s = %s.' % (term, _repr(result['$val']))
         print
 
     def default(self, line, show_changed=True):

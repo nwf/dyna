@@ -1,0 +1,99 @@
+> a += 1.
+| a += a / 2.
+
+Changes
+=======
+a = 2.0.
+
+> trace a
+
+a = 2.0
+|
+├─ += 1
+│
+│  a += 1.
+│
+└─ += 1.0
+
+   a += (a=2.0 / 2)=1.0.
+   |
+   └─ a = 2.0
+      |
+      └─ continue as before (cyclic structure, will continue forever)
+
+
+> :- backchain f/1.
+| f(X) := f(X-1) + f(X-2) for X > 1.
+| f(1) := 1.
+| f(0) := 1.
+| b := f(3).
+
+Changes
+=======
+b = 3.
+
+> trace b
+
+b = 3
+|
+└─ := 3
+
+   b := f(3)=3.
+   |
+   └─ f(3) = 3
+      |
+      └─ := 3
+
+         f(X=3) := (f((X=3 - 1)=2)=2 + f((X=3 - 2)=1)=1)=3,
+             for ((X=3 > 1)=true) = (&true=true).
+         |
+         ├─ f(1) = 1
+         │  |
+         │  └─ := 1
+         │
+         │     f(1) := 1.
+         │
+         └─ f(2) = 2
+            |
+            └─ := 2
+
+               f(X=2) := (f((X=2 - 1)=1)=1 + f((X=2 - 2)=0)=1)=2,
+                   for ((X=2 > 1)=true) = (&true=true).
+               |
+               ├─ f(0) = 1
+               │  |
+               │  └─ := 1
+               │
+               │     f(0) := 1.
+               │
+               └─ f(1) = 1
+                  |
+                  └─ continue as before (shared structure)
+
+> :- backchain foo/1.
+| :- backchain bar/2.
+| foo(X) = X+1.
+| bar(A,B) += foo(A)*B.
+| bar(A,B) += A*foo(B).
+
+> trace bar(10,10)
+
+bar(10,10) = 220
+|
+├─ += 110
+│
+│  bar(A=10, B=10) += (foo(A=10)=11 * B=10)=110.
+│  |
+│  └─ foo(10) = 11
+│     |
+│     └─ = 11
+│
+│        foo(X=10) = (X=10 + 1)=11.
+│
+└─ += 110
+
+   bar(A=10, B=10) += (A=10 * foo(B=10)=11)=110.
+   |
+   └─ foo(10) = 11
+      |
+      └─ continue as before (shared structure)

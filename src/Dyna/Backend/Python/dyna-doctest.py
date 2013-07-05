@@ -12,29 +12,37 @@ def extract(code):
     for block in re.compile('^> ', re.MULTILINE).split(code):
         cmd = []
         expect = []
+
+        reading = True
+
         for i, line in enumerate(block.split('\n')):
-            if line.startswith('|') or i == 0:
+            if (line.startswith('|') or i == 0) and reading:
                 if line.startswith('|'):
                     line = line[1:]
                 cmd.append(line)
             else:
+                reading = False
                 expect.append(line)
 
         yield '\n'.join(cmd).strip(), '\n'.join(expect).strip()
 
 
 def clean(x):
-    return re.sub('\033\[\d+m', '', strip_comments(x)).strip()
+    # remove whitespace at end of line
+    # remove ansi color codes
+    return re.compile('(\s*)$', re.MULTILINE).sub('', re.sub('\033\[\d+m', '', strip_comments(x)).strip())
 
 
 def run(code):
     interp = Interpreter()
     repl = REPL(interp)
-    errors = []
+    errors = 0
     for cmd, expect in extract(code):
+
         if not clean(cmd):
             print
             continue
+
         print yellow % '> %s' % cmd
 
         if clean(cmd) == '*resume*':
@@ -48,15 +56,15 @@ def run(code):
             sys.stdout = sys.__stdout__
 
         got = clean(x.getvalue())
-        expect = clean(got)
+        expect = clean(expect)
 
-        if clean(expect) == '*ignore*':
+        if expect == '*ignore*':
             continue
 
         if expect != got:
             print green % expect
             print red % got
-            errors.append([cmd, expect, got])
+            errors += 1
         else:
             print
             print got
@@ -67,7 +75,7 @@ def run(code):
         print green % 'PASS!'
         print
     else:
-        print red % '%s errors' % len(errors)
+        print yellow % '>>>', red % '%s errors' % errors
         print
         sys.exit(1)
 

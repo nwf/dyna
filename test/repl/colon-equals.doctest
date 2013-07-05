@@ -1,0 +1,61 @@
+% This program should leave b in an error state, but currently leaves it at 2
+% for some reason:
+
+> a(1) := 1. a(2) := 2. b := 0. b := a(X).
+
+Changes
+=======
+a(1) = 1.
+a(2) = 2.
+b = $error.
+
+> sol
+
+Solution
+========
+b = $error.
+
+a/1
+===
+a(1) = 1.
+a(2) = 2.
+
+
+Errors
+======
+Error(s) aggregating b/0:
+  AggregatorError:
+    `b`: `:=` got conflicting values [1, 2] for rule index 3
+
+
+% It should be an error because the last rule to contribute any aggregands to b
+% (namely rule 4) contributes multiple aggregands, and there's no way to choose
+% among them.
+
+% Until recently, I would have said that the following should also leave b in an
+% error state. But now possibly we should allow b to be 2 in this case for
+% consistency with the new version of = that we're trying on #23. Thoughts?
+
+> retract_rule 3
+
+Changes
+=======
+b = 0.
+
+> a(1) := 2. a(2) := 2. b := 0. b := a(X).
+
+Changes
+=======
+a(1) = 2.
+b = 2.
+
+> sol
+
+Solution
+========
+b = 2.
+
+a/1
+===
+a(1) = 2.
+a(2) = 2.
