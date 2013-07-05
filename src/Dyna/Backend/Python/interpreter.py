@@ -194,7 +194,6 @@ class Interpreter(object):
         self.do(self.dynac_code(code), initialize=False)
 
     def new_fn(self, fn, agg):
-
         # check for aggregator conflict.
         if self.agg_name[fn] is None:
             self.agg_name[fn] = agg
@@ -289,12 +288,6 @@ class Interpreter(object):
                     print >> out, '      %s' % (e)
                 print >> out
 
-#        for item, (val, es) in self.error.items():
-#            print >> out,  'because %r is %s:' % (item, _repr(val))
-#            for e, h in es:
-#                if h is not None:
-#                    r = h.rule
-#                    print >> out, '    %s\n        in rule %s\n            %s' % (e, r.span, r.src)
         print >> out
 
     def dump_rules(self):
@@ -318,10 +311,14 @@ class Interpreter(object):
             return Cons(*args)
         if fn == 'nil/0':
             return Nil
+
+        if fn == '$key/1':
+            self.new_fn(fn, '=')
+
         if fn not in self.agg_name:
-            # item has no aggregator (e.g purely structural stuff) -- what
-            # happens if we add one later?
+            # item has no aggregator and this is the first time we're seeing it.
             self.new_fn(fn, None)
+
         return self.chart[fn].insert(args)
 
 #    def retract_item(self, item):
@@ -396,18 +393,15 @@ class Interpreter(object):
                 item.value = now
                 continue
 
+            if hasattr(now, 'fn') and now.fn == 'with_key/2':
+                val, key = now.args
+                now = val
+                dkey = self.build('$key/1', item)
+                self.delete_emit(dkey, dkey.value, None, None)
+                self.emit(dkey, key, None, None, delete=False)
+
             if was == now:
                 continue
-
-
-            # aggregator with special key
-            if hasattr(item.aggregator, 'key'):
-                key = self.build('$key/1', item)
-                if key.aggregator is None:
-                    from aggregator import aggregator
-                    key.aggregator = aggregator('=', key)
-                self.delete_emit(key, key.value, None, None)
-                self.emit(key, item.aggregator.key, None, None, delete=False)
 
 
             was_error = False

@@ -232,8 +232,8 @@ defs = {
     'set=': set_equals,
     'bag=': bag_equals,
     'mean=': mean_equals,
-    'argmax=': maxwithkey_equals,
-    'argmin=': minwithkey_equals,
+#    'argmax=': maxwithkey_equals,
+#    'argmin=': minwithkey_equals,
 }
 
 def aggregator(name, term):

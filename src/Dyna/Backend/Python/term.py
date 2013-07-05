@@ -41,7 +41,17 @@ class Term(object):
     def __setstate__(self, state):
         (self.fn, self.args, self.value, self.aggregator) = state
 
-    __add__ = __sub__ = __mul__ = notimplemented
+    def __add__(self, _):
+        raise TypeError("Can't subtract terms.")
+
+    def __sub__(self, _):
+        raise TypeError("Can't add terms.")
+
+    def __mul__(self, _):
+        raise TypeError("Can't multiply terms.")
+
+    def __div__(self, _):
+        raise TypeError("Can't divide terms.")
 
 
 class Cons(Term):

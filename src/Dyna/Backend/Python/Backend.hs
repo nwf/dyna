@@ -49,7 +49,7 @@ import           Text.PrettyPrint.Free
 
 aggrs :: S.Set String
 aggrs = S.fromList
-  [ "max=" , "min=", "argmax=", "argmin="
+  [ "max=" , "min="
   , "+=" , "*="
   , "and=" , "or=" , "&=" , "|="
   , ":-"
