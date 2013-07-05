@@ -1,6 +1,6 @@
 from errors import notimplemented
 from utils import _repr
-from defn import Aggregator
+from aggregator import NoAggregator
 
 
 # TODO: codegen should output a derived Term instance for each functor
@@ -22,14 +22,10 @@ class Term(object):
         return self.fn == other.fn and self.args == other.args
 
     def __cmp__(self, other):
-#        if self is other:
-#            return 0
         if other is None:
             return 1
         if not isinstance(other, Term):
             return 1
-#        if self == other:
-#            return 0
         return cmp((self.fn, self.args), (other.fn, other.args))
 
     def __repr__(self):
@@ -56,7 +52,7 @@ class Cons(Term):
         self.head = head
         self.tail = tail
         Term.__init__(self, 'cons/2', (head, tail))
-        self.aggregator = Aggregator()
+        self.aggregator = NoAggregator
         self.aslist = [self.head] + self.tail.aslist
 
     def __repr__(self):
@@ -72,6 +68,15 @@ class Cons(Term):
             else:
                 yield a, (None,), a
 
+    def __eq__(self, other):
+        try:
+            return self.aslist == other.aslist
+        except AttributeError:
+            return False
+
+    def __hash__(self):
+        return hash(tuple(self.aslist))
+
     def __cmp__(self, other):
         try:
             return cmp(self.aslist, other.aslist)
@@ -82,7 +87,7 @@ class Cons(Term):
 class _Nil(Term):
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
-        self.aggregator = Aggregator()
+        self.aggregator = NoAggregator
         self.aslist = []
     def __repr__(self):
         return '[]'

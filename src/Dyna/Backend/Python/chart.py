@@ -1,5 +1,5 @@
 from collections import defaultdict
-from defn import aggregator
+from aggregator import aggregator
 from term import Term
 from utils import _repr
 
@@ -13,8 +13,8 @@ class Chart(object):
         self.ix = [defaultdict(set) for _ in xrange(arity)]
         self.agg_name = agg_name
 
-    def new_aggregator(self):
-        return aggregator(self.agg_name)
+    def new_aggregator(self, term):
+        return aggregator(self.agg_name, term)
 
     def __repr__(self):
         rows = [term for term in self.intern.values() if term.value is not None]
@@ -73,7 +73,7 @@ class Chart(object):
             return self.intern[args]
         except KeyError:
             self.intern[args] = term = Term(self.name, args)
-            term.aggregator = self.new_aggregator()
+            term.aggregator = self.new_aggregator(term)
             # index new term
             for i, x in enumerate(args):
                 self.ix[i][x].add(term)
