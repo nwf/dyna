@@ -350,7 +350,11 @@ class Interpreter(object):
                     def _emit(item, val, ruleix, variables):
                         item.aggregator.dec(val, ruleix, variables)
 
-                    rule.query(*head.args, emit=_emit)
+                    try:
+                        rule.query(*head.args, emit=_emit)
+                    except (TypeError, ZeroDivisionError):
+                        pass
+
                     self.agenda[head] = time()
 
         return self.go()
