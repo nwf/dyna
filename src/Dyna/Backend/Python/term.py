@@ -71,12 +71,15 @@ class Cons(Term):
     def __contains__(self, x):
         return x in self.aslist
 
-    def __iter__(self):
+    def like_chart(self):
         for a in self.aslist:
             if not isinstance(a, Term):
                 yield a, (None,), a
             else:
                 yield a, (None,), a
+
+    def __iter__(self):
+        return iter(self.aslist)
 
     def __eq__(self, other):
         try:
@@ -111,3 +114,19 @@ class _Nil(Term):
         return False
 
 Nil = _Nil()
+
+
+#class AList(Cons):
+#
+#    def __init__(self, head, tail):
+#
+#        if not (isinstance(tail, AList) or tail is Nil):
+#            raise TypeError('Malformed alist: tail is not an alist')
+#
+#        if not (isinstance(head, Cons) and len(head.aslist) == 2):
+#            raise TypeError('Malformed alist: head is not a pair.')
+#
+#        Cons.__init__(self, head, tail)
+#
+#    def __repr__(self):
+#        return '[%s]' % (', '.join('%s -> %s' % (_repr(k), _repr(v)) for k,v in self.aslist))

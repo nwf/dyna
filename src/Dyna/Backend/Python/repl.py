@@ -11,7 +11,7 @@ to help.
 
 import os, cmd, readline
 from utils import dynac, ip, lexer, subst, drepr, _repr, get_module
-from stdlib import topython
+from stdlib import topython, todyna
 from errors import DynaCompilerError, DynaInitializerException
 from config import dotdynadir
 from errors import show_traceback
@@ -250,7 +250,7 @@ class REPL(cmd.Cmd, object):
             return
         print
         for term, result in sorted((subst(q, result), result) for result in results):
-            print '%s = %s.' % (term, _repr(result['$val']))
+            print '%s = %s.' % (term, _repr(todyna(result['$val'])))
         print
 
     def default(self, line, show_changed=True):

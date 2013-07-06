@@ -27,13 +27,25 @@ def pycall(name, *args):
     x = eval(name)(*args)
     return todyna(x)
 
+
 def topython(x):
+    #if isinstance(x, AList) or x is Nil:
+    #    return {topython(k): topython(v) for k,v in x.aslist}
     if isinstance(x, Cons) or x is Nil:
         return [topython(y) for y in x.aslist]
     return x
 
 def todynalist(x):    # TODO: get rid of this.
     return todyna(x)
+
+
+def getkey(m, k):
+    return m[k]
+
+def setkey(m, k, v):
+    m[k] = v
+    return m
+
 
 def todyna(x):
 
@@ -43,6 +55,10 @@ def todyna(x):
         return todyna(x)
 
     elif isinstance(x, dict):
+        #c = Nil
+        #for k,v in x.items():
+        #    c = AList(todyna([k,v]), c)
+        #return c
         return todyna(x.items())
 
     elif isinstance(x, (list, tuple)):
@@ -60,7 +76,7 @@ def get(x, i):
 def iter_cons(x):
     if not (isinstance(x, Cons) or x is Nil):
         raise TypeError("Attemping to iterate something which isn't a list.")
-    return x
+    return x.like_chart()
 
 def in_list(x, a):
     if not (isinstance(a, Cons) or a is Nil):

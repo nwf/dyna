@@ -54,7 +54,7 @@
 
 > query tree(0)
 
-tree(0) = ['ROOT', ['S', ['NP', 'George'], ['VP', ['V', ['V', 'love'], '-s'], ['NP', 'Laura']]], '.'].
+tree(0) = ["ROOT", ["S", ["NP", "George"], ["VP", ["V", ["V", "love"], "-s"], ["NP", "Laura"]]], "."].
 
 > query sentence_length(10)
 
