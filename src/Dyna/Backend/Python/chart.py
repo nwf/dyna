@@ -21,6 +21,8 @@ class Chart(object):
         if not rows:
             return ''
 
+        heading = [self.name, '='*len(self.name)]
+
         # special handing or-equals aggregators -- only list true facts (and errors)
         if self.agg_name == ':-' or self.agg_name == '|=':
             lines = []
@@ -30,7 +32,7 @@ class Chart(object):
                 elif term.value:  # e.g. $error
                     lines.append('%s = %s.' % (_repr(term), _repr(term.value)))
             if self.arity != 0:
-                lines.append('')
+                lines = heading + lines # heading
             return '\n'.join(lines)
 
         if self.arity == 0:
@@ -38,14 +40,13 @@ class Chart(object):
             return '%s = %s.' % (term, _repr(term.value))
 
         p = [(_repr(term), _repr(term.value)) for term in sorted(rows)]
-        lines = [self.name, '='*len(self.name)]  # heading
+        lines = []
         terms, values = zip(*p)
         widths = map(len, terms)
         fmt = '%%-%ds = %%s.' % min(max(widths), 40)
         for term, value in zip(terms, values):
             lines.append(fmt % (term, value))
-        lines.append('')
-        return '\n'.join(lines)
+        return '\n'.join(heading + lines)
 
     def __getitem__(self, s):
         assert len(s) == self.arity + 1, \

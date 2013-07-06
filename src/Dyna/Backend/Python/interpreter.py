@@ -227,12 +227,10 @@ class Interpreter(object):
         if nullary:
             for line in nullary:
                 print >> out, line
-            print >> out
-        else:
-            print >> out
-
+        print >> out
         for line in charts:
             print >> out, line
+            print >> out
 
         self.dump_errors(out)
 
