@@ -447,9 +447,9 @@ class REPL(cmd.Cmd, object):
         In our solution we see that `a` is true.
 
             > sol
-            a = true.
-            b = true.
-            c = true.
+            a.
+            b.
+            c.
 
         Now we want to find out why
 
@@ -557,7 +557,7 @@ class REPL(cmd.Cmd, object):
         self.interp.new_rules = set()
 
         try:
-            query = "$trace dict= _ is %s, &(%s)." % (q,q)
+            query = "$trace dict= _ is (%s), &(%s)." % (q,q)
 
             self.default(query, show_changed=False)
 
@@ -573,9 +573,10 @@ class REPL(cmd.Cmd, object):
 
             from post.trace import Tracer
             tracer = Tracer(self.interp)
+
             for item in results:
                 print
-                tracer(item)
+                tracer(todyna(item))
 
         finally:
             # cleanup:

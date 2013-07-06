@@ -197,7 +197,7 @@ class Interpreter(object):
                 c.agg_name = agg
                 for item in c.intern.itervalues():
                     assert item.aggregator is None
-                    item.aggregator = c.new_aggregator()
+                    item.aggregator = c.new_aggregator(item)
 
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
