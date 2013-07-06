@@ -20,9 +20,23 @@ class Chart(object):
         rows = [term for term in self.intern.values() if term.value is not None]
         if not rows:
             return ''
+
+        # special handing or-equals aggregators -- only list true facts (and errors)
+        if self.agg_name == ':-' or self.agg_name == '|=':
+            lines = []
+            for term in sorted(rows):
+                if term.value is True:
+                    lines.append('%s.' % _repr(term))
+                elif term.value:  # e.g. $error
+                    lines.append('%s = %s.' % (_repr(term), _repr(term.value)))
+            if self.arity != 0:
+                lines.append('')
+            return '\n'.join(lines)
+
         if self.arity == 0:
             [term] = rows
             return '%s = %s.' % (term, _repr(term.value))
+
         p = [(_repr(term), _repr(term.value)) for term in sorted(rows)]
         lines = [self.name, '='*len(self.name)]  # heading
         terms, values = zip(*p)

@@ -1,0 +1,81 @@
+% Dynamic type checking for Boolean aggregators.
+
+> e :- 10.
+
+Changes
+=======
+e = $error.
+
+> sol
+
+Solution
+========
+e = $error.
+
+Errors
+======
+Error(s) aggregating e/0:
+  TypeError:
+    `e`: 10 is not Boolean.
+
+> retract_rule 0
+
+Changes
+=======
+e = null.
+
+
+
+
+> a :- false.
+
+Changes
+=======
+a = false.
+
+> a :- true.
+
+Changes
+=======
+a = true.
+
+
+> c := "horse".
+| b &= c.
+| b &= true.
+
+Changes
+=======
+b = $error.
+c = "horse".
+
+
+> sol
+
+Solution
+========
+a.
+b = $error.
+c = "horse".
+
+Errors
+======
+Error(s) aggregating b/0:
+  TypeError:
+    `b`: "horse" is not Boolean.
+
+
+> c := true.
+
+Changes
+=======
+b = true.
+c = true.
+
+> sol
+
+Solution
+========
+a.
+b = true.
+c = true.

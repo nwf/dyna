@@ -193,17 +193,25 @@ class or_equals(BAggregator):
         if len(s):
             return reduce(lambda x,y: x or y, s)
 
-class b_and_equals(BAggregator):
-    def fold(self):
-        s = [k for k, m in self.iteritems() if m > 0]
-        if len(s):
-            return reduce(operator.and_, s)
 
-class b_or_equals(BAggregator):
+class boolean_or_equals(BAggregator):
     def fold(self):
-        s = [k for k, m in self.iteritems() if m > 0]
+        s = [x for x, m in self.iteritems() if m > 0]
         if len(s):
-            return reduce(operator.or_, s)
+            for val in s:
+                if val is not True and val is not False:
+                    raise TypeError('%s is not Boolean.' % _repr(val))
+
+            return reduce(lambda x,y: x or y, s)
+
+class boolean_and_equals(BAggregator):
+    def fold(self):
+        s = [x for x, m in self.iteritems() if m > 0]
+        if len(s):
+            for val in s:
+                if val is not True and val is not False:
+                    raise TypeError('%s is not Boolean.' % _repr(val))
+            return reduce(lambda x,y: x and y, s)
 
 class set_equals(BAggregator):
     def fold(self):
@@ -226,9 +234,9 @@ defs = {
     '*=': times_equals,
     'and=': and_equals,
     'or=': or_equals,
-    '&=': b_and_equals,
-    '|=': b_or_equals,
-    ':-': or_equals,
+    '&=': boolean_and_equals,
+    '|=': boolean_or_equals,
+    ':-': boolean_or_equals,
     'majority=': majority_equals,
     'set=': set_equals,
     'bag=': bag_equals,
