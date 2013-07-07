@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-TODO: unsubscribe
-
-TODO: subscriptions probably should only show "changes"
+TODO: subscriptions: unsubscribe, only show changes
 
 TODO: help should print call signature of loads and post-processors in addition
 to help.

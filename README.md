@@ -15,16 +15,12 @@ Quick Start
 -----------
 
 First, ensure that you have the Haskell platform 2012.2 or later installed
-either through your favorite package manager (e,g, `apt-get install
+either through your favorite package manager (e.g., `apt-get install
 haskell-platform`) or by installing it stand-alone from the haskell homepage.
 
 This is enough to get you the compiler up and running. In order execute
-programs, you'll need to set up the Python backend up. For that you'll need to
-have the following:
-
-    * Python 2.7+
-
-The python modules required
+programs, you'll need to set up the Python backend. For that you'll need `Python
+2.7+` and the following python modules
 
     $ easy_install ipython
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Generates a visual representation of a Dyna program rules after the
+Generates a visual representation of a Dyna program's rules after the
 normalization process.
 """
 
@@ -16,7 +16,7 @@ try:
     from pygments.lexers import get_lexer_by_name
     from pygments.formatters import HtmlFormatter
 
-except ImportError as e:
+except ImportError:
     def format_code(code):
         warn('pygments not installed.')
         return code, 0
@@ -109,8 +109,8 @@ class Hypergraph(object):
 
                 # connect body variables to edge crux
                 for b in e.body:
-#                    print >> f, '"%s" -> "%s" [arrowhead=none];' % (b, id(e))
-                    print >> f, '"%s" -> "%s";' % (b, id(e))
+                    print >> f, '"%s" -> "%s" [arrowhead=none];' % (b, id(e))
+#                    print >> f, '"%s" -> "%s";' % (b, id(e))
 
                 # connect head variables to edge
 #                print >> f, '  "%s" [label="",shape=point];' % (id(e))
@@ -136,27 +136,27 @@ class Hypergraph(object):
         self.render(name)
         os.system('gnome-open %s.svg 2>/dev/null' % name)
 
-    def get_function(self, x):
-        """
-        String of symbolic representation of ``x``, a variable or function, in
-        this expresion graph.
-        """
-
-        if isinstance(x, Edge):
-            label = re.sub('@\d+$', '', x.label)
-            if not x.body:  # arity 0
-                return label
-
-            if not label[0].isalpha() and len(x.body) == 2:
-                [a,b] = map(self.get_function, x.body)
-                return '(%s %s %s)' % (a, label, b)
-
-            return '%s(%s)' % (label, ', '.join(map(self.get_function, x.body)))
-        else:
-            if not self.incoming[x]:  # input variable
-                return x
-            [e] = self.incoming[x]
-            return self.get_function(e)
+#    def get_function(self, x):
+#        """
+#        String of symbolic representation of ``x``, a variable or function, in
+#        this expresion graph.
+#        """
+#
+#        if isinstance(x, Edge):
+#            label = re.sub('@\d+$', '', x.label)
+#            if not x.body:  # arity 0
+#                return label
+#
+#            if not label[0].isalpha() and len(x.body) == 2:
+#                [a,b] = map(self.get_function, x.body)
+#                return '(%s %s %s)' % (a, label, b)
+#
+#            return '%s(%s)' % (label, ', '.join(map(self.get_function, x.body)))
+#        else:
+#            if not self.incoming[x]:  # input variable
+#                return x
+#            [e] = self.incoming[x]
+#            return self.get_function(e)
 
     def toposort(self, root):
         visited = set()
@@ -208,6 +208,7 @@ def graph_styles(g):
 
     # edge styles
     for e in g.edges:
+        sty[e].update({'shape': 'rectangle'})
         if    e.label.startswith('&') \
            or e.label.startswith('!') \
            or e.label.startswith('=') :  # distiguish unif edges
