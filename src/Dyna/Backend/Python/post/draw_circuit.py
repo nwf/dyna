@@ -1,10 +1,39 @@
 # -*- coding: utf-8 -*-
+"""
+TODO: draw subgraph of nodes matching a query.
+"""
 
+import re
 import webbrowser
 from debug import Hypergraph
 from cStringIO import StringIO
 from utils import lexer, subst
 
+HEADER = """
+<html>
+<head>
+<style>
+body {
+  background-color: black;
+  color: white;
+}
+</style>
+
+<!--
+<script type="text/javascript" language="javascript" src="http://code.jquery.com/jquery-1.10.2.min.js"></script>
+<script>
+function clicked(x) {
+  alert(x.childNodes);
+}
+</script>
+-->
+
+</head><body>
+"""
+
+FOOTER = """
+</body></html>
+"""
 
 def circuit(edges):
     # create hypergraph object
@@ -59,36 +88,56 @@ class draw_circuit(object):
         es = infer_edges(interp)
         c = circuit(es)
 
+        from collections import defaultdict
+        sty = defaultdict(dict)
+        for e in c.edges:
+            sty[e].update(dict(shape='circle',
+                               width='.125',
+                               fillcolor="yellow",
+                               label=''))
+
         with file(outfile, 'wb') as f:
-            print >> f, """
-            <html>
-            <head>
-            <style>
-            body {
-              background-color: black;
-              color: white;
-            }
-            </style>
-            </head>
-            <body>
-            """
+            print >> f, HEADER
 
             x = StringIO()
             interp.dump_charts(x)
 
             print >> f, '<div style="position:absolute;">%s</div>' \
-                % '<h1>Charts</h1>%s' \
+                % '<h1>Solution</h1>%s' \
                 % '<pre style="width: 500px;">%s</pre>' \
                 % x.getvalue()
+
+            svg = c.render('circuit', sty=sty)
+
+            E = {str(id(e)): e for e in c.edges}
+
+            def foo(m):
+                z, i, cls, x, q = m.groups()
+
+                if cls == 'edge':
+                    # split on arrow ->
+                    u, v = x.split('&#45;&gt;')
+                    print 'edge:', i, u, v
+                else:
+                    if x in E:
+                        print 'crux', i, x,
+                        rule = interp.rules[int(E[x].label)]
+                        x = '%s   %% rule %s' % (rule.src, rule.index)
+                    else:
+                        print 'node:', i, x
+
+                return '<g id="%s" class="%s"><title>%s</title>%s</g>' % (i, cls, x, q)
+
+            svg = re.sub('<g (id="([^"]+)" class="(node|edge)"><title>([^<>]+)</title>([\w\W]+?)</g>)', foo, svg)
 
             print >> f, """
             <div style="width: 800px; position:absolute; left: 550px">
             <h1>Hypergraph</h1>
             %s
             </div>
-            """ % c.render('circuit')
+            """ % svg
 
-            print >> f, '</body></html>'
+            print >> f, FOOTER
 
         if open:
             webbrowser.open(f.name)
