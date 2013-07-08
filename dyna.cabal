@@ -4,7 +4,7 @@ Version:        0.4
 Cabal-Version:  >=1.14
 Build-Type:     Simple
 Stability:      alpha
-Copyright:      Copyright (c) 2007-2012,
+Copyright:      Copyright (c) 2007-2013,
                       Nathaniel W. Filardo, Tim Vieira, wren ng thornton
 License:        OtherLicense
 License-File:   LICENSE
@@ -101,7 +101,7 @@ Executable dyna
                         -main-is Dyna.Main.Driver
 
     Build-Depends:      ansi-wl-pprint >= 0.6,
-                        base >=4,
+                        base >=4 && <6,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,
@@ -136,7 +136,7 @@ Test-suite dyna-selftests
                         -main-is Dyna.Main.TestsDriver
 
     Build-Depends:      ansi-wl-pprint >= 0.6,
-                        base >=4,
+                        base >=4 && <6,
                         bytestring >=0.9,
                         charset >=0.3,
                         containers >=0.4,

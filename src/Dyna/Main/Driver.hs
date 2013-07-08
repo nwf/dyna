@@ -23,6 +23,7 @@ import qualified Data.IntMap                  as IM
 import qualified Data.Maybe                   as MA
 import qualified Data.Set                     as S
 import           Data.String
+import           Data.Version (showVersion)
 import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.ANF
 import           Dyna.Analysis.ANFPretty
@@ -47,6 +48,14 @@ import           Text.PrettyPrint.Free        as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPA
 import qualified Text.Trifecta                as T
 import qualified Text.Trifecta.Result         as TR
+
+import qualified Paths_dyna                   as CPD
+
+------------------------------------------------------------------------}}}
+-- Version display                                                      {{{
+
+version :: String
+version = showVersion (CPD.version)
 
 ------------------------------------------------------------------------}}}
 -- Dumping                                                              {{{
@@ -173,9 +182,6 @@ quickExit QEHelpDump = do
   putStrLn (usageInfo "" $ dumpOpts False)
 quickExit QEVersion = putStrLn $ "Dyna " ++ version
 quickExit QEVersionNumber = putStrLn version
-
-version :: String
-version = "0.4" -- XREF:VERSION
 
 qeBanner :: String -> IO ()
 qeBanner s = putStrLn $ "Dyna " ++ version ++ ": " ++ s
@@ -326,7 +332,7 @@ renderSpannedWarn w s = "WARNING:" <+> text (BU.toString w) <+> "AT"
 ------------------------------------------------------------------------}}}
 -- Pipeline!                                                            {{{
 
-processFile :: (?dcfg :: DynacConfig) => String -> IO ()
+processFile :: (?dcfg :: DynacConfig) => FilePath -> IO ()
 processFile fileName = bracket openOut hClose go
  where
   openOut = maybe (return stdout) (flip openFile WriteMode)

@@ -17,7 +17,6 @@ import           System.IO
 import           System.IO.Error
 import           System.Process
 import           Test.Framework                      as TF
-import           Test.Framework.Providers.Program
 import           Test.Framework.TH
 import           Test.Golden
 

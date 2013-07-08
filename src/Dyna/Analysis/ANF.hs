@@ -55,7 +55,7 @@
 module Dyna.Analysis.ANF (
 	Crux, EvalCrux(..), UnifCrux(..), cruxIsEval, cruxVars, allCruxVars,
 	
-    Rule(..), ANFAnnots, ANFWarns,
+    Rule(..), RuleIx, ANFAnnots, ANFWarns,
     normTerm, normRule, runNormalize,
 
 	-- * Internals
