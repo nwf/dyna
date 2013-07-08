@@ -1,0 +1,154 @@
+% This example loads training data (trees represented as s-expressions),
+% binarizes trees, estimates a grammar then parses those training sentences.
+
+> % utility function.
+| :- backchain enumerate/2.
+| :- backchain enumerate/1.
+| enumerate(X) = enumerate(X, 0).
+| enumerate([], I) = [].
+| enumerate([X|Xs], I) = [[I,X] | enumerate(Xs, I+1)].
+|
+| :- backchain length/1.
+| length([]) = 0.
+| length([X|Xs]) = 1 + length(Xs).
+|
+| :- backchain reverse/1.
+| reverse([]) = [].
+| reverse([X|Xs]) = append(reverse(Xs), X).
+|
+| :- backchain append/2.
+| append([], Y) = [Y].
+| append([X|Xs], Y) = [X|append(Xs, Y)].
+
+> % the following rule order is important bc we use :=.
+| :- backchain sym/1.
+| sym(A) := A.
+| sym([A|_]) := A.
+|
+| % rule used to create top-level subtree
+| :- backchain rule/1.
+| rule([X,Y]) := &r(X, sym(Y)).
+| rule([X,Y,Z]) := &r(X, sym(Y), sym(Z)).
+|
+| % count the number of words in a subtree
+| :- backchain numwords/1.
+| numwords(X) := 1.
+| numwords([X,Y]) := numwords(Y).
+| numwords([X,Y,Z]) := numwords(Y) + numwords(Z).
+|
+| % extract word and it's position in tree
+| :- backchain word/2.
+| word(0, X) := X.
+| word(I, [X,Y]) := word(I, Y).
+| word(I, [X,Y,Z]) := I < numwords(Y), word(I, Y).
+| word(I, [X,Y,Z]) := I >= numwords(Y), word(I-numwords(Y), Z).
+|
+| % unnormalized
+| c(X,Y) += 1
+|   for &r(X,Y) in f(T),
+|       T is b(tree(_)).
+|
+| c(X,Y,Z) += 1
+|   for &r(X,Y,Z) in f(T),
+|       T is b(tree(_)).
+|
+| % normalizing constants for grammar rules
+| n(X) += c(X,Y).
+| n(X) += c(X,Y,Z).
+|
+| % normalize
+| p(X,Y) := c(X,Y) / n(X).
+| p(X,Y,Z) := c(X,Y,Z) / n(X).
+|
+| % extract rules in a tree
+| :- backchain f/1.
+| f([X,Y]) bag= rule([X,Y]).
+| f([X,Y,Z]) bag= rule([X,Y,Z]).
+| f([X,Y]) bag= A for A in f(X).
+| f([X,Y]) bag= A for A in f(Y).
+| f([X,Y,Z]) bag= A for A in f(X).
+| f([X,Y,Z]) bag= A for A in f(Y).
+| f([X,Y,Z]) bag= A for A in f(Z).
+|
+| %zzz(I) :=
+| %  T is b(tree(0)),
+| %  I in pycall("range", 0, numwords(T)),
+| %  word(I, T).
+|
+| % binarize s-expression tree
+| :- backchain b/1.
+| b(X) := X.
+| b([X,Y]) := [X,b(Y)].
+| b([X,Y,Z|Xs]) := [X, b(Y), b([&'@'(X), Z|Xs])].
+| b([X,Y,Z]) := [X,b(Y),b(Z)].
+|
+| % CKY parser
+| phrase(S,X,I,K)   max= phrase(S,Y,I,J) * phrase(S,Z,J,K) * p(X,Y,Z) with_key [[S,Y,I,J], [S,Z,J,K]].
+| phrase(S,X,I,K)   max= phrase(S,Y,I,K) * p(X,Y)                   with_key [[S,Y,I,K]].
+| phrase(S,X,I,I+1) max= 1                                        with_key X
+|   for [I,X] in enumerate(sentence(S)).
+|
+| % backpointers
+| bk(S,X,I,K) = $key(phrase(S,X,I,K)).
+|
+| % extract path from backpointers
+| path(S,X,I,K) := W is bk(S,X,I,K), W.
+| path(S,X,I,K) := [[S,Y,I,J], [S,Z,J,K]] is bk(S,X,I,K), [X, path(S,Y,I,J), path(S,Z,J,K)].
+| path(S,X,I,K) := [[S,Y,I,K]] is bk(S,X,I,K), [X, path(S,Y,I,K)].
+
+  *ignore*
+
+% load the grammar
+
+> load tree = sexpr("test/repl/data/english.par")
+
+  *ignore*
+
+> % a strange way to get back sentences as lists
+| sentence(S, I) =
+|   T is b(tree(S)),
+|   I in pycall("range", 0, numwords(T)),
+|   word(I, T).
+|
+| slen(S) max= _  is sentence(S, I), I.
+|
+| s(S,0) = [sentence(S,0)].
+| s(S,I) = [sentence(S,I) | s(S,I-1) ] for I > 0.
+| sentence(S) = reverse(s(S, slen(S))).
+|
+| goal(S) max= phrase(S, "ROOT", 0, length(sentence(S))).
+| parse(S) = path(S, "ROOT", 0, length(sentence(S))).
+
+  *ignore*
+
+
+% very inefficient way to format trees (not required, just fun to see that we
+% can do it). 
+%
+% TODO: unbinarize
+%
+> :- backchain tostring/1.
+| tostring(X) := X.
+| tostring(&'@'(X)) := "@" + X.
+| tostring([X,Y]) := "(" + tostring(X) + " " + tostring(Y) + ")".
+| tostring([X,Y,Z]) := "(" + tostring(X) + " " + tostring(Y) + " " + tostring(Z) + ")".
+
+% collect errors
+> errors(S) = [tostring(parse(S)), tostring(b(tree(S)))] for parse(S) != b(tree(S)).
+  *ignore*
+
+% report accuracy
+> correct += parse(S) == b(tree(S)), 1.0.
+| ntrees += _ is sentence(S), 1.
+| accuracy = correct / ntrees.
+
+Changes
+=======
+accuracy = 0.9130434782608695.
+correct = 21.0.
+ntrees = 23.
+
+% inspect errors
+> query errors(S)
+errors(12) = ["(ROOT (S (NP Laura) (VP (VP (V (V say) -s) (SBAR that (S (NP George) (VP (Modal might) (VP (V sleep)))))) (PP (P on) (NP (Det the) (N floor))))) !)", "(ROOT (S (NP Laura) (VP (V (V say) -s) (SBAR that (S (NP George) (VP (VP (Modal might) (VP (V sleep))) (PP (P on) (NP (Det the) (N floor)))))))) !)"].
+errors(21) = ["(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))))) (@VP and (VP (VP (V (V sleep) -ed)) (PP (P on) (NP (Det the) (N floor))))))) .)", "(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) (@VP and (VP (V (V sleep) -ed)))))) (PP (P on) (NP (Det the) (N floor))))) .)"].
