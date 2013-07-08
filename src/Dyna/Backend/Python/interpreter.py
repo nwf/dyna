@@ -629,10 +629,10 @@ def peel(fn, item):
     and constants (possibly an empty tuple).
     """
     if fn == "true/0":
-        assert item is true
+        assert item is True
         return
     if fn == "false/0":
-        assert item is false
+        assert item is False
         return
     assert isinstance(item, Term)
     assert item.fn == fn
