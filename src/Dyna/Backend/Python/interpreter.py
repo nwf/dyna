@@ -336,7 +336,10 @@ class Interpreter(object):
                         xs.remove(u)
                         assert u not in xs, 'Several occurrences of u in xs'
             # run initializer in delete mode
-            rule.init(emit=self.delete_emit)
+            try:
+                rule.init(emit=self.delete_emit)
+            except (TypeError, ZeroDivisionError):
+                pass
         else:
             assert rule.query is not None
             # remove query handler

@@ -1,7 +1,7 @@
 import re as _re
 from utils import get_module
 
-available = 'trace', 'dump_solution', 'draw_circuit', 'graph', 'save'
+available = 'trace', 'dump_solution', 'draw_circuit', 'graph', 'save', 'draw'
 
 def run(interp, line):
 

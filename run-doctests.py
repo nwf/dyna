@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from path import path
 from cStringIO import StringIO
 

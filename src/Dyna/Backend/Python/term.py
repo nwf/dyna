@@ -102,16 +102,25 @@ class _Nil(Term):
         Term.__init__(self, 'nil/0', ())
         self.aggregator = NoAggregator
         self.aslist = []
+
     def __repr__(self):
         return '[]'
-    def __iter__(self):
-        for a in self.aslist:
-            if not isinstance(a, Term):
-                yield a, (None,), a
-            else:
-                yield a, (None,), a
+
     def __contains__(self, x):
         return False
+
+    def like_chart(self):
+        return iter([])
+
+    def __iter__(self):
+        return iter([])
+
+    def __eq__(self, other):
+        try:
+            return self.aslist == other.aslist
+        except AttributeError:
+            return False
+
 
 Nil = _Nil()
 

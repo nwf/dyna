@@ -20,4 +20,4 @@
 (ROOT (S (NP Papa) (VP (Modal would) (VP (V have) (VP (V (V eat) -ed) (NP (Det his) (N (N sandwich) -s)))))) .)
 (ROOT (S (NP (Det every) (N sandwich)) (VP (V was) (VP (V (V go) -ing) (VP (V to (V have)) (VP (V been) (Adj delicious)))))) .)
 (ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) and (Adj blue)) (N woman))) and (NP (Det every) (N man))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) and (VP (V (V sleep) -ed))))) (PP (P on) (NP (Det the) (N floor))))) .)
-(a b c d)
+(ROOT (A a) (B b) (C c) (D d))
