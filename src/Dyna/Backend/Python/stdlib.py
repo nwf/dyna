@@ -11,6 +11,11 @@ except ImportError:                       # XXX: should probably issue a warning
     def uniform(a=0, b=1):
         return _random() * (b - a) + a
 
+
+_range = range
+def range(*x):
+    return todyna(_range(*x))
+
 def split(s, delim='\s+'):
     return todynalist(re.split(delim, s))
 

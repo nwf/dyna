@@ -107,7 +107,7 @@
 > % a strange way to get back sentences as lists
 | sentence(S, I) =
 |   T is b(tree(S)),
-|   I in pycall("range", 0, numwords(T)),
+|   I in range(0, numwords(T)),
 |   word(I, T).
 |
 | slen(S) max= _  is sentence(S, I), I.

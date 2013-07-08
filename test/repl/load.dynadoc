@@ -1,7 +1,4 @@
-> :- dispos &cons(&,&).
-| :- dispos &nil.
-|
-| % binary rules
+> % binary rules
 | rewrite(X, Y, Z) :=
 |     rules_tsv(Linenum, Cost, X, R),
 |     [Y, Z] is split(R, "\\s+"),
@@ -17,7 +14,7 @@
 | phrase(S,X,I,K) += phrase(S,Y,I,J) + phrase(S,Z,J,K) + rewrite(X,Y,Z).
 | phrase(S,W,I,I+1) += W is token(S,I), 0.
 |
-| sentence_length(S) max= token(S,I), I+1.
+| sentence_length(S) max= _ is token(S,I), I+1.
 | goal(S) += phrase(S, "ROOT", 0, sentence_length(S)).
 
 

@@ -18,7 +18,7 @@ def extract(code):
         for i, line in enumerate(block.split('\n')):
             if (line.startswith('|') or i == 0) and reading:
                 if line.startswith('|'):
-                    line = line[1:]
+                    line = ' ' + line[1:]
                 cmd.append(line)
             else:
                 reading = False

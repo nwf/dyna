@@ -628,14 +628,11 @@ def peel(fn, item):
     functor/arity, `fn`. Returns the arguments of term as a tuple of intern idxs
     and constants (possibly an empty tuple).
     """
-
-    if fn == "true/0" :
-#        assert item is True
-        assert bool(item)
+    if fn == "true/0":
+        assert item is true
         return
-    if fn == "false/0" :
-#        assert item is False
-        assert not bool(item)
+    if fn == "false/0":
+        assert item is false
         return
     assert isinstance(item, Term)
     assert item.fn == fn

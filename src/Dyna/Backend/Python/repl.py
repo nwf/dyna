@@ -133,14 +133,14 @@ class REPL(cmd.Cmd, object):
 #        """
 #        ip()
 
-#    def do_debug(self, line):
-#        """
-#        Development tool. Used for view Dyna's intermediate representations.
-#        """
-#        import debug
-#        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
-#            f.write(line)
-#        debug.main(f.name)
+    def do_debug(self, line):
+        """
+        Development tool. Used for view Dyna's intermediate representations.
+        """
+        import debug
+        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
+            f.write(line)
+        debug.main(f.name)
 
 #    def do_run(self, filename):
 #        """
