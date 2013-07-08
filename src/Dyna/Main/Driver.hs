@@ -517,6 +517,7 @@ main = catches (getArgs >>= main_)
   panic d = do
     PP.hPutDoc stderr (panicMsg <> line <> taMsg <> line <> PP.indent 1 d)
     hPutStrLn stderr ""
+    exitFailure
 
   upeMsg :: (IsString s) => s
   upeMsg = "Encountered error in input program:"
