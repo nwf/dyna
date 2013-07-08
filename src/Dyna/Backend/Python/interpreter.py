@@ -174,6 +174,8 @@ class Interpreter(object):
 
         self.files = []
 
+        self._repl = None
+
         # interpretor needs a place for it's temporary files.
         self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
         if tmp.exists():
@@ -507,7 +509,8 @@ class Interpreter(object):
 
     def repl(self):
         import repl
-        repl.REPL(self).cmdloop()
+        self._repl = repl.REPL(self)
+        self._repl.cmdloop()
 
     def do(self, filename, initialize=True):
         """
@@ -664,7 +667,7 @@ def main():
 
     interp = Interpreter()
 
-    crash_handler()
+    crash_handler(interp)
 
     if args.source:
 
