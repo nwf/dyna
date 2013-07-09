@@ -30,6 +30,10 @@ class Term(object):
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
+
+        if self.fn == '->/2':
+            return '%s -> %s' % self.args
+
         fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
         if not self.args:
             return fn
@@ -94,10 +98,11 @@ class Cons(Term):
 #        try:
 #            return cmp(self.aslist, other.aslist)
 #        except AttributeError:
-#            return 
+#            return
 
 
 class _Nil(Term):
+
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
         self.aggregator = NoAggregator
@@ -129,19 +134,3 @@ class _Nil(Term):
 
 
 Nil = _Nil()
-
-
-#class AList(Cons):
-#
-#    def __init__(self, head, tail):
-#
-#        if not (isinstance(tail, AList) or tail is Nil):
-#            raise TypeError('Malformed alist: tail is not an alist')
-#
-#        if not (isinstance(head, Cons) and len(head.aslist) == 2):
-#            raise TypeError('Malformed alist: head is not a pair.')
-#
-#        Cons.__init__(self, head, tail)
-#
-#    def __repr__(self):
-#        return '[%s]' % (', '.join('%s -> %s' % (_repr(k), _repr(v)) for k,v in self.aslist))

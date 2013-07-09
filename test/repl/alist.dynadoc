@@ -1,0 +1,40 @@
+% fun with associative lists
+
+> a = [1 -> "a", 2 -> "b", 3 -> "c", 3 -> "d"].
+|
+| :- backchain findall/2.
+| findall(K,[_|Xs]) := findall(K,Xs).
+| findall(K,[(K -> V)|Xs]) := [V|findall(K,Xs)].
+| findall(_,[]) := [].
+|
+| :- backchain get/2.
+| get(K,[_|Xs]) := get(K,Xs).
+| get(K,[(K -> V)|Xs]) := V.
+| get(_,[]) := null.
+|
+| :- backchain set/3.
+| set(K,V,A) = [K -> V|A].
+
+Changes
+=======
+a = [1 -> a, 2 -> b, 3 -> c, 3 -> d].
+
+> query findall(3, a)
+
+findall(3, a) = ["c", "d"].
+
+> query findall(4, a)
+
+findall(4, a) = [].
+
+> query get(3, a)
+
+get(3, a) = "c".
+
+> query get("three", a)
+
+No results.
+
+> query findall(3, set(3, "three", a))
+
+findall(3, set(3, "three", a)) = ["three", "c", "d"].

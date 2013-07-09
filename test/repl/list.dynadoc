@@ -84,18 +84,23 @@ d(2) = true.
 d(4) = true.
 
 % quote is important! or else we enumerate everything!
-> foo(A) := true for &f(A) in [1,2,&f("a"),3].
+> foo(A) := true for &bar(A) in [1,2,&bar("a"),3].
 |
-| % this one checks if the value of f(A) is in the list, (note: 1 == True, in python).
-| goo(A) := true for f(A) in [1,2,&f("a"),3].
-
+| bar("int") = 1.
+| bar("bool") = true.
+| bar("spaz") = 2.
+|
+| goo(A) := true for bar(A) in [true,2,&bar("a"),3].
 
 Changes
 =======
+bar("bool") = true.
+bar("int") = 1.
+bar("spaz") = 2.
 foo("a") = true.
-goo(1) = true.
-goo([1, 2, 3, [2, 1], f(1)]) = true.
-goo([]) = true.
+goo("bool") = true.
+goo("int") = true.                 % TODO: this should't appear in the results (XREF:bool)
+goo("spaz") = true.
 
 
 % unfortunately 1 == true and 0 == false in python so the following is true
@@ -103,7 +108,7 @@ goo([]) = true.
 
 Changes
 =======
-testbool = true.
+testbool = true.                  % TODO: XREF:bool
 
 
 % fun with set= at bag=
@@ -111,14 +116,15 @@ testbool = true.
 | thingsbag bag= 1.
 | thingsbag bag= 1.
 | thingsbag bag= 2.
+| thingsbag bag= true.            % XREF:bool
 |
 | thingset set= "three".
 | thingset set= 1.
 | thingset set= 1.
+| thingset set= true.            % XREF:bool should appear separately in set,
 | thingset set= 2.
 
 Changes
 =======
-thingsbag = [1, 1, 2, "three"].
+thingsbag = [1, 1, 1, 2, "three"].
 thingset = [1, 2, "three"].
-
