@@ -31,12 +31,12 @@ fcomp:
 .PHONY: clean veryclean
 clean:
 	rm -rf examples/*.dyna.*.plan  \
-           examples/*.dyna.*.planc \
-           examples/*.dyna.plan.py \
-           examples/*.dyna.plan.pyc \
-           examples/*.dyna.*.out \
-           examples/*.dyna.d \
-           examples/*.hist
+	   examples/*.dyna.*.planc \
+	   examples/*.dyna.plan.py \
+	   examples/*.dyna.plan.pyc \
+	   examples/*.dyna.*.out \
+	   examples/*.dyna.d \
+	   examples/*.hist
 	rm -rf test/*/*.out
 	rm -f tags TAGS
 veryclean: clean
@@ -80,7 +80,6 @@ ghcbuild:
 		-o         dist/build/dyna/dyna     \
 		-outputdir dist/build/dyna/dyna-tmp \
 		-main-is Dyna.Main.Driver Dyna.Main.Driver
-	
 	mkdir -p dist/build/dyna-selftests
 	mkdir -p dist/build/dyna-selftests/dyna-selftests-tmp
 	ghc --make -isrc                          \
@@ -105,3 +104,8 @@ profbuild:
 .PHONY: tags TAGS
 tags TAGS:
 	hasktags -b src
+
+coverage:
+	(coverage run run-doctests.py \
+	 ; coverage html --include 'src/*' -d coverage-report \
+	 ; gnome-open coverage-report/index.html)

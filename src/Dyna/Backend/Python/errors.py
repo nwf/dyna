@@ -5,7 +5,9 @@ from config import dotdynadir
 
 
 class DynaCompilerError(Exception):
-    pass
+    def __init__(self, msg, filename):
+        self.filename = filename
+        super(DynaCompilerError, self).__init__(msg)
 
 
 class AggregatorError(Exception):
@@ -45,8 +47,8 @@ def exception_handler(etype, evalue, tb):
     # chart -- because it might be too big to email); input to repl.
     # This should all go into a tarball.
 
-    if crash_handler.interp is not None:
-        crash_handler.interp()
+    for hook in crash_handler.hooks:
+        hook()
 
     print 'FATAL ERROR (%s): %s' % (etype.__name__, evalue)
     print 'Crash log available %s' % crashreport.name
@@ -58,8 +60,8 @@ def crash_handler():
     """
     sys.excepthook = exception_handler
 
-# XXX: global state...
-crash_handler.interp = None
+
+crash_handler.hooks = []
 
 
 def show_traceback(einfo=None):

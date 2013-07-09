@@ -1,6 +1,7 @@
 import re
 from term import Term, Cons, Nil
 from collections import Counter
+from utils import pretty, pretty_print
 
 try:
     from numpy import log, exp, sqrt
@@ -12,6 +13,22 @@ except ImportError:                       # XXX: should probably issue a warning
         return _random() * (b - a) + a
 
 
+def equals(x,y):
+    """
+    My work around for discrepency in bool equality True==1 and False==0.
+
+    >>> equals(True, 1)
+    False
+
+    >>> equals(1, 1.0)
+    True
+    """
+    if isinstance(x, bool) or isinstance(y, bool):
+        return type(x) == type(y) and x == y
+    else:
+        return x == y
+
+
 _range = range
 def range(*x):
     return todyna(_range(*x))
@@ -20,8 +37,7 @@ def split(s, delim='\s+'):
     return todynalist(re.split(delim, s))
 
 def crash():
-    class Crasher(Exception):
-        pass
+    class Crasher(Exception): pass
     raise Crasher('Hey, you asked for it!')
 
 def pycall(name, *args):

@@ -4,6 +4,7 @@ from path import path
 from subprocess import Popen, PIPE
 from config import dynahome, dotdynadir
 from collections import namedtuple
+from cStringIO import StringIO
 
 
 def _repr(x):
@@ -80,10 +81,13 @@ def dynac(f, out, anf=None, compiler_args=()):
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
-        # hide our temporary file's ugly sha1 file names from users.
-        ugly_file_name = dotdynadir + '[a-z0-9/.]+\.dyna\S*'
-        stderr = re.sub(ugly_file_name, '<repl>', stderr)
-        raise DynaCompilerError(stderr)
+        stderr = hide_ugly_filename(stderr)
+        raise DynaCompilerError(stderr, f)
+
+
+def hide_ugly_filename(x, replacement='<repl>'):
+    p = dotdynadir + '[a-z0-9/.]+\.dyna\S*'
+    return re.sub(p, replacement, x)
 
 
 def lexer(term):
@@ -173,6 +177,37 @@ def parse_sexpr(e):
             except IndexError:
                 raise ValueError("Unenclosed subexpression (near %s)" % token)
     return es
+
+
+def pretty_print(t):
+    print pretty(t)
+
+def pretty(t, initialindent=0):
+    "Pretty print tree as a tabbified s-expression."
+    f = StringIO()
+    out = f.write
+    def pp(t, indent=initialindent, indentme=True):
+        if indentme:
+            out(' '*indent)
+        if isinstance(t, basestring):                    # base case
+            return out('%s' % t)
+        if len(t) == 1:
+            if t[0]:
+                pp('%s' % t[0], indent, indentme)
+            return
+        label, children = t[0], t[1:]
+        label = '%s' % label
+        assert isinstance(label, basestring)
+        out('(%s ' % label)
+        n = len(children)
+        for i, child in enumerate(children):
+            pp(child, indent + len(label) + 2, i != 0)   # first child already indented
+            if i != n-1:                                 # no newline after last child
+                out('\n')
+        out(')')
+    pp(t)
+    out('\n')
+    return f.getvalue()
 
 
 class ANF(namedtuple('ANF', 'lines ruleix agg head evals unifs result')):

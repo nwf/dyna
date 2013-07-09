@@ -2,7 +2,7 @@ from collections import defaultdict
 from aggregator import aggregator
 from term import Term
 from utils import _repr
-
+from stdlib import equals
 
 class Chart(object):
 
@@ -80,7 +80,7 @@ class Chart(object):
                     yield term, term.args, term.value
         else:
             for term in candidates:
-                if term.value == val:
+                if equals(term.value, val):
                     yield term, term.args, term.value
 
     def insert(self, args):        # TODO: rename

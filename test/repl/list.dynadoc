@@ -1,0 +1,124 @@
+> x = cons(1, 2).
+
+DynaInitializerException:
+TypeError('Malformed list',) in ininitializer for rule
+    x = cons(1, 2).
+new rule(s) were not added to program.
+
+
+> s set= Y for Y in [3,2,1,[2,1],&f(1)].
+
+Changes
+=======
+s = [1, 2, 3, [2, 1], f(1)].
+
+> foo = 1 in s.
+
+Changes
+=======
+foo = true.
+
+% check comparison (sort order) of list and non-list.
+> f(s). f(1). f([]).
+
+Changes
+=======
+f(1) = true.
+f([1, 2, 3, [2, 1], f(1)]) = true.
+f([]) = true.
+
+% test for empty list
+> query 1 in nil
+
+1 in nil = false.
+
+> nothing set= X for X in [].
+
+
+
+
+> g([1,2]).
+
+Changes
+=======
+g([1, 2]) = true.
+
+> a := [1,2].
+
+Changes
+=======
+a = [1, 2].
+
+> goal(X) := g([1|X]).
+
+Changes
+=======
+goal([2]) = true.
+
+
+% list contains
+> b := &f("a") in [1,2,&f("a"),3].
+| c := 2 in [1,2,3].
+| d := 4 in [1,2,3].
+
+Changes
+=======
+b = true.
+c = true.
+d = false.
+
+
+% iteration of a complex list
+> things set= X for X in [1,[2,2],[3,4]].
+
+Changes
+=======
+things = [1, [2, 2], [3, 4]].
+
+% unpack structure requiring a check
+> d(&X) := true for [X,X] in [1,[2,2],[3,4],[4,4]].
+
+Changes
+=======
+d(2) = true.
+d(4) = true.
+
+% quote is important! or else we enumerate everything!
+> foo(A) := true for &f(A) in [1,2,&f("a"),3].
+|
+| % this one checks if the value of f(A) is in the list, (note: 1 == True, in python).
+| goo(A) := true for f(A) in [1,2,&f("a"),3].
+
+
+Changes
+=======
+foo("a") = true.
+goo(1) = true.
+goo([1, 2, 3, [2, 1], f(1)]) = true.
+goo([]) = true.
+
+
+% unfortunately 1 == true and 0 == false in python so the following is true
+> testbool := true in [1,2].
+
+Changes
+=======
+testbool = true.
+
+
+% fun with set= at bag=
+> thingsbag bag= "three".
+| thingsbag bag= 1.
+| thingsbag bag= 1.
+| thingsbag bag= 2.
+|
+| thingset set= "three".
+| thingset set= 1.
+| thingset set= 1.
+| thingset set= 2.
+
+Changes
+=======
+thingsbag = [1, 1, 2, "three"].
+thingset = [1, 2, "three"].
+
