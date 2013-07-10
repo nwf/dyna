@@ -200,6 +200,10 @@ class Crux(object):
                 return self.get_function(e)
 
             # handle lists
+
+            if e.label == '& nil':
+                return '[]'
+
             if e.label == '& cons':
                 _e = e
                 a = []
