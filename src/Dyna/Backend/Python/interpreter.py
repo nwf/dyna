@@ -74,7 +74,6 @@ from __future__ import division
 import os, sys, imp, argparse
 from collections import defaultdict
 from hashlib import sha1
-from time import time
 from path import path
 
 import load, post
@@ -139,6 +138,7 @@ class Interpreter(object):
         self.rules = ddict(Rule)
         self.error = {}
 
+        self.time_step = 0
         self.files = []
 
         # interpretor needs a place for it's temporary files.
@@ -323,7 +323,8 @@ class Interpreter(object):
                     except (TypeError, ZeroDivisionError):
                         pass
 
-                    self.agenda[head] = time()
+                    self.agenda[head] = self.time_step
+                    self.time_step += 1
 
         return self.go()
 
@@ -470,7 +471,8 @@ class Interpreter(object):
             item.aggregator.dec(val, ruleix, variables)
         else:
             item.aggregator.inc(val, ruleix, variables)
-        self.agenda[item] = time()  # FIFO
+        self.agenda[item] = self.time_step
+        self.time_step += 1
 
     def do(self, filename, initialize=True):
         """
