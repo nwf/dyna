@@ -465,9 +465,9 @@ class REPL(cmd.Cmd, object):
                      |
                      └─ c = true
                         |
-                        └─ |= true
+                        └─ :- true
 
-                           c |= &true.
+                           c :- &true.
 
 
         The trace shows which rules fired and contributed to the value we

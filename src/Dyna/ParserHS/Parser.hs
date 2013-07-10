@@ -465,7 +465,7 @@ rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
             (_ :~ ds) <- try (spanned (char '.') <* lookAhead whiteSpace)
-            return (Rule h "|=" (TFunctor "true" [] :~ ds) :~ (hs <> ds))
+            return (Rule h ":-" (TFunctor "true" [] :~ ds) :~ (hs <> ds))
          , do
             aggr    <- token $ join $ asks dlc_aggrs
             body    <- tfexpr
@@ -537,7 +537,7 @@ pragmaBody :: forall m .
               (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
            => m Pragma
 pragmaBody = token $ choice
-  [ 
+  [
     symbol "backchain" *> parseBackchain
   , symbol "dispos_def" *> parseDisposDefl -- set default dispositions
   , symbol "dispos" *> parseDisposition -- in-place dispositions
@@ -607,7 +607,7 @@ pragmaBody = token $ choice
                return $ POperAdd fx (fromIntegral prec) sym
 
       parseOperDel = POperDel <$> afx
-                         
+
       fixity = choice [ symbol "pre"  *> pure (PFPre, pfx)
                       , symbol "post" *> pure (PFPost, pfx)
                       , symbol "in" *> ((,) <$> (PFIn <$> assoc) <*> pure ifx)

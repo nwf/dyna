@@ -163,13 +163,13 @@ case_list = e @=? (term s)
   e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
         , TFunctor "cons"
-		    [ TFunctor "+"
+                    [ TFunctor "+"
                 [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
                 , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
                 ]
                :~ Span (Columns 3 3) (Columns 6 6) s
-			, TFunctor "nil" [] :~ Span (Columns 7 7) (Columns 7 7) s
-			]
+                        , TFunctor "nil" [] :~ Span (Columns 7 7) (Columns 7 7) s
+                        ]
            :~ Span (Columns 3 3) (Columns 7 7) s
         ]
        :~ Span (Columns 0 0) (Columns 7 7) s
@@ -181,13 +181,13 @@ case_list_bar = e @=? (term s)
   e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
         , TFunctor "cons"
-		    [ TFunctor "+"
+                    [ TFunctor "+"
                 [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
                 , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
                 ]
                :~ Span (Columns 3 3) (Columns 6 6) s
-			, TVar "X" :~ Span (Columns 7 7) (Columns 8 8) s
-			]
+                        , TVar "X" :~ Span (Columns 7 7) (Columns 8 8) s
+                        ]
            :~ Span (Columns 3 3) (Columns 8 8) s
         ]
        :~ Span (Columns 0 0) (Columns 8 8) s
@@ -274,7 +274,7 @@ case_ruleFact = e @=? (progrule sr)
  where
   e  = Rule
        (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
-       "|="
+       ":-"
        (TFunctor "true" [] :~ Span (Columns 4 4) (Columns 5 5) sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
@@ -509,7 +509,7 @@ arbPragma = oneof
   arbAtom = elements [ "f", "+" ]
 
 prop_pragma_roundtrip :: Property
-prop_pragma_roundtrip = 
+prop_pragma_roundtrip =
   forAll arbPragma (\p -> p == unsafeParse (testPragma defDLC)
                       (BU.fromString
                       (flip PP.displayS "" $ PP.renderCompact
