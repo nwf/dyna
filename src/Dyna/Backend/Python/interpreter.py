@@ -4,45 +4,11 @@
 TODO
 ====
 
- - More info in crash handler. (stack trace, repl transcript, cmd-line args,
-   version control info, and dyna source is enough)
-
  - dyna syntax which just gets passed to the backend:
-
-   - running repl commands, loaders, post-procesors
-
-   - hook for python imports? or maybe an arbirary preamble/epilogue.
-
-     :- python "from bar import foo, baz"
-
-   - sheebang?
-
- - vbench: a script which tracks performace over time (= git commits).
-
- - profiler workflow
-
-   kcachegrind
-     $ (PYTHONPATH=src/Dyna/Backend/Python/ pycachegrind src/Dyna/Backend/Python/interpreter.py examples/papa.dyna)
-
-   cProfile + snakeviz
-     $ python -m cProfile -o prof src/Dyna/Backend/Python/interpreter.py examples/force.dyna >/dev/null && snakeviz prof
-
- - unit tests and code coverage.
-
- - doc tests for Dyna code.
 
  - Use Dyna do some more work! think about using Dyna to maintain rules, update
    handlers, and indices (as Jason points out indices are just memoized
    queries).
-
- - Subscriptions:
-   - TODO: users are automatically be subscribed to errors.
-   - everything
-   - functor
-   - ignore variable
-   - show diffs
-
- - TODO: True and 1 are equivalent. This sometimes leads to strange behavior.
 
 
 FASTER

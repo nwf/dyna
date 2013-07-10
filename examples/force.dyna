@@ -29,17 +29,17 @@ x(U,T) += a * forceX(U,T-1).
 y(U,T) += a * forceY(U,T-1).
 
 % make graph symmetric.
-edge(A,B) := 1 for edge(B,A).
+edge(A,B) := edge(B,A).
 
 % collect nodes.
-node(U) := true for edge(U,_).
-node(U) := true for edge(_,U).
+node(U) :- true for _ is edge(U,_).
+node(U) :- true for _ is edge(_,U).
 
 % pack x and y into a tuple
 pos(U,T) := tuple(x(U, T), y(U, T)).
 
 % visualization
-frame(T, &text(Name, pos(Name, T))) := true for _ is node(Name).
+frame(T, &text(Name, pos(Name, T))) := true for node(Name).
 frame(T, &line(pos(U, T), pos(V, T))) := true for _ is edge(U,V).
 
 % declare some edges
