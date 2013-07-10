@@ -30,28 +30,32 @@ class Term(object):
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
+
+        if self.fn == '->/2':
+            return '%s -> %s' % self.args
+
         fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
         if not self.args:
             return fn
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
 
-    def __getstate__(self):
-        return (self.fn, self.args, self.value, self.aggregator)
+#    def __getstate__(self):
+#        return (self.fn, self.args, self.value, self.aggregator)
 
-    def __setstate__(self, state):
-        (self.fn, self.args, self.value, self.aggregator) = state
+#    def __setstate__(self, state):
+#        (self.fn, self.args, self.value, self.aggregator) = state
 
-    def __add__(self, _):
-        raise TypeError("Can't subtract terms.")
+#    def __add__(self, _):
+#        raise TypeError("Can't subtract terms.")
 
-    def __sub__(self, _):
-        raise TypeError("Can't add terms.")
+#    def __sub__(self, _):
+#        raise TypeError("Can't add terms.")
 
-    def __mul__(self, _):
-        raise TypeError("Can't multiply terms.")
+#    def __mul__(self, _):
+#        raise TypeError("Can't multiply terms.")
 
-    def __div__(self, _):
-        raise TypeError("Can't divide terms.")
+#    def __div__(self, _):
+#        raise TypeError("Can't divide terms.")
 
 
 class Cons(Term):
@@ -90,14 +94,15 @@ class Cons(Term):
     def __hash__(self):
         return hash(tuple(self.aslist))
 
-    def __cmp__(self, other):
-        try:
-            return cmp(self.aslist, other.aslist)
-        except AttributeError:
-            return 1
+#    def __cmp__(self, other):
+#        try:
+#            return cmp(self.aslist, other.aslist)
+#        except AttributeError:
+#            return
 
 
 class _Nil(Term):
+
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
         self.aggregator = NoAggregator
@@ -121,21 +126,11 @@ class _Nil(Term):
         except AttributeError:
             return False
 
+#    def __cmp__(self, other):
+#        try:
+#            return cmp(self.aslist, other.aslist)
+#        except AttributeError:
+#            return 1
+
 
 Nil = _Nil()
-
-
-#class AList(Cons):
-#
-#    def __init__(self, head, tail):
-#
-#        if not (isinstance(tail, AList) or tail is Nil):
-#            raise TypeError('Malformed alist: tail is not an alist')
-#
-#        if not (isinstance(head, Cons) and len(head.aslist) == 2):
-#            raise TypeError('Malformed alist: head is not a pair.')
-#
-#        Cons.__init__(self, head, tail)
-#
-#    def __repr__(self):
-#        return '[%s]' % (', '.join('%s -> %s' % (_repr(k), _repr(v)) for k,v in self.aslist))

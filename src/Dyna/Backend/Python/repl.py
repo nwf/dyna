@@ -8,7 +8,7 @@ to help.
 """
 
 import os, cmd, readline
-from utils import dynac, ip, lexer, subst, drepr, _repr, get_module
+from utils import ip, lexer, subst, drepr, _repr, get_module
 from stdlib import topython, todyna
 from errors import DynaCompilerError, DynaInitializerException
 from config import dotdynadir
@@ -29,6 +29,7 @@ class REPL(cmd.Cmd, object):
                 f.write('')
         readline.read_history_file(hist)
         self.lineno = 0
+        self.lines = []
 
         # create help routines based on doc string.
         for x, v in REPL.__dict__.iteritems():
@@ -111,6 +112,7 @@ class REPL(cmd.Cmd, object):
         been interpreted. If you want to modify the input line before execution
         (for example, variable substitution) do it here.
         """
+        self.lines.append(line)
         return line
 
     def postcmd(self, stop, line):
@@ -127,34 +129,30 @@ class REPL(cmd.Cmd, object):
         """Do nothing on empty input line"""
         pass
 
-#    def do_ip(self, _):
-#        """
-#        Development tool. Jump into an interactive python shell.
-#        """
-#        ip()
+    def do_ip(self, _):
+        """
+        Development tool. Jump into an interactive python shell.
+        """
+        ip()
 
-#    def do_debug(self, line):
-#        """
-#        Development tool. Used for view Dyna's intermediate representations.
-#        """
-#        import debug
-#        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
-#            f.write(line)
-#        debug.main(f.name)
+    def do_debug(self, line):
+        """
+        Development tool. Used for view Dyna's intermediate representations.
+        """
+        import debug
+        with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
+            f.write(line)
+        debug.main(f.name)
 
-#    def do_run(self, filename):
-#        """
-#        Load dyna rules from `filename`.
-#
-#        > run examples/papa.dyna
-#
-#        """
-#        try:
-#            changed = self.interp.do(self.interp.dynac(filename))
-#        except DynaCompilerError as e:
-#            print e
-#        else:
-#            self._changed(changed)
+    def do_dynac(self, line):
+        try:
+            src = self.interp.dynac_code(line)   # might raise DynaCompilerError
+        except DynaCompilerError as e:
+            src = e.filename
+            print e
+        finally:
+            print 'opening file %s' % src
+            os.system('emacs -nw %s' % src)
 
     def _query(self, q):
 
@@ -261,7 +259,7 @@ class REPL(cmd.Cmd, object):
             print "ERROR: Line doesn't end with period."
             return
         try:
-            src = self.interp.dynac_code(line)   # might raise DynaCompilerError
+            src = self.interp.dynac_code(line + '   %% repl line %s' % self.lineno)
             changed = self.interp.do(src)
 
         except (DynaInitializerException, DynaCompilerError) as e:
@@ -288,22 +286,6 @@ class REPL(cmd.Cmd, object):
         for x in sorted(changed):
             print '%s = %s.' % (x, _repr(x.value))
         print
-
-#    def _changed_subscriptions(self, changed):
-#
-#        # TODO: this doesn't show changes - it redumps everything.
-#
-#        if not changed:
-#            return
-#        for x, _ in sorted(changed.items()):
-#            if x.fn == '$subscribed/2':
-#                [i, q] = x.args
-#                if x.value:
-#                    print '%s: %s' % (i, q)
-#                    for result in x.value:
-#                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
-#        print
-#        self.interp.dump_errors()
 
     def cmdloop(self, _=None):
         try:
@@ -352,6 +334,22 @@ class REPL(cmd.Cmd, object):
 #                for result in results:
 #                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
 #        print
+
+#    def _changed_subscriptions(self, changed):
+#
+#        # TODO: this doesn't show changes - it redumps everything.
+#
+#        if not changed:
+#            return
+#        for x, _ in sorted(changed.items()):
+#            if x.fn == '$subscribed/2':
+#                [i, q] = x.args
+#                if x.value:
+#                    print '%s: %s' % (i, q)
+#                    for result in x.value:
+#                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
+#        print
+#        self.interp.dump_errors()
 
     def do_help(self, line):
         mod = line.split()

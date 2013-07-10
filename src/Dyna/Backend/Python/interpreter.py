@@ -4,45 +4,11 @@
 TODO
 ====
 
- - More info in crash handler. (stack trace, repl transcript, cmd-line args,
-   version control info, and dyna source is enough)
-
  - dyna syntax which just gets passed to the backend:
-
-   - running repl commands, loaders, post-procesors
-
-   - hook for python imports? or maybe an arbirary preamble/epilogue.
-
-     :- python "from bar import foo, baz"
-
-   - sheebang?
-
- - vbench: a script which tracks performace over time (= git commits).
-
- - profiler workflow
-
-   kcachegrind
-     $ (PYTHONPATH=src/Dyna/Backend/Python/ pycachegrind src/Dyna/Backend/Python/interpreter.py examples/papa.dyna)
-
-   cProfile + snakeviz
-     $ python -m cProfile -o prof src/Dyna/Backend/Python/interpreter.py examples/force.dyna >/dev/null && snakeviz prof
-
- - unit tests and code coverage.
-
- - doc tests for Dyna code.
 
  - Use Dyna do some more work! think about using Dyna to maintain rules, update
    handlers, and indices (as Jason points out indices are just memoized
    queries).
-
- - Subscriptions:
-   - TODO: users are automatically be subscribed to errors.
-   - everything
-   - functor
-   - ignore variable
-   - show diffs
-
- - TODO: True and 1 are equivalent. This sometimes leads to strange behavior.
 
 
 FASTER
@@ -116,7 +82,7 @@ import load, post
 from term import Term, Cons, Nil
 from chart import Chart
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac, read_anf, strip_comments, _repr
+    ddict, dynac, read_anf, strip_comments, _repr, hide_ugly_filename
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -132,7 +98,8 @@ class Rule(object):
         self.query = None
     @property
     def span(self):
-        return parse_attrs(self.init or self.query)['Span']
+        span = parse_attrs(self.init or self.query)['Span']
+        return hide_ugly_filename(span)
     @property
     def src(self):
         return strip_comments(parse_attrs(self.init or self.query)['rule'])
@@ -173,8 +140,6 @@ class Interpreter(object):
         self.error = {}
 
         self.files = []
-
-        self._repl = None
 
         # interpretor needs a place for it's temporary files.
         self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
@@ -256,7 +221,7 @@ class Interpreter(object):
                     E[h.rule][type(e)].append((e, item, val))
 
         # aggregation errors
-        for r in I:
+        for r in sorted(I, key=lambda r: r.index):
             print >> out, 'Error(s) aggregating %s:' % r
             for etype in I[r]:
                 print >> out, '  %s:' % etype.__name__
@@ -268,7 +233,7 @@ class Interpreter(object):
                 print >> out
 
         # errors pertaining to rules
-        for r in E:
+        for r in sorted(E, key=lambda r: r.index):
             print >> out, 'Error(s) in rule:', r.span
             print >> out
             for line in r.src.split('\n'):
@@ -507,11 +472,6 @@ class Interpreter(object):
             item.aggregator.inc(val, ruleix, variables)
         self.agenda[item] = time()  # FIFO
 
-    def repl(self):
-        import repl
-        self._repl = repl.REPL(self)
-        self._repl.cmdloop()
-
     def do(self, filename, initialize=True):
         """
         Compile, load, and execute new dyna rules.
@@ -598,12 +558,10 @@ class Interpreter(object):
     def dynac(self, filename):
         filename = path(filename)
         self.files.append(filename)
-
         out = self.tmp / filename.read_hexhash('sha1') + '.plan.py'
 #        out = filename + '.plan.py'
-
-        dynac(filename, out)
         self.files.append(out)
+        dynac(filename, out)
         return out
 
     def dynac_code(self, code):
@@ -631,14 +589,11 @@ def peel(fn, item):
     functor/arity, `fn`. Returns the arguments of term as a tuple of intern idxs
     and constants (possibly an empty tuple).
     """
-
-    if fn == "true/0" :
-#        assert item is True
-        assert bool(item)
+    if fn == "true/0":
+        assert item is True
         return
-    if fn == "false/0" :
-#        assert item is False
-        assert not bool(item)
+    if fn == "false/0":
+        assert item is False
         return
     assert isinstance(item, Term)
     assert item.fn == fn
@@ -667,7 +622,7 @@ def main():
 
     interp = Interpreter()
 
-    crash_handler(interp)
+    crash_handler()
 
     if args.source:
 
@@ -681,9 +636,6 @@ def main():
             args.source.copy(plan)
 
         else:
-            #plan = args.source + '.plan.py'
-            #interp.dynac(args.source, plan)
-
             try:
                 plan = interp.dynac(args.source)
             except DynaCompilerError as e:
@@ -724,7 +676,18 @@ def main():
         interp.dump_charts(args.output)      # should be a post-processor
 
     if args.interactive or not args.source:
-        interp.repl()
+        from repl import REPL
+        repl = REPL(interp)
+
+        def repl_crash():
+            # all files the interpreter generated
+            with file(dotdynadir / 'crash-repl.log', 'wb') as f:
+                for line in repl.lines:
+                    print >> f, line
+
+        crash_handler.hooks.append(repl_crash)
+
+        repl.cmdloop()
 
 
 if __name__ == '__main__':

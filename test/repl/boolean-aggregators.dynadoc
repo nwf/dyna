@@ -72,6 +72,12 @@ Changes
 b = true.
 c = true.
 
+
+
+> f(1,2). f(2,2).
+
+*ignore*
+
 > sol
 
 Solution
@@ -79,3 +85,8 @@ Solution
 a.
 b = true.
 c = true.
+
+f/2
+===
+f(1,2).
+f(2,2).

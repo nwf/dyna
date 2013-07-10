@@ -5,7 +5,9 @@ from config import dotdynadir
 
 
 class DynaCompilerError(Exception):
-    pass
+    def __init__(self, msg, filename):
+        self.filename = filename
+        super(DynaCompilerError, self).__init__(msg)
 
 
 class AggregatorError(Exception):
@@ -27,13 +29,15 @@ class DynaInitializerException(Exception):
 
 
 
-def crash_handler(interp):
+# TODO: we should package up all relevant state including compiler version,
+# codegen output, interpreter state (possibly without the chart -- because it
+# might be too big to email); input to repl.  This should all go into a tarball.
+def crash_handler():
     """
     Use our custom exception handler for handling uncaught exceptions.
     """
 
     def exception_handler(etype, evalue, tb):
-
         print 'FATAL ERROR (%s): %s' % (etype.__name__, evalue)
 
         # once for the log file.
@@ -46,31 +50,18 @@ def crash_handler(interp):
                           check_cache=None)
             h(etype, evalue, tb)
 
-
-            # Dump the entirety of readline's history.  I do not think that
-            # we can easily distinguish what is this session or a different
-            # one, but this is more useful than nothing.
-            #
-            # XXX Well, that'd be great, except that it doesn't work.
-
-            if interp is not None:
-                if interp._repl is not None:
-                    crashreport.write("REPL history:\n")
-                    for ix in xrange(1,readline.get_current_history_length()):
-                        crashreport.write("%d: %s\n" \
-                            % (ix,readline.get_history_entry(ix)))
-
-                # TODO: we should package up all relevant state including
-                # compiler version, codegen output, interpreter state
-                # (possibly without the chart -- because it might be too big
-                # to email); input to repl.  This should all go into a
-                # tarball.
-
         show_traceback((etype, evalue, tb))
+
+        for hook in crash_handler.hooks:
+            hook()
 
         print 'Crash log available %s' % crashreport.name
 
     sys.excepthook = exception_handler
+
+crash_handler.hooks = []
+
+
 
 def show_traceback(einfo=None):
     if not einfo:

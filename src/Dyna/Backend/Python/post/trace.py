@@ -178,8 +178,8 @@ class Crux(object):
             fn_args = [self.get_function(y) for y in x.body]
 
             # infix
-            if (not label.isalpha() and not label.startswith('&') and len(fn_args) == 2) \
-                    or label in ('in', 'and', 'or'):
+            if (not label[0].isalpha() and label[0] not in ('$','&') and len(fn_args) == 2) \
+                    or label in ('in', 'and', 'or', 'with_key', '->', 'is'):
                 [a,b] = fn_args
                 return '(%s %s %s)' % (a, label, b)
             return '%s(%s)' % (label, ', '.join(fn_args))

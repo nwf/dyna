@@ -148,25 +148,25 @@ class min_equals(BAggregator):
         if len(s):
             return min(s)
 
-class maxwithkey_equals(max_equals):
-    def fold(self):
-        m = max_equals.fold(self)
-        self.key = None
-        if m is not None:
-            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
-                raise AggregatorError("argmax expects a pair of values")
-            self.key = m.aslist[1]
-            return m.aslist[0]
+#class maxwithkey_equals(max_equals):
+#    def fold(self):
+#        m = max_equals.fold(self)
+#        self.key = None
+#        if m is not None:
+#            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
+#                raise AggregatorError("argmax expects a pair of values")
+#            self.key = m.aslist[1]
+#            return m.aslist[0]
 
-class minwithkey_equals(min_equals):
-    def fold(self):
-        m = min_equals.fold(self)
-        self.key = None
-        if m is not None:
-            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
-                raise AggregatorError("argmin expects a pair of values")
-            self.key = m.aslist[1]
-            return m.aslist[0]
+#class minwithkey_equals(min_equals):
+#    def fold(self):
+#        m = min_equals.fold(self)
+#        self.key = None
+#        if m is not None:
+#            if not hasattr(m, 'aslist') or len(m.aslist) != 2:
+#                raise AggregatorError("argmin expects a pair of values")
+#            self.key = m.aslist[1]
+#            return m.aslist[0]
 
 
 class plus_equals(BAggregator):
@@ -181,18 +181,17 @@ class times_equals(BAggregator):
         if len(s):
             return reduce(operator.mul, s)
 
-class and_equals(BAggregator):
-    def fold(self):
-        s = [k for k, m in self.iteritems() if m > 0]
-        if len(s):
-            return reduce(lambda x,y: x and y, s)
+#class and_equals(BAggregator):
+#    def fold(self):
+#        s = [k for k, m in self.iteritems() if m > 0]
+#        if len(s):
+#            return reduce(lambda x,y: x and y, s)
 
-class or_equals(BAggregator):
-    def fold(self):
-        s = [k for k, m in self.iteritems() if m > 0]
-        if len(s):
-            return reduce(lambda x,y: x or y, s)
-
+#class or_equals(BAggregator):
+#    def fold(self):
+#        s = [k for k, m in self.iteritems() if m > 0]
+#        if len(s):
+#            return reduce(lambda x,y: x or y, s)
 
 class boolean_or_equals(BAggregator):
     def fold(self):
@@ -232,8 +231,6 @@ defs = {
     'min=': min_equals,
     '+=': plus_equals,
     '*=': times_equals,
-    'and=': and_equals,
-    'or=': or_equals,
     '&=': boolean_and_equals,
     '|=': boolean_or_equals,
     ':-': boolean_or_equals,

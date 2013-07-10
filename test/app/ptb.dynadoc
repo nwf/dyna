@@ -107,7 +107,7 @@
 > % a strange way to get back sentences as lists
 | sentence(S, I) =
 |   T is b(tree(S)),
-|   I in pycall("range", 0, numwords(T)),
+|   I in range(0, numwords(T)),
 |   word(I, T).
 |
 | slen(S) max= _  is sentence(S, I), I.
@@ -152,3 +152,5 @@ ntrees = 23.
 > query errors(S)
 errors(12) = ["(ROOT (S (NP Laura) (VP (VP (V (V say) -s) (SBAR that (S (NP George) (VP (Modal might) (VP (V sleep)))))) (PP (P on) (NP (Det the) (N floor))))) !)", "(ROOT (S (NP Laura) (VP (V (V say) -s) (SBAR that (S (NP George) (VP (VP (Modal might) (VP (V sleep))) (PP (P on) (NP (Det the) (N floor)))))))) !)"].
 errors(21) = ["(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))))) (@VP and (VP (VP (V (V sleep) -ed)) (PP (P on) (NP (Det the) (N floor))))))) .)", "(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) (@VP and (VP (V (V sleep) -ed)))))) (PP (P on) (NP (Det the) (N floor))))) .)"].
+
+%> *resume*

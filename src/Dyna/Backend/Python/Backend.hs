@@ -51,7 +51,7 @@ aggrs :: S.Set String
 aggrs = S.fromList
   [ "max=" , "min="
   , "+=" , "*="
-  , "and=" , "or=" , "&=" , "|="
+  , "&=" , "|="
   , ":-"
   , "="
   , "majority=" , "mean="
@@ -176,12 +176,14 @@ constants = go
   go ("int",_)     = Just $ PDBS $ call "int" []
   go ("pycall",_)  = Just $ PDBS $ call "pycall" []
 
+  go ("range",_)  = Just $ PDBS $ call "range" []
+
   go ("in",2)    = Just $ PDBS $ call "in_list" []
 
   go ("<=",2)    = Just $ PDBS $ infixOp "<="
   go ("<",2)     = Just $ PDBS $ infixOp "<"
-  go ("=",2)     = Just $ PDBS $ infixOp "=="
-  go ("==",2)    = Just $ PDBS $ infixOp "=="
+  go ("=",2)     = Just $ PDBS $ call "equals" []
+  go ("==",2)    = Just $ PDBS $ call "equals" []
   go (">=",2)    = Just $ PDBS $ infixOp ">="
   go (">",2)     = Just $ PDBS $ infixOp ">"
   go ("!=",2)    = Just $ PDBS $ infixOp "!="
@@ -250,10 +252,8 @@ piterate vs = if length vs == 0 then "_"
 pdope_ :: S.Set DFunctAr -> DOpAMine PyDopeBS -> State Int (Doc e)
 pdope_ _ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
 pdope_ _ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
-pdope_ _ (OPCheq v val) = return $ "if" <+> pretty v <+> "!="
-                                      <+> pretty val <> ": continue"
-pdope_ _ (OPCkne v val) = return $ "if" <+> pretty v <+> "=="
-                                      <+> pretty val <> ": continue"
+pdope_ _ (OPCheq v val) = return $ "if not equals(" <> pretty v <> ", " <> pretty val <> "): continue"
+pdope_ _ (OPCkne v val) = return $ "if equals(" <> pretty v <> ", " <> pretty val <> "): continue"
 pdope_ _ (OPPeel vs i f _) = return $
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs

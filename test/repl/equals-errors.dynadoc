@@ -1,36 +1,41 @@
 
-:- a = 2.
-=============
-a := 2
+> a = 2.
 
+Changes
+=======
+a = 2.
 
 % It's ok to assign 2 again.
-
-:- a = 2.
-
+> a = 2.
 
 % but you can't set it to a different value, such as 1.
+> a = 1.
 
-:- a = 1.
-=============
-a := $error
+Changes
+=======
+a = $error.
 
-:- sol
+> sol
 
 Solution
 ========
-a => $error.
-
+a = $error.
 
 Errors
 ======
-because a is "failed to aggregate item `a` because `=` got conflicting values [1, 2]":
+Error(s) aggregating a/0:
+  AggregatorError:
+    `a`: `=` got conflicting values [1, 2]
 
 
-:- retract_rule 2
+> retract_rule 2
 
-:- sol
+Changes
+=======
+a = 2.
+
+> sol
 
 Solution
 ========
-a => 2.
+a = 2.

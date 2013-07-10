@@ -97,3 +97,17 @@ bar(10,10) = 220
    └─ foo(10) = 11
       |
       └─ continue as before (shared structure)
+
+
+> x = [1,2,3].
+
+Changes
+=======
+x = [1, 2, 3].
+
+> trace x
+
+x = [1, 2, 3]
+|
+└─ = [1, 2, 3]
+   x = [1, 2, 3].
