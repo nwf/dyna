@@ -50,22 +50,23 @@ _tNumeric = TBase . TNumeric
 
 defDLC :: DLCfg
 defDLC = DLC (mkEOT defOperSpec True) genericAggregators
--- quasiDLC :: DLCfg
--- quasiDLC = DLC (mkEOT defOperSpec False) genericAggregators
+strictDefDLC :: DLCfg
+strictDefDLC = DLC (mkEOT defOperSpec False) genericAggregators
 
-term :: ByteString -> Spanned Term
-term = unsafeParse (testTerm defDLC <* eof)
+genericterm, strictterm :: ByteString -> Spanned Term
+genericterm = unsafeParse (testTerm defDLC <* eof)
+strictterm = unsafeParse (testTerm strictDefDLC <* eof)
 
 case_basicAtom :: Assertion
-case_basicAtom = e @=? (term "foo")
+case_basicAtom = e @=? (strictterm "foo")
  where e = TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 3 3) "foo"
 
 case_basicAtomTWS :: Assertion
-case_basicAtomTWS = e @=? (term "foo ")
+case_basicAtomTWS = e @=? (strictterm "foo ")
  where e =  TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 4 4) "foo "
 
 case_basicFunctor :: Assertion
-case_basicFunctor = e @=? (term sfb)
+case_basicFunctor = e @=? (strictterm sfb)
  where
   e =  TFunctor "foo"
          [TFunctor "bar" [] :~ Span (Columns 4 4) (Columns 7 7) sfb
@@ -76,7 +77,7 @@ case_basicFunctor = e @=? (term sfb)
   sfb = "foo(bar)"
 
 case_dollarFunctor :: Assertion
-case_dollarFunctor = e @=? (term sfb)
+case_dollarFunctor = e @=? (strictterm sfb)
  where
   e =  TFunctor "$foo"
          [TFunctor "bar" [] :~ Span (Columns 5 5) (Columns 8 8) sfb
@@ -87,7 +88,7 @@ case_dollarFunctor = e @=? (term sfb)
   sfb = "$foo(bar)"
 
 case_nestedFunctorsWithArgs :: Assertion
-case_nestedFunctorsWithArgs = e @=? (term st)
+case_nestedFunctorsWithArgs = e @=? (strictterm st)
  where
   e = TFunctor "foo"
         [TFunctor "bar" [] :~ Span (Columns 4 4) (Columns 7 7) st
@@ -105,7 +106,7 @@ case_nestedFunctorsWithArgs = e @=? (term st)
   st = "foo(bar,X,bif(),baz(quux,Y))"
 
 case_basicFunctorComment :: Assertion
-case_basicFunctorComment = e @=? (term sfb)
+case_basicFunctorComment = e @=? (strictterm sfb)
  where
   e =  TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 8 8) sfb
 
@@ -113,7 +114,7 @@ case_basicFunctorComment = e @=? (term sfb)
   sfb = "foo %xxx"
 
 case_basicFunctorNLComment :: Assertion
-case_basicFunctorNLComment = e @=? (term sfb)
+case_basicFunctorNLComment = e @=? (strictterm sfb)
  where
   e =  TFunctor "foo"
          [_tNumeric (Left 1) :~ Span (Lines 1 0 9 0) (Lines 1 1 10 1) "1,2\n"
@@ -125,7 +126,7 @@ case_basicFunctorNLComment = e @=? (term sfb)
   sfb = "foo(%xxx\n1,2\n)"
 
 case_basicFunctorTWS :: Assertion
-case_basicFunctorTWS = e @=? (term sfb)
+case_basicFunctorTWS = e @=? (strictterm sfb)
  where
   e = TFunctor "foo"
        [TFunctor "bar" [] :~ Span (Columns 5 5) (Columns 9 9) sfb
@@ -135,7 +136,7 @@ case_basicFunctorTWS = e @=? (term sfb)
   sfb = "foo (bar )"
 
 case_basicFunctorNL :: Assertion
-case_basicFunctorNL = e @=? (term sfb)
+case_basicFunctorNL = e @=? (strictterm sfb)
  where
   e = TFunctor "foo"
        [TFunctor "bar" [] :~ Span (Lines 1 1 5 1) (Lines 1 5 9 5) "(bar )"
@@ -145,7 +146,7 @@ case_basicFunctorNL = e @=? (term sfb)
   sfb = "foo\n(bar )"
 
 case_colonFunctor :: Assertion
-case_colonFunctor = e @=? (term pvv)
+case_colonFunctor = e @=? (genericterm pvv)
  where
   e = TFunctor "possible"
         [TFunctor ":"
@@ -157,37 +158,62 @@ case_colonFunctor = e @=? (term pvv)
        :~ Span (Columns 0 0) (Columns 17 17) pvv
   pvv = "possible(Var:Val)"
 
+------------------------------------------------------------------------}}}
+-- Expressions                                                          {{{
+
+-- Regression for github nwf/dyna#45
+case_operQuote :: Assertion
+case_operQuote = e @=? (strictterm s)
+ where
+  e = TFunctor "!="
+        [TFunctor "a" [] :~ Span (Columns 1 1) (Columns 3 3) s
+        ,TFunctor "&"
+           [TFunctor "b" [] :~ Span (Columns 7 7) (Columns 8 8) s
+           ]
+          :~ Span (Columns 6 6) (Columns 8 8) s
+        ]
+       :~ Span (Columns 1 1) (Columns 8 8) s
+  s = "(a != &b)"
+
+
+case_failIncompleteExpr :: Assertion
+case_failIncompleteExpr = checkParseFail (testTerm defDLC) "foo +"
+  (\s -> take 18 s @=? "(interactive):1:5:")
+
+------------------------------------------------------------------------}}}
+-- List handling                                                        {{{
+
 case_list :: Assertion
-case_list = e @=? (term s)
+case_list = e @=? (strictterm s)
  where
   e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
         , TFunctor "cons"
-                    [ TFunctor "+"
+            [ TFunctor "+"
                 [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
                 , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
                 ]
                :~ Span (Columns 3 3) (Columns 6 6) s
-                        , TFunctor "nil" [] :~ Span (Columns 7 7) (Columns 7 7) s
-                        ]
+            , TFunctor "nil" [] :~ Span (Columns 7 7) (Columns 7 7) s
+            ]
            :~ Span (Columns 3 3) (Columns 7 7) s
         ]
        :~ Span (Columns 0 0) (Columns 7 7) s
   s = "[1,2+3]"
 
 case_list_bar :: Assertion
-case_list_bar = e @=? (term s)
+case_list_bar = e @=? (strictterm s)
  where
   e = TFunctor "cons"
         [ _tNumeric (Left 1) :~ Span (Columns 1 1) (Columns 2 2) s
         , TFunctor "cons"
-                    [ TFunctor "+"
+            [ TFunctor "+"
                 [ _tNumeric (Left 2) :~ Span (Columns 3 3) (Columns 4 4) s
                 , _tNumeric (Left 3) :~ Span (Columns 5 5) (Columns 6 6) s
                 ]
                :~ Span (Columns 3 3) (Columns 6 6) s
-                        , TVar "X" :~ Span (Columns 7 7) (Columns 8 8) s
-                        ]
+            , TVar "X" :~ Span (Columns 7 7) (Columns 8 8) s
+            ]
            :~ Span (Columns 3 3) (Columns 8 8) s
         ]
        :~ Span (Columns 0 0) (Columns 8 8) s
@@ -202,15 +228,11 @@ case_list_bar = e @=? (term s)
 --          ] :~ Span (Columns 0 0) (Columns 9 9) gs
 --   gs = "gensym(*)"
 
-case_failIncompleteExpr :: Assertion
-case_failIncompleteExpr = checkParseFail (testTerm defDLC) "foo +"
-  (\s -> take 18 s @=? "(interactive):1:5:")
-
 ------------------------------------------------------------------------}}}
 -- Annotations                                                          {{{
 
 case_tyAnnot :: Assertion
-case_tyAnnot = e @=? (term fintx)
+case_tyAnnot = e @=? (strictterm fintx)
  where
   e = TFunctor "f" [TAnnot (AnnType $ TFunctor "int" []
                                      :~ Span (Columns 3 3) (Columns 7 7) fintx)

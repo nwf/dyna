@@ -114,8 +114,8 @@ mkEOT s0 f0 = EOT $ addFailSafe $ interpSpec M.empty $ M.toList s0
   interpret PFPost   = Postfix      . uf . interpCore
 
   -- Make operators use the longest match
-  interpCore s = try (spanned (bsf (symbol s))
-                      <* notFollowedBy (oneOfSet usualpunct))
+  interpCore s = try $ spanned $ token
+                 (bsf (string s) <* notFollowedBy (oneOfSet usualpunct))
 
   addFailSafe = if f0 then (++ failSafe) else id
 
