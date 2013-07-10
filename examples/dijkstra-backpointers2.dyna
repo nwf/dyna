@@ -1,16 +1,14 @@
 % Single source shortest path with optimal path extraction.
+% This version is briefer but possibly less efficient.
 
 % Cost of the optimal path from start to each node.  
-path(start) min= 0                   with_key [].
-path(B)     min= path(A) + edge(A,B) with_key A.
+% In each case, the associated key is a reversed version of the path itself.
+path(start) min= 0                   with_key [start].
+path(B)     min= path(A) + edge(A,B) with_key P for P is append($key(path(A)),B).
 
 % The cost of the optimal path to the end node, and that path itself.
 goal        = path(end).
-optimalpath = reverse(bestpath(end)).
-
-% extract cheapest path by following backpointers from each vertex.
-bestpath(V) := [V | bestpath($key(path(V)))].
-bestpath(start) := [start].
+optimalpath = $key(path(end)).
 
 % expensive path
 edge("a","b") := 1.
@@ -28,9 +26,6 @@ end := "d".
 
 % ---------------------------------------
 % list utilities
-:- backchain reverse/1.
-reverse([]) = [].
-reverse([X|Xs]) = append(reverse(Xs), X).
 
 :- backchain append/2.
 append([], Y) = [Y].
