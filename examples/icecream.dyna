@@ -1,0 +1,51 @@
+% Ice cream example matching the spreadsheet.
+% Should be used with hmm.dyna.
+
+% initial emission probabilities
+p_e("C",1) := 0.7.   p_e("H",1) := 0.1.
+p_e("C",2) := 0.2.   p_e("H",2) := 0.2.
+p_e("C",3) := 0.1.   p_e("H",3) := 0.7.
+
+% initial transition probabilities
+p_t("C","C") := 0.8.   p_t("H","C") := 0.1.   p_t(&start,"C") := 0.5.
+p_t("C","H") := 0.1.   p_t("H","H") := 0.8.   p_t(&start,"H") := 0.5.
+p_t("C",&stop) := 0.1. p_t("H",&stop) := 0.1. p_t(&start,&stop) := 0.
+
+% word sequence: number of ice creams on each day.
+
+word(1) := 2.  
+word(2) := 3.
+word(3) := 3.
+word(4) := 2.
+word(5) := 3.
+word(6) := 2.
+word(7) := 3.
+word(8) := 2.
+word(9) := 2.
+word(10) := 3.
+word(11) := 1.
+word(12) := 3.
+word(13) := 3.
+word(14) := 1.
+word(15) := 1.
+word(16) := 1.
+word(17) := 2.
+word(18) := 1.
+word(19) := 1.
+word(20) := 1.
+word(21) := 3.
+word(22) := 1.
+word(23) := 2.
+word(24) := 1.
+word(25) := 1.
+word(26) := 1.
+word(27) := 2.
+word(28) := 3.
+word(29) := 3.
+word(30) := 2.
+word(31) := 3.
+word(32) := 2.
+word(33) := 2.
+
+
+
