@@ -78,7 +78,7 @@ from path import path
 
 import load, post
 
-from term import Term, Cons, Nil
+from term import Term, Cons, Nil, MapsTo
 from chart import Chart
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
     ddict, dynac, read_anf, strip_comments, _repr, hide_ugly_filename
@@ -272,6 +272,8 @@ class Interpreter(object):
             return Cons(*args)
         if fn == 'nil/0':
             return Nil
+        if fn == '->/2':
+            return MapsTo(*args)
 
         if fn == '$key/1':
             self.new_fn(fn, '=')

@@ -1,5 +1,5 @@
 import re
-from term import Term, Cons, Nil
+from term import Term, Cons, Nil, MapsTo
 from collections import Counter
 from utils import pretty, pretty_print
 
@@ -77,7 +77,7 @@ def todyna(x):
         #for k,v in x.items():
         #    c = AList(todyna([k,v]), c)
         #return c
-        return todyna(x.items())
+        return todyna([MapsTo(k,v) for k,v in x.items()])
 
     elif isinstance(x, (list, tuple)):
         c = Nil

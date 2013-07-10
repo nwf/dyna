@@ -31,9 +31,6 @@ class Term(object):
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
 
-        if self.fn == '->/2':
-            return '%s -> %s' % self.args
-
         fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
         if not self.args:
             return fn
@@ -134,3 +131,10 @@ class _Nil(Term):
 
 
 Nil = _Nil()
+
+
+class MapsTo(Term):
+    def __init__(self, k, v):
+        super(MapsTo, self).__init__('->/2', (k, v))
+    def __repr__(self):
+        return '%s -> %s' % self.args
