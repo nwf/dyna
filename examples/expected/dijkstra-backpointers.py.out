@@ -8,8 +8,8 @@ start = "a".
 
 $key/1
 ======
-$key(goal)      = end.
-$key(path("a")) = start.
+$key(goal)      = "d".
+$key(path("a")) = "a".
 $key(path("b")) = "a".
 $key(path("c")) = "b".
 $key(path("d")) = "e".

@@ -177,7 +177,7 @@ disposTab_prologish t = DisposTab s a
        , (("false",0),(SDQuote,[]))
        -- key
        , (("$key" ,1),(SDEval,[ADQuote]))
-       , (("with_key",2),(SDQuote,[ADEval, ADQuote]))
+       , (("with_key",2),(SDQuote,[ADEval, ADEval]))
        -- lists
        , (("nil",  0),(SDQuote,[]))
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
@@ -211,7 +211,7 @@ disposTab_dyna t = DisposTab s a
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
        -- key
        , (("$key" ,1),(SDEval,[ADQuote]))
-       , (("with_key",2),(SDQuote,[ADEval, ADQuote]))
+       , (("with_key",2),(SDQuote,[ADEval, ADEval]))
        , (("->",2),(SDQuote,[ADQuote, ADQuote]))
        ]
 
