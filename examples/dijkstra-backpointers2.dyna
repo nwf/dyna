@@ -4,7 +4,7 @@
 % Cost of the optimal path from start to each node.  
 % In each case, the associated key is a reversed version of the path itself.
 path(start) min= 0                   with_key [start].
-path(B)     min= path(A) + edge(A,B) with_key P for P is append($key(path(A)),B).
+path(B)     min= path(A) + edge(A,B) with_key append($key(path(A)),B).
 
 % The cost of the optimal path to the end node, and that path itself.
 goal        = path(end).
