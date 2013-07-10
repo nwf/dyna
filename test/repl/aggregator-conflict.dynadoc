@@ -9,7 +9,7 @@ a = 1.
 DynaCompilerError:
 Encountered error in input program:
  Conflicting aggregators; rule <repl>
- uses '|=' for a/0 but I had been lead to expect '+='.
+ uses ':-' for a/0 but I had been lead to expect '+='.
 Everything was syntactically valid, but we could not
 see it through.
 
