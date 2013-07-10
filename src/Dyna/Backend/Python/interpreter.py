@@ -602,7 +602,7 @@ def peel(fn, item):
 
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source', nargs='?', type=path,
+    parser.add_argument('source', nargs='*', type=path,
                         help='Path to Dyna source file (or plan if --plan=true).')
     parser.add_argument('-i', dest='interactive', action='store_true',
                         help='Fire-up REPL after runing solver..')
@@ -625,6 +625,24 @@ def main():
     crash_handler()
 
     if args.source:
+
+        if len(args.source) > 1:
+            # concatenate files
+            with file(interp.tmp / 'tmp.dyna', 'wb') as g:
+                for f in args.source:
+                    if not os.path.exists(f):
+                        print 'File %r does not exist.' % f
+                    with file(f) as f:
+                        g.write('\n')
+                        g.write('%'*80)
+                        g.write('\n')
+                        g.write('%% ')
+                        g.write(f.name)
+                        g.write('\n')
+                        g.write(f.read())
+            args.source = g.name
+        else:
+            [args.source] = args.source
 
         if not os.path.exists(args.source):
             print 'File %r does not exist.' % args.source
