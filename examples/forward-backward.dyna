@@ -1,3 +1,7 @@
+% Forward-backward reestimation of an HMM.
+% The data and initial model from the "ice cream" spreadsheet
+% example can be found in icecream.dyna.
+
 % ---------------------------------------------------
 % INPUT
 % ---------------------------------------------------
@@ -107,8 +111,7 @@ p_emission(I+1,Tag,Word)
 % has probability 1 regardless of smoothing.  This overrides the previous
 % rules.
 
-p_emission(0,&stop,&eos) := 1.
-p_emission(I+1,&stop,&eos) := p_emission(I,&stop,&eos) for I < num_iterations.
+p_emission(I,&stop,&eos) := 1 for is_iter(I).
 
 % ---------------------------------------------------
 % DRAW CONCLUSIONS FROM THE ESTIMATED MODEL
@@ -128,3 +131,4 @@ bestpathprob(State) max= edge(num_iterations,State,NextState) * bestpathprob(Nex
 bestpathprob = bestpathprob(start_state).
 bestpath = $key(bestpathprob(start_state)).
 
+p
