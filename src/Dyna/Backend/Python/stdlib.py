@@ -3,14 +3,11 @@ from term import Term, Cons, Nil
 from collections import Counter
 from utils import pretty, pretty_print
 
-try:
-    from numpy import log, exp, sqrt
-    from numpy.random import uniform
-except ImportError:                       # XXX: should probably issue a warning.
-    from math import log, exp, sqrt
-    from random import random as _random
-    def uniform(a=0, b=1):
-        return _random() * (b - a) + a
+
+from math import log, exp, sqrt
+from random import random as _random
+def uniform(a=0, b=1):
+    return _random() * (b - a) + a
 
 
 def equals(x,y):
