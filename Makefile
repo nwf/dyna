@@ -55,7 +55,7 @@ HADDOCK_HTML ?= "../\\$$pkgid/html"
 haddock:
 	mkdir -p dist/alldoc
 	haddock --html -o dist/alldoc \
-	 --ignore-all-exports -w --optghc=-isrc \
+	 --ignore-all-exports -w --optghc=-isrc --optghc=-idist/build/autogen \
 	 -t "Dyna -- GIT `git describe --always`" \
 	 `runghc -imisc HaddockPaths "$(HADDOCK_HTML)"` \
 	 `grep -ie '^\( \|\t\)*main-is:' dyna.cabal | sed -e "s/^.*Is: */src\//"`
