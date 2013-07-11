@@ -124,12 +124,12 @@ testbool = false.
 | thingsbag bag= 1.
 | thingsbag bag= 1.
 | thingsbag bag= 2.
-| thingsbag bag= true.            % XREF:bool
+| thingsbag bag= true.
 |
 | thingset set= "three".
 | thingset set= 1.
 | thingset set= 1.
-| thingset set= true.            % XREF:bool should appear separately in set,
+| thingset set= true.
 | thingset set= 2.
 
 Changes
