@@ -1,0 +1,26 @@
+> w := 1, "no".      % right now 1 == true, shouldn't be the case.
+| x := 3, "no".      % shouldn't fire.
+| y := true, "yes".   % already works
+| z := false, "no".  % won't fire.
+
+Changes
+=======
+y = "yes".
+
+
+> f("a")     = 3.0.
+| f("float") = 1.0.
+| f("int")   = 1.
+| f("bool")  = true.
+
+  *ignore*
+
+% integer and float comparsion
+> query 3 is f("a")
+
+3 is f("a") = true.
+
+% integer and bool
+> query f(X) == true
+
+f("bool") == true = true.
