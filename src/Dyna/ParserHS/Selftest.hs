@@ -30,6 +30,7 @@ import           Dyna.ParserHS.OneshotDriver
 import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm (Annotation(..), TBase(..))
+import           Dyna.XXX.Trifecta (unSpan)
 import           Dyna.XXX.TrifectaTest
 import           Test.Framework                      as TF
 import           Test.Framework.Providers.HUnit
@@ -60,6 +61,14 @@ strictterm = unsafeParse (testTerm strictDefDLC <* eof)
 case_basicAtom :: Assertion
 case_basicAtom = e @=? (strictterm "foo")
  where e = TFunctor "foo" [] :~ Span (Columns 0 0) (Columns 3 3) "foo"
+
+case_booleans_not_atoms :: Assertion
+case_booleans_not_atoms = map snd t @=? map (unSpan.strictterm.fst) t
+ where t = [ ("true"   , TBase (TBool True))
+           , ("false"  , TBase (TBool False))
+           , ("'true'" , TFunctor "true"  [])
+           , ("'false'", TFunctor "false" [])
+           ]
 
 case_basicAtomTWS :: Assertion
 case_basicAtomTWS = e @=? (strictterm "foo ")
@@ -297,7 +306,7 @@ case_ruleFact = e @=? (progrule sr)
   e  = Rule
        (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
        ":-"
-       (TFunctor "true" [] :~ Span (Columns 4 4) (Columns 5 5) sr)
+       (TBase (dynaUnitTerm) :~ Span (Columns 4 4) (Columns 5 5) sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
   sr = "goal."

@@ -263,11 +263,6 @@ class Interpreter(object):
         print
 
     def build(self, fn, *args):
-        # TODO: codegen should handle true/0 is True and false/0 is False
-        if fn == 'true/0':
-            return True
-        if fn == 'false/0':
-            return False
         if fn == 'cons/2':
             return Cons(*args)
         if fn == 'nil/0':
@@ -591,12 +586,6 @@ def peel(fn, item):
     functor/arity, `fn`. Returns the arguments of term as a tuple of intern idxs
     and constants (possibly an empty tuple).
     """
-    if fn == "true/0":
-        assert item is True
-        return
-    if fn == "false/0":
-        assert item is False
-        return
     assert isinstance(item, Term)
     assert item.fn == fn
     return item.args

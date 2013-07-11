@@ -36,7 +36,9 @@ import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Types        as P
 import qualified Dyna.ParserHS.Parser       as P
+import           Dyna.Term.Normalized (NT (NTBase))
 import           Dyna.Term.TTerm
+import           Dyna.Term.SurfaceSyntax (dynaUnitTerm)
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
@@ -129,11 +131,11 @@ builtins (f,is,o) = case () of
                     cdop = [OPIter x [y] "iter" DetNon (Just $ PDBS call)]
                     cmod = [(x^.mv_var, nuniv)]
                   in if isFree o
-                      then Right $ BAct (OPWrap (o^.mv_var) [] "true" : cdop)
+                      then Right $ BAct (OPAsgn (o^.mv_var) (NTBase dynaUnitTerm) : cdop)
                                         ((o^.mv_var, nuniv) : cmod)
                       else if isGround o
                             then let _chk = "_chk"
-                                 in Right $ BAct ( OPWrap _chk [] "true"
+                                 in Right $ BAct ( OPAsgn _chk (NTBase dynaUnitTerm)
                                                  : OPCheq _chk (o^.mv_var)
                                                  : cdop)
                                                  cmod
@@ -191,9 +193,7 @@ constants = go
   go ("and",2)   = Just $ PDBS $ infixOp "and"
   go ("or",2)    = Just $ PDBS $ infixOp "or"
 
-  go ("true",0)  = Just $ PDBS $ nullary "True"
-  go ("false",0) = Just $ PDBS $ nullary "False"
-  go ("null",0)  = Just $ PDBS $ nullary "None"
+  go ("null",0)  = Just $ PDBS $ nullary "None" -- XXX
 
   go ("!",1)     = Just $ PDBS $ call "not" []
   go ("not",1)   = Just $ PDBS $ call "not" []

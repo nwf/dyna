@@ -39,8 +39,8 @@ dynaConjOper = ","
 dynaRevConjOpers :: (IsString s) => [s]
 dynaRevConjOpers = ["whenever","for"]
 
-dynaUnitTerm :: (IsString s) => s
-dynaUnitTerm = "true"
+dynaUnitTerm :: TBase
+dynaUnitTerm = TBool True
 
 dynaUnifOpers :: (IsString s) => [s]
 dynaUnifOpers = [ "=", "==" ]
