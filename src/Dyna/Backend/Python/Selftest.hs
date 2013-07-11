@@ -91,9 +91,6 @@ test_End_To_End = map mkExample
 selftest :: TF.Test
 selftest = $(testGroupGenerator)
 
-main :: IO ()
-main = $(defaultMainGenerator)
-
 -- If you're running from within GHCi and just want to do something quickly,
 -- try
 --

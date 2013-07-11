@@ -275,8 +275,8 @@ instance (Show f, Ord f, Monad m) => MCM (SIMCT m f) KI where
                                       ++ (show k))
           (\v' -> do
              merged <- unSIMCT $ f (krenkri v') v
-             uses (simctx_map_k . at (unKI ck))
-                  (flip assert () . (== Just v'))
+             () <- uses (simctx_map_k . at (unKI ck))
+                        (flip assert () . (== Just v'))
              simctx_map_k %= IM.insert (unKI ck)
                                        (either KRName KRStruct merged))
         $ IM.lookup (unKI ck) m

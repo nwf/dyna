@@ -252,7 +252,7 @@ normTerm_ a m _ d (P.TVar v) = do
 -- Numerics get returned in-place and raise a warning if they are evaluated.
 normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
   case m of
-    (_,True)  -> newWarn "Quoting numerics is unnecessary" ss
+    (_,True)  -> newWarn "Suppressing numeric evaluation is unnecessary" ss
     (0,False) -> return ()
     (_,False) -> newWarn "Ignoring request to evaluate numeric" ss
   maybe (newWarn "Numeric literal is discarded" ss)
@@ -262,10 +262,20 @@ normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
 -- Strings too
 normTerm_ _ m ss d (P.TBase x@(TString _))  = do
   case m of
-    (_,True)  -> newWarn "Quoting strings is unnecessary" ss
+    (_,True)  -> newWarn "Suppressing string evaluation is unnecessary" ss
     (0,False) -> return ()
     (_,False) -> newWarn "Ignoring request to evaluate string" ss
   maybe (newWarn "String literal is discarded" ss)
+        (doLoadBase x)
+        d
+
+-- Booleans too
+normTerm_ _ m ss d (P.TBase x@(TBool _)) = do
+  case m of
+    (_,True)  -> newWarn "Suppressing boolean evaluation is unnecessary" ss
+    (0,False) -> return ()
+    (_,False) -> newWarn "Ignoring request to evaluate boolean" ss
+  maybe (newWarn "Boolean literal is discarded" ss)
         (doLoadBase x)
         d
 
@@ -288,7 +298,7 @@ normTerm_ a m ss d (P.TFunctor f [x T.:~ sx, v T.:~ sv])
     (Nothing, 1) -> doUnif nx nv
     (_      , n) -> do
                      _ <- doUnif nx nv
-                     t <- newLoad "_x" (Right (dynaUnitTerm,[]))
+                     t <- newLoad "_x" (Left $ NTBase dynaUnitTerm)
                      r <- timesM (newEval "_x" . Left) (n-1) t
                      maybe (return ()) (doUnif r) d
 
@@ -388,10 +398,10 @@ normConjunct ss f i si r sr n d rev =
                     go di dr
                     doStruct (selfstruct di dr) d'
     (1,Just d') -> do
-                    di <- newLoad "_b" (Right $ (dynaUnitTerm,[]))
+                    di <- newLoad "_b" (Left $ NTBase dynaUnitTerm)
                     go di d'
     (_,_      ) -> do
-                    di <- newLoad "_b" (Right $ (dynaUnitTerm,[]))
+                    di <- newLoad "_b" (Left $ NTBase dynaUnitTerm)
                     dr <- nextVar "_c"
                     go di dr
                     ct <- timesM (newEval "_x" . Left) (n-1) dr

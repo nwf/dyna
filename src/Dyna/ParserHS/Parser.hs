@@ -326,6 +326,8 @@ term = token $ choice
 
         , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
 
+        , try $ spanned $ TBase . TBool <$> boolean
+
         , try $ spanned $ flip TFunctor [] <$> parseAtom
                         <* (notFollowedBy $ char '(')
 
@@ -336,6 +338,10 @@ term = token $ choice
         <?> "Term"
  where
   mkta ty te = TAnnot (AnnType ty) te
+
+  boolean = choice [ symbol "true" *> return True
+                   , symbol "false" *> return False
+                   ]
 
   parenfunc = TFunctor <$> parseFunctor
                        <*> parens (tlexpr `sepBy` symbolic ',')
@@ -370,7 +376,7 @@ term = token $ choice
     mkpf (Prefix m)  = Prefix (nfp >> m)
     mkpf (Postfix m)  = Postfix (nfp >> m)
 
-  nfp = notFollowedBy (symbolic '|' *> notFollowedBy (oneOfSet usualpunct))
+    nfp = notFollowedBy (symbolic '|' *> notFollowedBy (oneOfSet usualpunct))
 
 -- | Sometimes we require that a character not be followed by whitespace
 -- and satisfy some additional predicate before we pass it off to some other parser.
@@ -465,7 +471,7 @@ rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
             (_ :~ ds) <- try (spanned (char '.') <* lookAhead whiteSpace)
-            return (Rule h ":-" (TFunctor "true" [] :~ ds) :~ (hs <> ds))
+            return (Rule h ":-" (TBase dynaUnitTerm :~ ds) :~ (hs <> ds))
          , do
             aggr    <- token $ join $ asks dlc_aggrs
             body    <- tfexpr

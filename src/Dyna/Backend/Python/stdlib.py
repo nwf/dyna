@@ -5,9 +5,6 @@ from utils import pretty, pretty_print, true, false, null, isbool
 from math import log, exp, sqrt
 from random import random as _random
 
-def uniform(a=0, b=1):
-    return _random() * (b - a) + a
-
 
 def or_(x, y):
     if not (isbool(x) and isbool(y)):
@@ -150,3 +147,6 @@ def in_list(x, a):
 def read_lines(filename):
     with file(filename) as f:
         return f.readlines()
+
+def uniform(a=0, b=1):
+    return _random() * (b - a) + a
