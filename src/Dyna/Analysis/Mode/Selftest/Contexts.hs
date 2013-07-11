@@ -137,7 +137,4 @@ prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
 selftest :: TF.Test
 selftest = moreTries 1000 $(testGroupGenerator)
 
-main :: IO ()
-main = $(defaultMainGenerator)
-
 ------------------------------------------------------------------------}}}

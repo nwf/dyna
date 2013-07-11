@@ -168,6 +168,3 @@ prop_call_test_sufficient i1 i2 = nWFN' i1 && nWFN' i2 && nSub i1 i2
 
 selftest :: TF.Test
 selftest = moreTries 5000 $(testGroupGenerator)
-
-main :: IO ()
-main = TF.defaultMain [selftest]

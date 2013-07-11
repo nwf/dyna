@@ -543,7 +543,4 @@ prop_pragma_roundtrip =
 selftest :: TF.Test
 selftest = $(testGroupGenerator)
 
-main :: IO ()
-main = $(defaultMainGenerator)
-
 ------------------------------------------------------------------------}}}
