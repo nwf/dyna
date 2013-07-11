@@ -84,9 +84,7 @@ primOps = go
   go ("and"  ,2) = Just   [miaod 2 Det     ]
   go ("or"   ,2) = Just   [miaod 2 Det     ]
 
-  go ("true" ,0) = Just   [miaod 0 Det     ]
-  go ("false",0) = Just   [miaod 0 Det     ]
-  go ("null" ,0) = Just   [miaod 0 Det     ]
+  -- go ("null" ,0) = Just   [miaod 0 Det     ]
 
   go ("!"    ,1) = Just   [miaod 1 Det     ]
   go ("not"  ,1) = Just   [miaod 1 Det     ]

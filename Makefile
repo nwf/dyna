@@ -38,6 +38,7 @@ clean:
 	   examples/*.dyna.d \
 	   examples/*.hist
 	rm -rf test/*/*.out
+	rm -rf *.tix
 	rm -f tags TAGS
 veryclean: clean
 	rm -rf dist
@@ -54,7 +55,7 @@ HADDOCK_HTML ?= "../\\$$pkgid/html"
 haddock:
 	mkdir -p dist/alldoc
 	haddock --html -o dist/alldoc \
-	 --ignore-all-exports -w --optghc=-isrc \
+	 --ignore-all-exports -w --optghc=-isrc --optghc=-idist/build/autogen \
 	 -t "Dyna -- GIT `git describe --always`" \
 	 `runghc -imisc HaddockPaths "$(HADDOCK_HTML)"` \
 	 `grep -ie '^\( \|\t\)*main-is:' dyna.cabal | sed -e "s/^.*Is: */src\//"`
@@ -100,6 +101,27 @@ profbuild:
 	     -o         dist/pb/a.out \
 		 -outputdir dist/pb \
 		 -main-is $(MAINMOD) $(MAINFILE)
+
+.PHONY: test-hpc
+test-hpc:
+	mkdir -p dist/selftest-hpc
+	ghc -O0 -fhpc -isrc -idist/build/autogen --make \
+		-o         dist/selftest-hpc/dyna-selftests     \
+		-outputdir dist/selftest-hpc/dyna-selftests-tmp \
+		-hpcdir dist/selftest-hpc/hpc \
+		-main-is Dyna.Main.TestsDriver Dyna.Main.TestsDriver
+	# Remove any old .tix files
+	# (prevent "module mismatch with .tix/.mix file hash number")
+	rm -rf dyna-selftests.tix
+	# Run from top-level
+	dist/selftest-hpc/dyna-selftests
+	# Then move the mix and tix files out of the way
+	mv dyna-selftests.tix dist/selftest-hpc
+	# And last, generate markup
+	hpc markup \
+		--destdir=dist/selftest-hpc-out \
+		--hpcdir=dist/selftest-hpc/hpc \
+		dist/selftest-hpc/dyna-selftests.tix
 
 .PHONY: tags TAGS
 tags TAGS:

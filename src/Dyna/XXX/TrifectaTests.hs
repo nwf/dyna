@@ -67,6 +67,3 @@ case_interactMany = successInteract pa "aa" ["", "(a", "", "a)", ""]
 
 selftest :: TF.Test
 selftest = $(testGroupGenerator)
-
-main :: IO ()
-main = $(defaultMainGenerator)

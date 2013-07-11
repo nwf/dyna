@@ -43,15 +43,21 @@ import qualified Data.ByteString.Char8()
 ------------------------------------------------------------------------}}}
 -- Term Base Cases                                                      {{{
 
-data TBaseSkolem = TSNumeric | TSString
+data TBaseSkolem = TSBool | TSNumeric | TSString
  deriving (Eq,Ord,Show)
 
 -- | Term base cases.
-data TBase = TNumeric !(Either Integer Double)
+data TBase = TBool !Bool
+           | TNumeric !(Either Integer Double)
            | TString  !B.ByteString
  deriving (D.Data,D.Typeable,Eq,Ord,Show)
 
 instance PP.Pretty TBase where
+    --pretty (TBool x)            = PP.pretty x
+
+    pretty (TBool True)         = "true"
+    pretty (TBool False)        = "false"
+
     pretty (TNumeric (Left x))  = PP.pretty x
     pretty (TNumeric (Right x)) = PP.pretty x
     pretty (TString s)          = PP.text $ show s

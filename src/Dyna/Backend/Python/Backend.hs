@@ -36,7 +36,9 @@ import           Dyna.Backend.BackendDefn
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Types        as P
 import qualified Dyna.ParserHS.Parser       as P
+import           Dyna.Term.Normalized (NT (NTBase))
 import           Dyna.Term.TTerm
+import           Dyna.Term.SurfaceSyntax (dynaUnitTerm)
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
@@ -125,15 +127,15 @@ builtins (f,is,o) = case () of
     -> case is of
          [x,y] | isFree x && isGround y
                -> let
-                    call _ vs = "iter_cons" <> (parens $ sepBy comma $ mpv vs) <> colon -- for some reason on colon get put at the end of this line.
+                    call _ vs = "iter_cons" <> (parens $ sepBy comma $ mpv vs) <> colon
                     cdop = [OPIter x [y] "iter" DetNon (Just $ PDBS call)]
                     cmod = [(x^.mv_var, nuniv)]
                   in if isFree o
-                      then Right $ BAct (OPWrap (o^.mv_var) [] "true" : cdop)
+                      then Right $ BAct (OPAsgn (o^.mv_var) (NTBase dynaUnitTerm) : cdop)
                                         ((o^.mv_var, nuniv) : cmod)
                       else if isGround o
                             then let _chk = "_chk"
-                                 in Right $ BAct ( OPWrap _chk [] "true"
+                                 in Right $ BAct ( OPAsgn _chk (NTBase dynaUnitTerm)
                                                  : OPCheq _chk (o^.mv_var)
                                                  : cdop)
                                                  cmod
@@ -187,8 +189,6 @@ constants = go
   go ("&",2)     = Just $ PDBS $ call "and_" []
   go ("!",1)     = Just $ PDBS $ call "not_" []
 
-  go ("true",0)  = Just $ PDBS $ nullary "true"
-  go ("false",0) = Just $ PDBS $ nullary "false"
   go ("null",0)  = Just $ PDBS $ nullary "null"
 
   --go ("eval",1)  = Just $ PDBS $ call "None;exec " []

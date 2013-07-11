@@ -22,8 +22,8 @@ import qualified Text.PrettyPrint.Free            as PP
 -- answer, of course, is to use update mode information, once we have it.
 
 type BackendDriver bs = AggMap                       -- ^ Aggregation
-                      -> [(Rule,[(Int,Maybe DFunctAr -- ^ Rule update
-                                 , Cost, DVar, DVar, Actions bs)])]
+                      -> [(Rule,[(Int,Maybe DFunctAr
+                                 , Cost, DVar, DVar, Actions bs)])] -- ^ Rule update
                       -> [(Rule,Cost,Actions bs)] -- ^ Initializers
                       -> S.Set DFunctAr           -- ^ Ground backchains
                       -> [(DFunctAr,Rule,([DVar],(Cost,Actions bs)))] -- ^ GBC plans

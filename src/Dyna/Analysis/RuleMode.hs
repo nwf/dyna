@@ -222,8 +222,9 @@ possible fp bcs co lf cr =
     --
     -- XXX Special casing ought not be necessary!
     Left (_, CCall vo [va,vb] funct) | funct `elem` dynaUnifOpers -> do
-      pfx <- fgn vo (return (OPWrap vo [] dynaUnitTerm))
-                    (return (OPPeel [] vo dynaUnitTerm DetSemi))
+      pfx <- fgn vo (return [OPAsgn vo (NTBase dynaUnitTerm)])
+                    (let c = "_chk" in return [ OPAsgn c (NTBase dynaUnitTerm)
+                                              , OPCheq vo c])
                     (throwError UFExDomain)
       unif <- fgn va (fgn vb (throwError UFExDomain)
                              (bind va >> return [OPAsgn va (NTVar vb)])
@@ -232,13 +233,13 @@ possible fp bcs co lf cr =
                              (gencall)
                              (throwError UFExDomain))
                      (throwError UFExDomain)
-      return (pfx:unif)
+      return (pfx++unif)
 
      where
       gencall = do
         is <- mapM mkMV [va,vb]
         o  <- mkMV vo
-        case fp (funct,is,o) of
+        case fp ("=",is,o) of       -- XXX; should we really be using "="?
           Right (BAct a m) -> runbact m >> return a
           Left _ -> dynacPanic "Backend failed to generate unification call"
 
