@@ -1,5 +1,4 @@
 import pylab as pl
-from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 
 class draw(object):
@@ -11,7 +10,7 @@ class draw(object):
 
              visual element
                    v
-        frame(T, &text(String, tuple(X, Y))).
+        frame(T, &text(String, [X, Y])).
               ^
            time index
 
@@ -36,6 +35,7 @@ class draw(object):
 
         nframes = max(frame)
 
+        # TODO: support multiple creating plots
         assert nframes == 0, 'many frames found. Did you mean to use an animtation?'
 
         def draw_frame(t):
@@ -73,7 +73,7 @@ class draw(object):
         ax = pl.axes()
 
         draw_frame(0)
-        
+
         #pl.ion(); pl.show()
         #from arsenal.debug import ip; ip()
         pl.show()
