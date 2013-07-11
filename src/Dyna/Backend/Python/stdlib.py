@@ -1,41 +1,75 @@
 import re
 from term import Term, Cons, Nil, MapsTo
 from collections import Counter
-from utils import pretty, pretty_print
-
-
+from utils import pretty, pretty_print, true, false, null, isbool
 from math import log, exp, sqrt
 from random import random as _random
+
 def uniform(a=0, b=1):
     return _random() * (b - a) + a
 
 
-def equals(x,y):
+def or_(x, y):
+    if not (isbool(x) and isbool(y)):
+        raise TypeError('')
+    return todyna(x or y)
+
+def and_(x, y):
+    if not (isbool(x) and isbool(y)):
+        raise TypeError('')
+    return todyna(x and y)
+
+def not_(x):
+    if not isbool(x):
+        raise TypeError('')
+    if x:
+        return false
+    else:
+        return true
+
+def gt(x, y):
+    return todyna(x > y)
+
+def gte(x, y):
+    return todyna(x >= y)
+
+def lt(x, y):
+    return todyna(x < y)
+
+def lte(x, y):
+    return todyna(x <= y)
+
+def eq(x,y):
     """
     My work around for discrepency in bool equality True==1 and False==0.
 
-    >>> equals(True, 1)
-    False
+    >>> eq(true, 1)
+    false
 
-    >>> equals(1, 1.0)
-    True
+    >>> eq(1, 1.0)
+    true
     """
-    if isinstance(x, bool) or isinstance(y, bool):
-        return type(x) == type(y) and x == y
-    else:
-        return x == y
+    return todyna(x == y)
 
+def not_eq(x, y):
+    if x != y:
+        return true
+    else:
+        return false
 
 _range = range
 def range(*x):
     return todyna(_range(*x))
 
+
 def split(s, delim='\s+'):
-    return todynalist(re.split(delim, s))
+    return todyna(re.split(delim, s))
+
 
 def crash():
     class Crasher(Exception): pass
     raise Crasher('Hey, you asked for it!')
+
 
 def pycall(name, *args):
     """
@@ -47,22 +81,14 @@ def pycall(name, *args):
 
 
 def topython(x):
-    #if isinstance(x, AList) or x is Nil:
-    #    return {topython(k): topython(v) for k,v in x.aslist}
-    if isinstance(x, Cons) or x is Nil:
+
+    if islist(x):
         return [topython(y) for y in x.aslist]
+
+    elif isinstance(x, MapsTo):
+        return tuple(x.args)
+
     return x
-
-def todynalist(x):    # TODO: get rid of this.
-    return todyna(x)
-
-
-def getkey(m, k):
-    return m[k]
-
-def setkey(m, k, v):
-    m[k] = v
-    return m
 
 
 def todyna(x):
@@ -72,11 +98,13 @@ def todyna(x):
         x.sort()
         return todyna(x)
 
+    elif x is True:
+        return true
+
+    elif x is False:
+        return false
+
     elif isinstance(x, dict):
-        #c = Nil
-        #for k,v in x.items():
-        #    c = AList(todyna([k,v]), c)
-        #return c
         return todyna([MapsTo(k,v) for k,v in x.items()])
 
     elif isinstance(x, (list, tuple)):
@@ -85,21 +113,38 @@ def todyna(x):
             c = Cons(todyna(y), c)
         return c
     else:
+
         return x
 
 
 def get(x, i):
     return x[i]
 
+
+def getkey(m, k):
+    return m[k]
+
+
+def setkey(m, k, v):
+    m[k] = v
+    return m
+
+
+def islist(x):
+    return isinstance(x, Cons) or x is Nil
+
+
 def iter_cons(x):
-    if not (isinstance(x, Cons) or x is Nil):
-        raise TypeError("Attemping to iterate something which isn't a list.")
+    if not islist(x):
+        raise TypeError("Attemping to iterate something which isn't a list. %r" % (x,))
     return x.like_chart()
 
+
 def in_list(x, a):
-    if not (isinstance(a, Cons) or a is Nil):
-        raise TypeError("Attemping to iterate something which isn't a list.")
+    if not islist(a):
+        raise TypeError("Attemping to iterate something which isn't a list. %r" % (a,))
     return x in a.aslist
+
 
 # should probably be done with memoized backchaining...
 def read_lines(filename):

@@ -154,13 +154,10 @@ constants = go
  where
   go ("-",1)     = Just $ PDBS $ call "-" []
   go ("^",2)     = Just $ PDBS $ infixOp "^"
-  go ("|",2)     = Just $ PDBS $ infixOp "|"
   go ("-",2)     = Just $ PDBS $ infixOp "-"
   go ("/",2)     = Just $ PDBS $ infixOp "/"
   go ("*",2)     = Just $ PDBS $ infixOp "*"
   go ("**",2)    = Just $ PDBS $ infixOp "**"
-  go ("&",2)     = Just $ PDBS $ infixOp "&"
-  go ("%",2)     = Just $ PDBS $ infixOp "%"
   go ("+",2)     = Just $ PDBS $ infixOp "+"
 
   go ("mod",2)   = Just $ PDBS $ infixOp "%"
@@ -168,39 +165,36 @@ constants = go
   go ("log",_)   = Just $ PDBS $ call "log" []
   go ("exp",1)   = Just $ PDBS $ call "exp" []
   go ("sqrt",1)    = Just $ PDBS $ call "sqrt" []
-  go ("getattr",_) = Just $ PDBS $ call "getattr" []
+
+
   go ("uniform",_) = Just $ PDBS $ call "uniform" []
 
+  go ("pycall",_)  = Just $ PDBS $ call "pycall" []
   go ("split",_)   = Just $ PDBS $ call "split" []
   go ("float",_)   = Just $ PDBS $ call "float" []
   go ("int",_)     = Just $ PDBS $ call "int" []
-  go ("pycall",_)  = Just $ PDBS $ call "pycall" []
-
   go ("range",_)  = Just $ PDBS $ call "range" []
 
+  go ("<=",2)    = Just $ PDBS $ call "lte" []
+  go ("<",2)     = Just $ PDBS $ call "lt" []
+  go ("=",2)     = Just $ PDBS $ call "eq" []
+  go ("==",2)    = Just $ PDBS $ call "eq" []
+  go (">=",2)    = Just $ PDBS $ call "gte" []
+  go (">",2)     = Just $ PDBS $ call "gt" []
+  go ("!=",2)    = Just $ PDBS $ call "not_eq" []
+
+  go ("|",2)     = Just $ PDBS $ call "or_" []
+  go ("&",2)     = Just $ PDBS $ call "and_" []
+  go ("!",1)     = Just $ PDBS $ call "not_" []
+
+  go ("true",0)  = Just $ PDBS $ nullary "true"
+  go ("false",0) = Just $ PDBS $ nullary "false"
+  go ("null",0)  = Just $ PDBS $ nullary "null"
+
+  --go ("eval",1)  = Just $ PDBS $ call "None;exec " []
+  --go ("tuple",_) = Just $ PDBS $ call "" []
+
   go ("in",2)    = Just $ PDBS $ call "in_list" []
-
-  go ("<=",2)    = Just $ PDBS $ infixOp "<="
-  go ("<",2)     = Just $ PDBS $ infixOp "<"
-  go ("=",2)     = Just $ PDBS $ call "equals" []
-  go ("==",2)    = Just $ PDBS $ call "equals" []
-  go (">=",2)    = Just $ PDBS $ infixOp ">="
-  go (">",2)     = Just $ PDBS $ infixOp ">"
-  go ("!=",2)    = Just $ PDBS $ infixOp "!="
-
-  go ("and",2)   = Just $ PDBS $ infixOp "and"
-  go ("or",2)    = Just $ PDBS $ infixOp "or"
-
-  go ("true",0)  = Just $ PDBS $ nullary "True"
-  go ("false",0) = Just $ PDBS $ nullary "False"
-  go ("null",0)  = Just $ PDBS $ nullary "None"
-
-  go ("!",1)     = Just $ PDBS $ call "not" []
-  go ("not",1)   = Just $ PDBS $ call "not" []
-
-  go ("eval",1)  = Just $ PDBS $ call "None;exec " []
-  go ("tuple",_) = Just $ PDBS $ call "" []
-
   go ("nil",0)   = Just $ PDBS $ call "build" ["nil/0"]
   go ("cons",2)  = Just $ PDBS $ call "build" ["cons/2"]
 
@@ -252,8 +246,8 @@ piterate vs = if length vs == 0 then "_"
 pdope_ :: S.Set DFunctAr -> DOpAMine PyDopeBS -> State Int (Doc e)
 pdope_ _ (OPIndr _ _)   = dynacSorry "indirect evaluation not implemented"
 pdope_ _ (OPAsgn v val) = return $ pretty v <+> equals <+> pretty val
-pdope_ _ (OPCheq v val) = return $ "if not equals(" <> pretty v <> ", " <> pretty val <> "): continue"
-pdope_ _ (OPCkne v val) = return $ "if equals(" <> pretty v <> ", " <> pretty val <> "): continue"
+pdope_ _ (OPCheq v val) = return $ "if not eq(" <> pretty v <> ", " <> pretty val <> "): continue"
+pdope_ _ (OPCkne v val) = return $ "if eq(" <> pretty v <> ", " <> pretty val <> "): continue"
 pdope_ _ (OPPeel vs i f _) = return $
     "try:" `above` (indent 4 $
            tupledOrUnderscore vs

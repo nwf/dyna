@@ -21,7 +21,7 @@ forceY(V,T) += f(U,V,T) * (y(U,T) - y(V,T)).
 
 % Constants
 a := 0.15.
-niter := 200.
+niter := 20.
 edgelen := 4.0.   % "the unit edge length"
 
 % should `a` be negative?
@@ -35,8 +35,8 @@ edge(A,B) := edge(B,A).
 node(U) :- true for _ is edge(U,_).
 node(U) :- true for _ is edge(_,U).
 
-% pack x and y into a tuple
-pos(U,T) := tuple(x(U, T), y(U, T)).
+% pack x and y into a list
+pos(U,T) := [x(U, T), y(U, T)].
 
 % visualization
 frame(T, &text(Name, pos(Name, T))) := true for node(Name).

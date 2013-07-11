@@ -7,11 +7,38 @@ from collections import namedtuple
 from cStringIO import StringIO
 
 
+
+class _true(object):
+    def __nonzero__(self):
+        return True
+    def __repr__(self):
+        return 'true'
+
+class _false(object):
+    def __nonzero__(self):
+        return False
+    def __repr__(self):
+        return 'false'
+
+true = _true()
+false = _false()
+null = None
+
+def isbool(x):
+    return x is true or x is false
+
+
+
+
 def _repr(x):
+
+# TODO: this assertion should eventually hold.
+#    assert x is not True and x is not False, x
     if x is True:
         return 'true'
     elif x is False:
         return 'false'
+
     elif x is None:
         return 'null'
     elif isinstance(x, basestring):

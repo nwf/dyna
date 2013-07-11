@@ -7,7 +7,7 @@ from __future__ import division
 
 import operator
 from collections import Counter
-from utils import drepr, _repr, user_vars
+from utils import drepr, _repr, user_vars, isbool, true, false
 from errors import AggregatorError
 
 
@@ -142,10 +142,16 @@ class or_equals(BAggregator):
         s = [x for x, m in self.iteritems() if m > 0]
         if len(s):
             for val in s:
-                if val is not True and val is not False:
+                if not isbool(val):
                     raise TypeError('%s is not Boolean.' % _repr(val))
 
-            return reduce(lambda x,y: x or y, s)
+            # TODO: can short circuit as soon as we get a true... but above we
+            # check the types.. so we don't get the benefit.
+            for val in s:
+                if val is true:
+                    return true
+            return false
+
 
 
 class and_equals(BAggregator):
@@ -153,10 +159,16 @@ class and_equals(BAggregator):
         s = [x for x, m in self.iteritems() if m > 0]
         if len(s):
             for val in s:
-                if val is not True and val is not False:
+                if not isbool(val):
                     raise TypeError('%s is not Boolean.' % _repr(val))
-            return reduce(lambda x,y: x and y, s)
 
+            # TODO: can short circuit as soon as we get a false. but above we
+            # check the types.. so we don't get the benfit
+            for val in s:
+                if val is false:
+                    return false
+            return true
+            
 
 class set_equals(BAggregator):
     def fold(self):

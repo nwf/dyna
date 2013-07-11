@@ -1,8 +1,8 @@
 from collections import defaultdict
 from aggregator import aggregator
 from term import Term
-from utils import _repr
-from stdlib import equals
+from utils import _repr, true
+
 
 class Chart(object):
 
@@ -24,10 +24,10 @@ class Chart(object):
         heading = [self.name, '='*len(self.name)]
 
         # special handing or-equals aggregators -- only list true facts (and errors)
-        if self.agg_name == ':-' or self.agg_name == '|=':
+        if self.agg_name == ':-':
             lines = []
             for term in sorted(rows):
-                if term.value is True:
+                if term.value is true:
                     lines.append('%s.' % _repr(term))
                 elif term.value:  # e.g. $error
                     lines.append('%s = %s.' % (_repr(term), _repr(term.value)))
@@ -80,7 +80,7 @@ class Chart(object):
                     yield term, term.args, term.value
         else:
             for term in candidates:
-                if equals(term.value, val):
+                if term.value == val:
                     yield term, term.args, term.value
 
     def insert(self, args):        # TODO: rename

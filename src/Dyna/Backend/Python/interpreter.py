@@ -81,7 +81,8 @@ import load, post
 from term import Term, Cons, Nil, MapsTo
 from chart import Chart
 from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac, read_anf, strip_comments, _repr, hide_ugly_filename
+    ddict, dynac, read_anf, strip_comments, _repr, hide_ugly_filename, \
+    true, false
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -265,16 +266,15 @@ class Interpreter(object):
     def build(self, fn, *args):
         # TODO: codegen should handle true/0 is True and false/0 is False
         if fn == 'true/0':
-            return True
+            return true
         if fn == 'false/0':
-            return False
+            return false
         if fn == 'cons/2':
             return Cons(*args)
         if fn == 'nil/0':
             return Nil
         if fn == '->/2':
             return MapsTo(*args)
-
         if fn == '$key/1':
             self.new_fn(fn, '=')
 
@@ -295,7 +295,7 @@ class Interpreter(object):
 
         # remove $rule
         if hasattr(rule, 'item'):
-            self.delete_emit(rule.item, True, ruleix=None, variables=None)
+            self.delete_emit(rule.item, true, ruleix=None, variables=None)
 
         if rule.init is not None:
             # remove update handlers
@@ -387,6 +387,9 @@ class Interpreter(object):
                 # Thus, we can skip the delete-updates.
                 self.update_dispatcher(item, was, delete=True)
 
+
+            assert now is not True or now is not False  # invalid dyna types.
+
             item.value = now
 
             if now is not None:
@@ -449,6 +452,7 @@ class Interpreter(object):
             h(*args, emit=_emit)
 
         head.value = head.aggregator.fold()
+
         return head.value
 
     def new_query(self, fn, ruleix, handler):
@@ -548,7 +552,7 @@ class Interpreter(object):
             if interp.agg_name[fn] is None:
                 interp.new_fn(fn, ':=')
             item = interp.build(fn, ix, *a)
-            interp.emit(item, True, ruleix=None, variables=None, delete=False)
+            interp.emit(item, true, ruleix=None, variables=None, delete=False)
             return item
         for i in new_rules:
             r = self.rules[i]
@@ -594,10 +598,10 @@ def peel(fn, item):
     and constants (possibly an empty tuple).
     """
     if fn == "true/0":
-        assert item is True
+        assert item is true
         return
     if fn == "false/0":
-        assert item is False
+        assert item is false
         return
     assert isinstance(item, Term)
     assert item.fn == fn

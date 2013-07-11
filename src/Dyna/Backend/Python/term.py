@@ -1,5 +1,5 @@
 from errors import notimplemented
-from utils import _repr
+from utils import _repr, true, false
 from aggregator import NoAggregator
 
 
@@ -70,7 +70,10 @@ class Cons(Term):
         return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
     def __contains__(self, x):
-        return x in self.aslist
+        if x in self.aslist:
+            return true
+        else:
+            return false
 
     def like_chart(self):
         for a in self.aslist:
@@ -109,7 +112,7 @@ class _Nil(Term):
         return '[]'
 
     def __contains__(self, x):
-        return False
+        return false
 
     def like_chart(self):
         return iter([])

@@ -4,6 +4,7 @@ TODO: option for strict number of columns.
 """
 
 import re
+from utils import true
 
 class tsv(object):
     """
@@ -37,10 +38,10 @@ class tsv(object):
             fn = '%s/%s' % (name, len(a))
 
             if interp.agg_name[fn] is None:
-                interp.new_fn(fn, ':=')
+                interp.new_fn(fn, ':-')
 
             interp.emit(interp.build(fn, *a),
-                        True,
+                        true,
                         ruleix=None,
                         variables=None,
                         delete=False)

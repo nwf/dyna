@@ -83,24 +83,32 @@ Changes
 d(2) = true.
 d(4) = true.
 
-% quote is important! or else we enumerate everything!
-> foo(A) := true for &bar(A) in [1,2,&bar("a"),3].
-|
-| bar("int") = 1.
+
+% let's look at a the difference between Booleans and integers
+> bar("int") = 1.
 | bar("bool") = true.
-| bar("spaz") = 2.
-|
-| goo(A) := true for bar(A) in [true,2,&bar("a"),3].
+| bar("two") = 2.
 
 Changes
 =======
 bar("bool") = true.
 bar("int") = 1.
-bar("spaz") = 2.
+bar("two") = 2.
+
+% quote is important! or else we enumerate everything!
+> foo(A) := true for &bar(A) in [1,2,&bar("a"),3].
+
+Changes
+=======
 foo("a") = true.
+
+% if you don't quote bar(A) drives the querym checking membership in the list.
+> goo(A) := true for bar(A) in [true,2,&bar("a")].
+
+Changes
+=======
 goo("bool") = true.
-goo("int") = true.                 % TODO: this should't appear in the results (XREF:bool)
-goo("spaz") = true.
+goo("two") = true.
 
 
 % unfortunately 1 == true and 0 == false in python so the following is true
@@ -108,7 +116,7 @@ goo("spaz") = true.
 
 Changes
 =======
-testbool = true.                  % TODO: XREF:bool
+testbool = false.
 
 
 % fun with set= at bag=
@@ -126,5 +134,5 @@ testbool = true.                  % TODO: XREF:bool
 
 Changes
 =======
-thingsbag = [1, 1, 1, 2, "three"].
-thingset = [1, 2, "three"].
+thingsbag = [1, 1, 2, "three", true].
+thingset = [1, 2, true, "three"].
