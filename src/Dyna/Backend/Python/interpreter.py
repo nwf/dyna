@@ -217,16 +217,16 @@ class Interpreter(object):
         for item, (val, es) in self.error.items():
             for e, h in es:
                 if h is None:
-                    I[item.fn][type(e)].append((e, item, val))
+                    I[item.fn][type(e)].append((item, val, e))
                 else:
-                    E[h.rule][type(e)].append((e, item, val))
+                    E[h.rule][type(e)].append((item, val, e))
 
         # aggregation errors
         for r in sorted(I, key=lambda r: r.index):
             print >> out, 'Error(s) aggregating %s:' % r
             for etype in I[r]:
                 print >> out, '  %s:' % etype.__name__
-                for i, (e, item, value) in enumerate(sorted(I[r][etype])):                       # todo: probably don't want to show ten million errors
+                for i, (item, value, e) in enumerate(sorted(I[r][etype])):
                     if i >= 5:
                         print >> out, '    %s more ...' % (len(I[r][etype]) - i)
                         break
@@ -242,7 +242,7 @@ class Interpreter(object):
             print >> out
             for etype in E[r]:
                 print >> out, '  %s:' % etype.__name__
-                for i, (e, item, value) in enumerate(sorted(E[r][etype])):                       # todo: probably don't want to show ten million errors
+                for i, (item, value, e) in enumerate(sorted(E[r][etype])):
                     if i >= 5:
                         print >> out, '    %s more ...' % (len(E[r][etype]) - i)
                         break

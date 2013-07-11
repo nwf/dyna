@@ -56,8 +56,8 @@ Errors
 ======
 Error(s) aggregating a/1:
   AggregatorError:
-    `a(2)`: `:=` got conflicting values [1, 2] for rule index 8
     `a(1)`: `:=` got conflicting values [1, 2] for rule index 8
+    `a(2)`: `:=` got conflicting values [1, 2] for rule index 8
 Error(s) aggregating d/0:
   TypeError:
     `d`: unsupported operand type(s) for *: 'NoneType' and 'int'
