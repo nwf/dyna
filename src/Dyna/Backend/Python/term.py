@@ -69,11 +69,11 @@ class Cons(Term):
     def __repr__(self):
         return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
-    def __contains__(self, x):
-        if x in self.aslist:
-            return true
-        else:
-            return false
+#    def __contains__(self, x):
+#        if x in self.aslist:
+#            return true
+#        else:
+#            return false
 
     def like_chart(self):
         for a in self.aslist:
@@ -111,8 +111,8 @@ class _Nil(Term):
     def __repr__(self):
         return '[]'
 
-    def __contains__(self, x):
-        return false
+#    def __contains__(self, x):
+#        return false
 
     def like_chart(self):
         return iter([])

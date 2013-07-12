@@ -62,7 +62,6 @@ def groupby(key, data):
 
 def dig(head, visited, tail, groups, interp, depth_limit=-1):
 
-    print head, len(tail), depth_limit
     if depth_limit >= 0 and len(tail) >= depth_limit:
         return [yellow % '*max depth*']
 
@@ -232,13 +231,3 @@ class Crux(object):
                 return self.get_function(e)
 
             return self.get_function(e) + (cyan % '=%s' % self.values(x))
-
-
-class Expr(object):
-    pass
-class Fn(Expr):
-    pass
-class Infix(Expr):
-    pass
-class Unif(Expr):
-    pass

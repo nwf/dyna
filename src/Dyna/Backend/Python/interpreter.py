@@ -100,14 +100,12 @@ class Rule(object):
 
     @property
     def span(self):
-        if self.init or self.query:
-            span = parse_attrs(self.init or self.query)['Span']
-            return hide_ugly_filename(span)
+        span = parse_attrs(self.init or self.query)['Span']
+        return hide_ugly_filename(span)
 
     @property
     def src(self):
-        if self.init or self.query:
-            return strip_comments(parse_attrs(self.init or self.query)['rule'])
+        return strip_comments(parse_attrs(self.init or self.query)['rule'])
 
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.index, self.src)
@@ -570,39 +568,41 @@ class Interpreter(object):
             self.new_fn(k, v)
 
         new_rules = set()
-        for _, r, _ in env.queries:
+        for fn, r, h in env.queries:
+            self.new_query(fn, r, h)
             new_rules.add(r)
-        for r, _ in env.initializers:
+        for fn, r, h in env.updaters:
+            self.new_updater(fn, r, h)
+        for r, h in env.initializers:
+            self.new_initializer(r, h)
             new_rules.add(r)
         self.new_rules = new_rules
 
-        for fn, r, h in env.queries:
-            self.new_query(fn, r, h)
-
         try:
             if initialize:
-                # only run new initializers
+                # run new initializers
                 for _, init in env.initializers:
                     init(emit=_emit)
 
         except (TypeError, ZeroDivisionError) as e:
+
+            # remove new rules
+            for r in new_rules:
+                self.retract_rule(r)
+            self.new_rules = set()
+
+            # if multiple rules were added we reject all of them (in order to
+            # avoid an bizarre parser state.
             raise DynaInitializerException(e, init)
 
-
-        finally:
+        else:
 
             # process emits
             for e in emits:
                 self.emit(*e, delete=False)
 
-            for fn, r, h in env.updaters:
-                self.new_updater(fn, r, h)
-            for r, h in env.initializers:
-                self.new_initializer(r, h)
-
             # accept the new parser state
             self.parser_state = env.parser_state
-
 
         # ------ $rule for fun and profit -------
         interp = self

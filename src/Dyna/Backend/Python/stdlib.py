@@ -18,7 +18,7 @@ def and_(x, y):
 
 def not_(x):
     if not isbool(x):
-        raise TypeError('')
+        raise TypeError(repr(x))
     if x:
         return false
     else:
@@ -140,7 +140,7 @@ def iter_cons(x):
 def in_list(x, a):
     if not islist(a):
         raise TypeError("Attemping to iterate something which isn't a list. %r" % (a,))
-    return x in a.aslist
+    return todyna(x in a.aslist)
 
 
 # should probably be done with memoized backchaining...
