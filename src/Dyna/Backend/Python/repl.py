@@ -7,7 +7,7 @@ TODO: help should print call signature of loads and post-processors in addition
 to help.
 """
 
-import os, cmd, readline
+import re, os, cmd, readline
 from utils import ip, lexer, subst, drepr, _repr, get_module
 from stdlib import topython, todyna
 from errors import DynaCompilerError, DynaInitializerException
@@ -550,6 +550,17 @@ class REPL(cmd.Cmd, object):
             print "Queries don't end with a dot."
             return
 
+        depth_limit = -1
+        p = re.compile('--limit=(\d+)\\b')
+        x = p.findall(q)
+        if x:
+            q = p.sub('', q)
+            depth_limit = int(x[0])
+
+        self._trace(q, depth_limit=depth_limit)
+
+    def _trace(self, q, depth_limit=-1):
+
         self.interp.new_rules = set()
 
         try:
@@ -572,7 +583,7 @@ class REPL(cmd.Cmd, object):
 
             for item in results:
                 print
-                tracer(todyna(item))
+                tracer(todyna(item), depth_limit=depth_limit)
 
         finally:
             # cleanup:

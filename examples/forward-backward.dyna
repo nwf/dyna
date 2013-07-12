@@ -25,23 +25,23 @@ word(last_time+1) := &eos.
 num_iterations := 10.
 
 is_iter(0).
-is_iter(I+1) |= true for is_iter(I) & I < num_iterations.
+is_iter(I+1) :- true for is_iter(I) & I < num_iterations.
 
 % ---------------------------------------------------
 % FORWARD-BACKWARD ALGORITHM (THE "E STEP" OF THE EM ALGORITHM)
 % ---------------------------------------------------
 
-% At each iteration I = 0, 1, ... num_iterations, 
+% At each iteration I = 0, 1, ... num_iterations,
 % define a trellis graph on states of the form &state(Time,Tag),
 % which expresses all ways of explaining the word sequence.
 % The edge weights are defined from iteration I's probability model.
 
-edge(I,&state(Time-1,PrevTag),&state(Time,Tag)) 
+edge(I,&state(Time-1,PrevTag),&state(Time,Tag))
    = p_transition(I,PrevTag,Tag) * p_emission(I,Tag,word(Time)).
 start_state = &state(0,&start).        % the initial tag at time 0 is called &start
 end_state = &state(last_time+1,&stop). % the final tag is called &stop
 
-% Compute alphas and betas on that trellis graph, using 
+% Compute alphas and betas on that trellis graph, using
 % dynamic programming.
 
 alpha(I,start_state) += 1 for is_iter(I).
@@ -59,27 +59,27 @@ z(I) = alpha(I,end_state).
 % true path is one of the paths in the trellis.
 
 prob(I,State) = alpha(I,State) * beta(I,State) / z(I).
-prob(I,PrevState,State) 
+prob(I,PrevState,State)
     = alpha(I,PrevState) * edge(I,PrevState,State) * beta(I,State) / z(I).
 
 % ---------------------------------------------------
 % COUNTING TRANSITIONS AND EMISSIONS
 % ---------------------------------------------------
 
-% From the above, we can get the expected counts of specific 
+% From the above, we can get the expected counts of specific
 % transitions and emissions.
 
 count_transition(I,PrevTag,Tag) += prob(I,&state(Time-1,PrevTag),&state(Time,Tag)).
 count_emission(I,Tag,word(Time)) += prob(I,&state(Time,Tag)).
 
-% Smooth by adding lambda to all counts corresponding to parameters, 
+% Smooth by adding lambda to all counts corresponding to parameters,
 % even counts that are still 0 or null.
 
 lambda := 0.0.    % can be changed
 count_transition(I,PrevTag,Tag) += lambda for (Param is p_transition(I,PrevTag,Tag)).
 count_emission(I,Tag,Word) += lambda for (Param is p_emission(I,Tag,Word)).
 
-% Get the total smoothed count in each context.  These will be the 
+% Get the total smoothed count in each context.  These will be the
 % denominators of our smoothed probabiities.
 
 count_transition_denom(I,PrevTag) += count_transition(I,PrevTag,Tag).
@@ -100,10 +100,10 @@ p_emission(0,Tag,Word) := p_e(Tag,Word).
 
 % Given the smoothed counts at time I, we define the new model at time I+1:
 
-p_transition(I+1,PrevTag,Tag) 
-     = count_transition(I,PrevTag,Tag) / count_transition_denom(I,PrevTag) 
+p_transition(I+1,PrevTag,Tag)
+     = count_transition(I,PrevTag,Tag) / count_transition_denom(I,PrevTag)
            for I < num_iterations.
-p_emission(I+1,Tag,Word) 
+p_emission(I+1,Tag,Word)
      := count_emission(I,Tag,Word) / count_emission_denom(I,Tag)
            for I < num_iterations.
 
@@ -117,7 +117,7 @@ p_emission(I,&stop,&eos) := 1 for is_iter(I).
 % DRAW CONCLUSIONS FROM THE ESTIMATED MODEL
 % ---------------------------------------------------
 
-% After the model is estimated, look at the computations for the final 
+% After the model is estimated, look at the computations for the final
 % iteration to find the most likely tag at each time step, and its probability.
 
 besttagprob(Time) max= prob(num_iterations, &state(Time,Tag)) with_key Tag.
@@ -130,5 +130,3 @@ bestpathprob(State) max= edge(num_iterations,State,NextState) * bestpathprob(Nex
                             with_key [Tag | $key(bestpathprob(NextState))] for &state(_,Tag) = State.
 bestpathprob = bestpathprob(start_state).
 bestpath = $key(bestpathprob(start_state)).
-
-p

@@ -41,11 +41,16 @@ class Tracer(object):
             groups[a] = groupby(lambda x: x[1], groups[a])
         self.items = groups
 
-    def __call__(self, item):
+    def __call__(self, item, depth_limit=-1):
         if item not in self.items:
             print
             print 'no trace for', item
-        print '\n'.join(dig(item, set(), tuple(), self.items, self.interp))
+        print '\n'.join(dig(head = item,
+                            visited = set(),
+                            tail = tuple(),
+                            groups = self.items,
+                            interp = self.interp,
+                            depth_limit = depth_limit))
 
 
 def groupby(key, data):
@@ -55,7 +60,11 @@ def groupby(key, data):
     return dict(g)
 
 
-def dig(head, visited, tail, groups, interp):
+def dig(head, visited, tail, groups, interp, depth_limit=-1):
+
+    print head, len(tail), depth_limit
+    if depth_limit >= 0 and len(tail) >= depth_limit:
+        return [yellow % '*max depth*']
 
     if head in tail:
         return ['%s = %s' % (yellow % head, _repr(head.value))] \
@@ -80,12 +89,12 @@ def dig(head, visited, tail, groups, interp):
         for (_, _, body, vs) in groups[head][ruleix]:
 
             crux = Crux(head, interp.rules[ruleix], body, dict(vs))
-            block = branch([dig(x, visited, tail + (head,), groups, interp) for x in body])
+            block = branch([dig(x, visited, tail + (head,), groups, interp, depth_limit) for x in body])
 
             if block:
-                contribs.append(crux.format() + ['|'] + block)
+                contribs.append(crux.fvalue() + [''] + crux.format() + ['|'] + block)
             else:
-                contribs.append(crux.format() + [''])
+                contribs.append(crux.fvalue() + [''] + crux.format() + [''])
 
     return ['%s = %s' % (yellow % head, cyan % _repr(head.value))] \
         + ['|'] \
@@ -131,10 +140,13 @@ class Crux(object):
         except (SyntaxError, NameError):
             return x
 
+    def fvalue(self):
+        # show value and aggregator.. separate from format so we can use in
+        # error handling
+        return ['%s %s' % (green % self.rule.anf.agg, self.values(self.rule.anf.result))]
+
     def format(self):
         rule = self.rule
-        #src = rule.src.replace('\n',' ').strip()
-        #user_vars = dict(user_vars(self.vs.items()))
 
         graph = self.graph
         side = [self.get_function(x) for x in graph.outputs if x != rule.anf.result and x != rule.anf.head]
@@ -149,9 +161,7 @@ class Crux(object):
         else:
             explode += '.'
 
-        lines = ['%s %s' % (green % rule.anf.agg, self.values(rule.anf.result)),
-                 '',
-                 explode]
+        lines = [explode]
 
         if side:
             lines.append(side)
@@ -165,8 +175,10 @@ class Crux(object):
         """
         g = self.graph
         if isinstance(x, debug.Edge):
-            label = re.sub('@\d+$', '', x.label)
-            label = re.sub('^& ', '&', label)
+
+            # clean up edge name
+            label = re.sub('@\d+$', '', x.label)  # remove evaluation index
+            label = re.sub('^& ', '&', label)     # normalize prefix quote operator
 
             if label == '=':
                 [b] = x.body
@@ -191,6 +203,7 @@ class Crux(object):
                     return x[1:] + (cyan % '=%s' % self.values(x))
                 return self.values(x)
 
+            # handle multiple values (can happen at unification nodes)
             if len(g.incoming[x]) > 1:
                 return ' = '.join('(%s%s)' % (self.get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
 
@@ -200,7 +213,6 @@ class Crux(object):
                 return self.get_function(e)
 
             # handle lists
-
             if e.label == '& nil':
                 return '[]'
 
@@ -220,3 +232,13 @@ class Crux(object):
                 return self.get_function(e)
 
             return self.get_function(e) + (cyan % '=%s' % self.values(x))
+
+
+class Expr(object):
+    pass
+class Fn(Expr):
+    pass
+class Infix(Expr):
+    pass
+class Unif(Expr):
+    pass

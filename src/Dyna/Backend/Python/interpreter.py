@@ -91,18 +91,24 @@ from stdlib import todyna
 
 
 class Rule(object):
+
     def __init__(self, index):
         self.index = index
         self.init = None
         self.updaters = []
         self.query = None
+
     @property
     def span(self):
-        span = parse_attrs(self.init or self.query)['Span']
-        return hide_ugly_filename(span)
+        if self.init or self.query:
+            span = parse_attrs(self.init or self.query)['Span']
+            return hide_ugly_filename(span)
+
     @property
     def src(self):
-        return strip_comments(parse_attrs(self.init or self.query)['rule'])
+        if self.init or self.query:
+            return strip_comments(parse_attrs(self.init or self.query)['rule'])
+
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.index, self.src)
 
@@ -248,7 +254,21 @@ class Interpreter(object):
                         break
                     print >> out, '    when `%s` = %s' % (item, _repr(value))
                     print >> out, '      %s' % (e)
-                print >> out
+                    print >> out
+
+                    # TODO: include an undefined or unknown marker
+                    # TODO: can highlight the expression which raise the error.
+                    from post.trace import Crux
+
+                    c = Crux(head=None,
+                             rule=r,
+                             body=None,
+                             vs = dict(e.exception_frame))
+
+                    for line in c.format():
+                        print '       ', line
+
+                    print >> out
 
         print >> out
 
@@ -411,7 +431,49 @@ class Interpreter(object):
             try:
                 handler(item, val, emit=t_emit)
             except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
+
+                import traceback
+
+                # Move to the frame where the exception occurred, which is often not the
+                # same frame where the exception was caught.
+                tb = sys.exc_info()[2]
+                if tb is not None:
+                    while 1:
+                        if not tb.tb_next:
+                            break
+                        tb = tb.tb_next
+                    f = tb.tb_frame
+                else:                             # no exception occurred
+                    f = sys._getframe()
+
+                # get the stack frames
+                stack = []
+                while f:
+                    stack.append(f)
+                    f = f.f_back
+                stack.reverse()
+
+                if 0:
+                    print 'Traceback:'
+                    print '=========='
+                    print traceback.format_exc()
+
+                    print 'Locals by frame:'
+                    print '================'
+                    for frame in stack:
+                        print 'Frame %s in %s at line %s' % (frame.f_code.co_name,
+                                                             frame.f_code.co_filename,
+                                                             frame.f_lineno)
+                        for key, value in frame.f_locals.iteritems():
+                            print '%20s = %r' % (key, value)
+
+                        print
+                        print
+
+
+                e.exception_frame = stack[-1].f_locals.items()
                 error.append((e, handler))
+
 
         if error:
             self.error[item] = (val, error)
@@ -504,7 +566,6 @@ class Interpreter(object):
         def _emit(*args):
             emits.append(args)
 
-        # TODO: this should be a transaction.
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
@@ -527,7 +588,13 @@ class Interpreter(object):
         except (TypeError, ZeroDivisionError) as e:
             raise DynaInitializerException(e, init)
 
-        else:
+
+        finally:
+
+            # process emits
+            for e in emits:
+                self.emit(*e, delete=False)
+
             for fn, r, h in env.updaters:
                 self.new_updater(fn, r, h)
             for r, h in env.initializers:
@@ -536,9 +603,6 @@ class Interpreter(object):
             # accept the new parser state
             self.parser_state = env.parser_state
 
-            # process emits
-            for e in emits:
-                self.emit(*e, delete=False)
 
         # ------ $rule for fun and profit -------
         interp = self
