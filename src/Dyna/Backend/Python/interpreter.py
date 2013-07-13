@@ -126,11 +126,10 @@ def rule_error_context():
 
 
 def render_rule_context(rule, ctx, indent=''):
-    # TODO: include an undefined or unknown marker
-    # TODO: can highlight the expression which raise the error.
+    # TODO: highlight expression which caused the error.
     from post.trace import Crux
     c = Crux(head=None, rule=rule, body=None, vs = ctx)
-    return ''.join(indent + line for line in c.format())
+    return '\n'.join(indent + line for line in c.format())
 
 
 class Rule(object):
@@ -140,9 +139,10 @@ class Rule(object):
         self.init = None
         self.updaters = []
         self.query = None
-
         self._span = None
         self._src = None
+
+        self.initialized = False
 
     @property
     def span(self):
@@ -408,9 +408,10 @@ class Interpreter(object):
             print '^C'
             self.dump_charts()
 
-    def _go(self):
+    def _go(self, changed=None):
         "the main loop"
-        changed = {}
+        if changed is None:
+            changed = {}
         agenda = self.agenda
         error = self.error
         while agenda:
@@ -446,19 +447,15 @@ class Interpreter(object):
             if was == now:
                 continue
 
-            was_error = False
-            if item in error:    # clear error
-                was_error = True
-                del error[item]
-
             # TODO: handle `was` and `now` at the same time to avoid the two passes.
             # TODO: will need to propagate was=None when we have question mark
-            if was is not None and not was_error:
+            if was is not None: # and item not in error:
                 # if `was` is marked as an error we know it didn't propagate.
                 # Thus, we can skip the delete-updates.
                 self.update_dispatcher(item, was, delete=True)
 
-            assert now is not True or now is not False  # invalid dyna types.
+            if item in error:     # only care about errors at new value.
+                del error[item]
 
             item.value = now
 
@@ -466,6 +463,12 @@ class Interpreter(object):
                 self.update_dispatcher(item, now, delete=False)
 
             changed[item] = now
+
+        if self.uninitialized_rules:
+            self.run_uninitialized()
+
+            if self.agenda:
+                self._go(changed)
 
         return changed
 
@@ -483,6 +486,10 @@ class Interpreter(object):
         error = []
 
         for handler in self.updaters[item.fn]:
+
+            if not handler.rule.initialized:
+                continue
+
             try:
                 handler(item, val, emit=t_emit)
             except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
@@ -617,25 +624,34 @@ class Interpreter(object):
     def run_uninitialized(self):
 
         q = list(self.uninitialized_rules)
+        failed = []
+
         self.uninitialized_rules = []
+
         while q:
             (_, r) = q.pop()
             try:
+
+                rule = self.rules[r]
+                assert not rule.initialized
+
                 emits = []
                 def _emit(*args):
                     emits.append(args)
 
-                self.rules[r].init(emit=_emit)
+                rule.init(emit=_emit)
 
             except (TypeError, ZeroDivisionError) as e:
                 e.exception_frame = rule_error_context()
-                self.uninitialized_rules.append((e, r))
+                failed.append((e, r))
 
             else:
+                rule.initialized = True
                 # process emits
                 for e in emits:
                     self.emit(*e, delete=False)
 
+        self.uninitialized_rules = failed
 
     def dynac(self, filename):
         filename = path(filename)
