@@ -13,12 +13,24 @@ class _true(object):
         return True
     def __repr__(self):
         return 'true'
+    def __eq__(self, other):
+        return self is other
+    def __cmp__(self, other):
+        if other == 1:
+            return -1
+        return cmp(True, other)
 
 class _false(object):
     def __nonzero__(self):
         return False
     def __repr__(self):
         return 'false'
+    def __eq__(self, other):
+        return self is other
+    def __cmp__(self, other):
+        if other == 0:
+            return -1
+        return cmp(False, other)
 
 true = _true()
 false = _false()

@@ -137,6 +137,10 @@ class Crux(object):
         try:
             return _repr(eval(x.replace('\\"', '"')))
         except (SyntaxError, NameError):
+            if x.startswith('_'):  # looks like an intermediate variable and it's not in vs
+                # TODO: we could double check that this is a temp variable by
+                # looking it up in anf.
+                return '?'
             return x
 
     def fvalue(self):

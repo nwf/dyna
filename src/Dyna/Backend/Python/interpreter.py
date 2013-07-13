@@ -86,8 +86,51 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import crash_handler, DynaInitializerException, AggregatorError, DynaCompilerError
+from errors import crash_handler, AggregatorError, DynaCompilerError
 from stdlib import todyna
+
+
+def rule_error_context():
+    # Move to the frame where the exception occurred, which is often not the
+    # same frame where the exception was caught.
+    tb = sys.exc_info()[2]
+    if tb is not None:
+        while 1:
+            if not tb.tb_next:
+                break
+            tb = tb.tb_next
+        f = tb.tb_frame
+    else:                             # no exception occurred
+        f = sys._getframe()
+
+    # get the stack frames
+    stack = []
+    while f:
+        stack.append(f)
+        f = f.f_back
+
+    rule_frame = None
+    for frame in stack:
+        if frame.f_code.co_name == '_':   # find frame which looks like an update handler (it's name is at least '_')
+            rule_frame = frame
+
+            if False:
+                print 'Frame %s in %s at line %s' % (frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno)
+                for key, value in frame.f_locals.iteritems():
+                    print '%20s = %r' % (key, value)
+                print '\n'
+
+    if rule_frame is not None:
+        return dict(rule_frame.f_locals.items())
+    return {}
+
+
+def render_rule_context(rule, ctx, indent=''):
+    # TODO: include an undefined or unknown marker
+    # TODO: can highlight the expression which raise the error.
+    from post.trace import Crux
+    c = Crux(head=None, rule=rule, body=None, vs = ctx)
+    return ''.join(indent + line for line in c.format())
 
 
 class Rule(object):
@@ -98,14 +141,21 @@ class Rule(object):
         self.updaters = []
         self.query = None
 
+        self._span = None
+        self._src = None
+
     @property
     def span(self):
-        span = parse_attrs(self.init or self.query)['Span']
-        return hide_ugly_filename(span)
+        if self._span is None:
+            span = parse_attrs(self.init or self.query)['Span']
+            self._span = hide_ugly_filename(span)
+        return self._span
 
     @property
     def src(self):
-        return strip_comments(parse_attrs(self.init or self.query)['rule'])
+        if self._src is None:
+            self._src = strip_comments(parse_attrs(self.init or self.query)['rule'])
+        return self._src
 
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.index, self.src)
@@ -145,6 +195,8 @@ class Interpreter(object):
 
         self.time_step = 0
         self.files = []
+
+        self.uninitialized_rules = []
 
         # interpretor needs a place for it's temporary files.
         self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
@@ -210,11 +262,11 @@ class Interpreter(object):
         if out is None:
             out = sys.stdout
         # We only dump the error chart if it's non empty.
-        if not self.error:
+        if not self.error and not self.uninitialized_rules:
             return
         print >> out
-        print >> out, 'Errors'
-        print >> out, '======'
+        print >> out, red % 'Errors'
+        print >> out, red % '======'
 
         I = defaultdict(lambda: defaultdict(list))
         E = defaultdict(lambda: defaultdict(list))
@@ -254,19 +306,20 @@ class Interpreter(object):
                     print >> out, '      %s' % (e)
                     print >> out
 
-                    # TODO: include an undefined or unknown marker
-                    # TODO: can highlight the expression which raise the error.
-                    from post.trace import Crux
-
-                    c = Crux(head=None,
-                             rule=r,
-                             body=None,
-                             vs = dict(e.exception_frame))
-
-                    for line in c.format():
-                        print '       ', line
-
+                    print >> out, render_rule_context(r, e.exception_frame, indent='      ')
                     print >> out
+
+        # uninitialized rules
+        if self.uninitialized_rules:
+            print >> out, red % 'Uninitialized rules'
+            print >> out, red % '==================='
+            for e, r in self.uninitialized_rules:
+                print >> out, 'Failed to initialize rule:'
+                rule = self.rules[r]
+                print >> out, '   ', rule.src
+                print >> out, '  due to `%s`' % e
+                print >> out, render_rule_context(rule, e.exception_frame, indent='    ')
+                print >> out
 
         print >> out
 
@@ -309,6 +362,11 @@ class Interpreter(object):
         # remove $rule
         if hasattr(rule, 'item'):
             self.delete_emit(rule.item, true, ruleix=None, variables=None)
+
+        uninits = [(e, r) for e, r in self.uninitialized_rules if r != idx]
+        if len(uninits) != len(self.uninitialized_rules):
+            self.uninitialized_rules = uninits
+            return []
 
         if rule.init is not None:
             # remove update handlers
@@ -400,7 +458,6 @@ class Interpreter(object):
                 # Thus, we can skip the delete-updates.
                 self.update_dispatcher(item, was, delete=True)
 
-
             assert now is not True or now is not False  # invalid dyna types.
 
             item.value = now
@@ -429,49 +486,8 @@ class Interpreter(object):
             try:
                 handler(item, val, emit=t_emit)
             except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
-
-                import traceback
-
-                # Move to the frame where the exception occurred, which is often not the
-                # same frame where the exception was caught.
-                tb = sys.exc_info()[2]
-                if tb is not None:
-                    while 1:
-                        if not tb.tb_next:
-                            break
-                        tb = tb.tb_next
-                    f = tb.tb_frame
-                else:                             # no exception occurred
-                    f = sys._getframe()
-
-                # get the stack frames
-                stack = []
-                while f:
-                    stack.append(f)
-                    f = f.f_back
-                stack.reverse()
-
-                if 0:
-                    print 'Traceback:'
-                    print '=========='
-                    print traceback.format_exc()
-
-                    print 'Locals by frame:'
-                    print '================'
-                    for frame in stack:
-                        print 'Frame %s in %s at line %s' % (frame.f_code.co_name,
-                                                             frame.f_code.co_filename,
-                                                             frame.f_lineno)
-                        for key, value in frame.f_locals.iteritems():
-                            print '%20s = %r' % (key, value)
-
-                        print
-                        print
-
-
-                e.exception_frame = stack[-1].f_locals.items()
+                e.exception_frame = rule_error_context()
                 error.append((e, handler))
-
 
         if error:
             self.error[item] = (val, error)
@@ -535,7 +551,7 @@ class Interpreter(object):
         self.agenda[item] = self.time_step
         self.time_step += 1
 
-    def do(self, filename, initialize=True):
+    def do(self, filename):
         """
         Compile, load, and execute new dyna rules.
 
@@ -560,10 +576,6 @@ class Interpreter(object):
                     ('peel', peel)]:
             setattr(env, k, v)
 
-        emits = []
-        def _emit(*args):
-            emits.append(args)
-
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 
@@ -576,33 +588,11 @@ class Interpreter(object):
         for r, h in env.initializers:
             self.new_initializer(r, h)
             new_rules.add(r)
+            self.uninitialized_rules.append((None, r))
         self.new_rules = new_rules
 
-        try:
-            if initialize:
-                # run new initializers
-                for _, init in env.initializers:
-                    init(emit=_emit)
-
-        except (TypeError, ZeroDivisionError) as e:
-
-            # remove new rules
-            for r in new_rules:
-                self.retract_rule(r)
-            self.new_rules = set()
-
-            # if multiple rules were added we reject all of them (in order to
-            # avoid an bizarre parser state.
-            raise DynaInitializerException(e, init)
-
-        else:
-
-            # process emits
-            for e in emits:
-                self.emit(*e, delete=False)
-
-            # accept the new parser state
-            self.parser_state = env.parser_state
+        # accept the new parser state
+        self.parser_state = env.parser_state
 
         # ------ $rule for fun and profit -------
         interp = self
@@ -620,7 +610,32 @@ class Interpreter(object):
                 r.item = rule(i, r.src, todyna([head, agg, result, evals, unifs]), r.init, r.query)
         #-----------------------------------------
 
+        self.run_uninitialized()
+
         return self.go()
+
+    def run_uninitialized(self):
+
+        q = list(self.uninitialized_rules)
+        self.uninitialized_rules = []
+        while q:
+            (_, r) = q.pop()
+            try:
+                emits = []
+                def _emit(*args):
+                    emits.append(args)
+
+                self.rules[r].init(emit=_emit)
+
+            except (TypeError, ZeroDivisionError) as e:
+                e.exception_frame = rule_error_context()
+                self.uninitialized_rules.append((e, r))
+
+            else:
+                # process emits
+                for e in emits:
+                    self.emit(*e, delete=False)
+
 
     def dynac(self, filename):
         filename = path(filename)
@@ -676,8 +691,6 @@ def main():
                         help='run post-processor.')
     parser.add_argument('--load', nargs='*',
                         help='run loaders.')
-#    parser.add_argument('--profile', action='store_true',
-#                        help='run profiler.')
 
     args = parser.parse_args()
 
@@ -737,11 +750,7 @@ def main():
 #            os.system('pkill snakeviz; snakeviz prof &')
 #            return
 
-        try:
-            interp.do(plan)
-        except DynaInitializerException as e:
-            print e
-            exit(1)
+        interp.do(plan)
 
     if args.load:
         for cmd in args.load:

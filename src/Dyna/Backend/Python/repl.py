@@ -10,7 +10,7 @@ to help.
 import re, os, cmd, readline
 from utils import ip, lexer, subst, drepr, _repr, get_module
 from stdlib import topython, todyna
-from errors import DynaCompilerError, DynaInitializerException
+from errors import DynaCompilerError
 from config import dotdynadir
 from errors import show_traceback
 from interpreter import Interpreter, foo, none
@@ -258,11 +258,12 @@ class REPL(cmd.Cmd, object):
         if not line.endswith('.'):
             print "ERROR: Line doesn't end with period."
             return
+
         try:
             src = self.interp.dynac_code(line + '   %% repl line %s' % self.lineno)
             changed = self.interp.do(src)
 
-        except (DynaInitializerException, DynaCompilerError) as e:
+        except DynaCompilerError as e:
             print type(e).__name__ + ':'
             print e
             print 'new rule(s) were not added to program.'

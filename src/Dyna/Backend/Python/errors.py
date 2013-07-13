@@ -14,20 +14,6 @@ class AggregatorError(Exception):
     pass
 
 
-class DynaInitializerException(Exception):
-    def __init__(self, exception, init):
-        rule = parse_attrs(init)['rule']
-        span = parse_attrs(init)['Span']
-        if span.startswith(dotdynadir / 'tmp'):
-            # don't show users tmp files create by the repl.
-            msg = '%r in ininitializer for rule\n    %s' % \
-                (exception, rule)
-        else:
-            msg = '%r in ininitializer for rule\n  %s\n        %s' % \
-                (exception, span, rule)
-        super(DynaInitializerException, self).__init__(msg)
-
-
 
 # TODO: we should package up all relevant state including compiler version,
 # codegen output, interpreter state (possibly without the chart -- because it

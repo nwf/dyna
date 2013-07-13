@@ -1,10 +1,20 @@
 > x = cons(1, 2).
 
-DynaInitializerException:
-TypeError('Malformed list',) in ininitializer for rule
-    x = cons(1, 2).
-new rule(s) were not added to program.
+> sol
 
+Solution empty.
+
+Errors
+======
+Uninitialized rules
+===================
+Failed to initialize rule:
+    x = cons(1, 2).
+  due to `Malformed list`
+    x = &cons(1, 2).
+
+
+> retract_rule 0
 
 > s set= Y for Y in [3,2,1,[2,1],&f(1)].
 
@@ -134,5 +144,5 @@ testbool = false.
 
 Changes
 =======
-thingsbag = [1, 1, 2, "three", true].
-thingset = [1, 2, true, "three"].
+thingsbag = [true, 1, 1, 2, "three"].
+thingset = [true, 1, 2, "three"].

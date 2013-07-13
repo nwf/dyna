@@ -168,7 +168,7 @@ class and_equals(BAggregator):
                 if val is false:
                     return false
             return true
-            
+
 
 class set_equals(BAggregator):
     def fold(self):
@@ -180,8 +180,11 @@ class set_equals(BAggregator):
 
 class bag_equals(BAggregator):
     def fold(self):
-        from stdlib import todyna
-        return todyna(list(Counter(self).elements()))
+        if any(m > 0 for m in self.itervalues()):
+            from stdlib import todyna
+            x = list(Counter(self).elements())
+            x.sort()
+            return todyna(x)
 
 
 # map names to functions
