@@ -134,8 +134,8 @@
 | tostring([X,Y,Z]) := "(" + tostring(X) + " " + tostring(Y) + " " + tostring(Z) + ")".
 
 % collect errors
-> errors(S) = [tostring(parse(S)), tostring(b(tree(S)))] for parse(S) != b(tree(S)).
-  *ignore*
+%> errors(S) = [tostring(parse(S)), tostring(b(tree(S)))] for parse(S) != b(tree(S)).
+%  *ignore*
 
 % report accuracy
 > correct += parse(S) == b(tree(S)), 1.0.
@@ -149,8 +149,8 @@ correct = 21.0.
 ntrees = 23.
 
 % inspect errors
-> query errors(S)
-errors(12) = ["(ROOT (S (NP Laura) (VP (VP (V (V say) -s) (SBAR that (S (NP George) (VP (Modal might) (VP (V sleep)))))) (PP (P on) (NP (Det the) (N floor))))) !)", "(ROOT (S (NP Laura) (VP (V (V say) -s) (SBAR that (S (NP George) (VP (VP (Modal might) (VP (V sleep))) (PP (P on) (NP (Det the) (N floor)))))))) !)"].
-errors(21) = ["(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))))) (@VP and (VP (VP (V (V sleep) -ed)) (PP (P on) (NP (Det the) (N floor))))))) .)", "(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) (@VP and (VP (V (V sleep) -ed)))))) (PP (P on) (NP (Det the) (N floor))))) .)"].
+%> query errors(S)
+%errors(12) = ["(ROOT (S (NP Laura) (VP (VP (V (V say) -s) (SBAR that (S (NP George) (VP (Modal might) (VP (V sleep)))))) (PP (P on) (NP (Det the) (N floor))))) !)", "(ROOT (S (NP Laura) (VP (V (V say) -s) (SBAR that (S (NP George) (VP (VP (Modal might) (VP (V sleep))) (PP (P on) (NP (Det the) (N floor)))))))) !)"].
+%errors(21) = ["(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))))) (@VP and (VP (VP (V (V sleep) -ed)) (PP (P on) (NP (Det the) (N floor))))))) .)", "(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) (@VP and (VP (V (V sleep) -ed)))))) (PP (P on) (NP (Det the) (N floor))))) .)"].
 
 %> *resume*

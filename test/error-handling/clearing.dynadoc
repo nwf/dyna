@@ -1,0 +1,59 @@
+> d += 0.
+
+Changes
+=======
+d = 0.
+
+> a += 1.
+
+Changes
+=======
+a = 1.
+
+> b += a.
+
+Changes
+=======
+b = 1.
+
+% OK so far.  Now if I
+
+> a += 1/d.
+
+> sol
+
+Solution
+========
+a = 1.
+b = 1.
+d = 0.
+
+Errors
+======
+Uninitialized rules
+===================
+Failed to initialize rule:
+    a += 1/d.
+  due to `division by zero`
+    a += (1 / d=0)=?.
+
+
+% That seems OK.  But when I
+
+> d += 1.
+
+Changes
+=======
+a = 2.
+b = 2.
+d = 1.
+
+% Looks good.
+
+> sol
+
+Solution
+========
+a = 2.
+b = 2.
+d = 1.

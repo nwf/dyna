@@ -1,0 +1,87 @@
+
+> b := 0.
+| a += 1/b.
+|
+| c += "" + b.
+|
+| e := 0.
+|
+| b := e/0.
+| a += e/0.
+|
+| d += null.
+| d += 1.
+|
+| a(X) := f(X,Y).
+|
+| f(1,1) := 1.
+| f(1,2) := 2.
+|
+| f(2,1) := 1.
+| f(2,2) := 2.
+
+Changes
+=======
+a(1) = $error.
+a(2) = $error.
+b = 0.
+d = $error.
+e = 0.
+f(1,1) = 1.
+f(1,2) = 2.
+f(2,1) = 1.
+f(2,2) = 2.
+
+> sol
+
+Solution
+========
+b = 0.
+d = $error.
+e = 0.
+
+a/1
+===
+a(1) = $error.
+a(2) = $error.
+
+f/2
+===
+f(1,1) = 1.
+f(1,2) = 2.
+f(2,1) = 1.
+f(2,2) = 2.
+
+Errors
+======
+Error(s) aggregating a/1:
+  AggregatorError:
+    `a(1)`: `:=` got conflicting values [1, 2] for rule index 8
+    `a(2)`: `:=` got conflicting values [1, 2] for rule index 8
+Error(s) aggregating d/0:
+  TypeError:
+    `d`: unsupported operand type(s) for *: 'NoneType' and 'int'
+Error(s) in rule: <repl>
+    a += 1/b.
+  ZeroDivisionError:
+    when `b` = 0
+      division by zero
+      a += (1 / b=0)=?.
+Error(s) in rule: <repl>
+    c += "" + b.
+  TypeError:
+    when `b` = 0
+      cannot concatenate 'str' and 'int' objects
+      c += ("" + b=0)=?.
+Error(s) in rule: <repl>
+    b := e/0.
+  ZeroDivisionError:
+    when `e` = 0
+      division by zero
+      b := (e=0 / 0)=?.
+Error(s) in rule: <repl>
+    a += e/0.
+  ZeroDivisionError:
+    when `e` = 0
+      division by zero
+      a += (e=0 / 0)=?.

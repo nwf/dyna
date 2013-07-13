@@ -13,8 +13,9 @@ from dyna_doctest import run
 from utils import red, green
 
 failures = []
-for x in path('test/repl').glob("*.dynadoc"):
+for x in path('test').glob("*/*.dynadoc"):
     print x,
+    sys.stdout.flush()
     with file(x) as f:
         g = StringIO()
         if run(f.read(), g):

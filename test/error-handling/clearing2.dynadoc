@@ -1,0 +1,37 @@
+> d += 0.
+
+Changes
+=======
+d = 0.
+
+> a += 1 / d.
+
+> rules
+
+Rules
+=====
+  0: d += 0.
+  1: a += 1 / d.
+
+
+> sol
+
+Solution
+========
+d = 0.
+
+Errors
+======
+Uninitialized rules
+===================
+Failed to initialize rule:
+    a += 1 / d.
+  due to `division by zero`
+    a += (1 / d=0)=?.
+
+> d += 1.
+
+Changes
+=======
+a = 1.0.
+d = 1.
