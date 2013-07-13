@@ -86,50 +86,8 @@ from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import crash_handler, AggregatorError, DynaCompilerError
+from errors import crash_handler, rule_error_context, AggregatorError, DynaCompilerError
 from stdlib import todyna
-
-
-def rule_error_context():
-    # Move to the frame where the exception occurred, which is often not the
-    # same frame where the exception was caught.
-    tb = sys.exc_info()[2]
-    if tb is not None:
-        while 1:
-            if not tb.tb_next:
-                break
-            tb = tb.tb_next
-        f = tb.tb_frame
-    else:                             # no exception occurred
-        f = sys._getframe()
-
-    # get the stack frames
-    stack = []
-    while f:
-        stack.append(f)
-        f = f.f_back
-
-    rule_frame = None
-    for frame in stack:
-        if frame.f_code.co_name == '_':   # find frame which looks like an update handler (it's name is at least '_')
-            rule_frame = frame
-
-            if False:
-                print 'Frame %s in %s at line %s' % (frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno)
-                for key, value in frame.f_locals.iteritems():
-                    print '%20s = %r' % (key, value)
-                print '\n'
-
-    if rule_frame is not None:
-        return dict(rule_frame.f_locals.items())
-    return {}
-
-
-def render_rule_context(rule, ctx, indent=''):
-    # TODO: highlight expression which caused the error.
-    from post.trace import Crux
-    c = Crux(head=None, rule=rule, body=None, vs = ctx)
-    return '\n'.join(indent + line for line in c.format())
 
 
 class Rule(object):
@@ -159,6 +117,13 @@ class Rule(object):
 
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.index, self.src)
+
+    def render_ctx(self, ctx, indent=''):
+        # TODO: highlight expression which caused the error.
+        from post.trace import Crux
+        c = Crux(head=None, rule=self, body=None, vs = ctx)
+        return '\n'.join(indent + line for line in c.format())
+
 
 
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
@@ -306,7 +271,7 @@ class Interpreter(object):
                     print >> out, '      %s' % (e)
                     print >> out
 
-                    print >> out, render_rule_context(r, e.exception_frame, indent='      ')
+                    print >> out, r.render_ctx(e.exception_frame, indent='      ')
                     print >> out
 
         # uninitialized rules
@@ -318,7 +283,7 @@ class Interpreter(object):
                 rule = self.rules[r]
                 print >> out, '   ', rule.src
                 print >> out, '  due to `%s`' % e
-                print >> out, render_rule_context(rule, e.exception_frame, indent='    ')
+                print >> out, rule.render_ctx(e.exception_frame, indent='    ')
                 print >> out
 
         print >> out
@@ -430,7 +395,7 @@ class Interpreter(object):
                 item.value = now
                 continue
 
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt, NotImplementedError) as e:
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt) as e:
                 error[item] = (None, [(e, None)])
 
                 now = self.build('$error/0')   # XXX: should go an agenda or run delete?

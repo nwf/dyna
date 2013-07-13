@@ -1,4 +1,3 @@
-from errors import notimplemented
 from utils import _repr, true, false
 from aggregator import NoAggregator
 
