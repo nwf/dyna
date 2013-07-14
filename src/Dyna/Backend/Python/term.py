@@ -29,7 +29,6 @@ class Term(object):
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
-
         fn = '/'.join(self.fn.split('/')[:-1])  # drop arity from name.
         if not self.args:
             return fn

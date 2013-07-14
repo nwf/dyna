@@ -118,6 +118,7 @@ def rule_error_context():
     for frame in stack:
         if frame.f_code.co_name == '_':   # find frame which looks like an update handler (it's name is at least '_')
             rule_frame = frame
+            break
 
     if rule_frame is not None:
         return dict(rule_frame.f_locals)

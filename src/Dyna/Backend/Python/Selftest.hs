@@ -41,7 +41,7 @@ runDynaPy f pl out = handle (\(_ :: ExitCode) -> return ()) $ do
    (Nothing,Nothing,Nothing,ph) <- createProcess $ CreateProcess
       { cmdspec = RawCommand "/usr/bin/env"
                              [ "python"
-                             , "src/Dyna/Backend/Python/interpreter.py"
+                             , "src/Dyna/Backend/Python/main.py"
                              , "--plan"
                              , "-o", out
                              , pl

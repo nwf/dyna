@@ -11,7 +11,7 @@ d = 0.
 Rules
 =====
   0: d += 0.
-  1: a += 1 / d.
+  1: a += 1 / d.  <-- uninitialized
 
 
 > sol

@@ -46,12 +46,10 @@ def _repr(x):
 
 # TODO: this assertion should eventually hold.
 #    assert x is not True and x is not False, x
-
     if x is True:
         return 'true'
     elif x is False:
         return 'false'
-
     elif x is None:
         return 'null'
     elif isinstance(x, basestring):

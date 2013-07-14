@@ -1,93 +1,22 @@
 #!/usr/bin/env python
 
-"""
-TODO
-====
-
- - dyna syntax which just gets passed to the backend:
-
- - Use Dyna do some more work! think about using Dyna to maintain rules, update
-   handlers, and indices (as Jason points out indices are just memoized
-   queries).
-
-
-FASTER
-======
-
- - specialize calls to emit: don't build the local variable dictionaries if the
-   aggregator doesn't use them. Consider generate both versions (or an argument
-   to the update handler which will skip the appropriate code paths).
-
- - faster charts (dynamic argument types? jason's trie data structure)
-
- - teach planner to prefer not to use the value column, because it's not
-   indexed.
-
- - Collect all query modes used by the planner. Consider indexing value column
-   if plans need it.
-
- - better default prioritization (currently FIFO)
-
- - BAggregators aren't very efficient.
-
- - interning with integers instead of deduplicated instances of Term.
-
-
-STRONGER (robustness)
-=====================
-
- - error handling, some stuff isn't a proper transaction yet.
-
- - Context manager for disabling ^C in certain blocks.
-
- - catch compiler errors (for example, ^C while compiling results in a "Compiler
-   panic!  This is almost assuredly not your fault!...").
-
-
-USERS
-=====
-
- - user-defined priorities
-
- - Catch typos! Warn the user if they write a predicate that is not defined on
-   the LHS of a rule and it's not quoted (i.e. not some new piece of structure).
-   [mode analysis will help with this].
-
- - If the solver is taking too long, print an "apology" with some simple
-   statistics explaining what the solver is doing (e.g. repropagation-rate: does
-   it have a bad prioritization heuristics is it stuck in a cycle; number of
-   items proved: is it counting to infinity?).
-
-
-JUST FOR FUN
-============
-
- - visualize execution of solver on hypergraph -- recreate nwf's animations from
-   his ICLP talk.
-
- - overload everything so that values maintain provenance and we can inspect the
-   entire fine-grained circuit.
-
-"""
-
-from __future__ import division
-import os, sys, imp, argparse
+import os, sys, imp, traceback
 from collections import defaultdict
 from hashlib import sha1
 from path import path
 
-import load, post
-
 from term import Term, Cons, Nil, MapsTo
 from chart import Chart
-from utils import ip, red, green, blue, magenta, yellow, parse_attrs, \
-    ddict, dynac, read_anf, strip_comments, _repr, hide_ugly_filename, \
-    true, false
+from utils import red, parse_attrs, ddict, dynac, read_anf, strip_comments, \
+    _repr, hide_ugly_filename, true, false
 
 from prioritydict import prioritydict
 from config import dotdynadir
-from errors import crash_handler, rule_error_context, AggregatorError, DynaCompilerError
+from errors import rule_error_context, AggregatorError, DynaCompilerError
 from stdlib import todyna
+
+
+#sys.setrecursionlimit(10000)
 
 
 class Rule(object):
@@ -99,7 +28,6 @@ class Rule(object):
         self.query = None
         self._span = None
         self._src = None
-
         self.initialized = False
 
     @property
@@ -125,7 +53,6 @@ class Rule(object):
         return '\n'.join(indent + line for line in c.format())
 
 
-
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
 # state
 class foo(dict):
@@ -147,22 +74,19 @@ class Interpreter(object):
     def __init__(self):
         # declarations
         self.agg_name = defaultdict(none)
+        self.parser_state = ''
+        self.files = []
+        # rules
+        self.rules = ddict(Rule)
         self.updaters = defaultdict(list)
         self._gbc = defaultdict(list)
-
         # data structures
         self.agenda = prioritydict()
-        self.parser_state = ''
-
         self.chart = foo(self.agg_name)
-        self.rules = ddict(Rule)
         self.error = {}
-
-        self.time_step = 0
-        self.files = []
-
         self.uninitialized_rules = []
-
+        # misc
+        self.time_step = 0
         # interpretor needs a place for it's temporary files.
         self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
         if tmp.exists():
@@ -170,10 +94,8 @@ class Interpreter(object):
         tmp.makedirs_p()
 
     def new_fn(self, fn, agg):
-        # check for aggregator conflict.
         if self.agg_name[fn] is None:
             self.agg_name[fn] = agg
-
             # if we have a new aggregator and an existing chart we need to shove
             # a bunch of aggregators into the interned nodes.
             #
@@ -187,7 +109,7 @@ class Interpreter(object):
                 for item in c.intern.itervalues():
                     assert item.aggregator is None
                     item.aggregator = c.new_aggregator(item)
-
+        # check for aggregator conflict.
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
     def dump_charts(self, out=None):
@@ -200,11 +122,8 @@ class Interpreter(object):
         others = [x for x in fns if not x.endswith('/0')]
 
         # show nullary charts first
-        nullary = [str(self.chart[x]) for x in nullary]
-        charts = [str(self.chart[x]) for x in others if not x.startswith('$rule/')]
-
-        nullary = filter(None, nullary)
-        charts = filter(None, charts)
+        nullary = filter(None, [str(self.chart[x]) for x in nullary])
+        charts = filter(None, [str(self.chart[x]) for x in others if not x.startswith('$rule/')])
 
         if nullary or charts:
             print >> out
@@ -233,6 +152,7 @@ class Interpreter(object):
         print >> out, red % 'Errors'
         print >> out, red % '======'
 
+        # separate errors into aggregation errors and update handler errors
         I = defaultdict(lambda: defaultdict(list))
         E = defaultdict(lambda: defaultdict(list))
         for item, (val, es) in self.error.items():
@@ -270,7 +190,6 @@ class Interpreter(object):
                     print >> out, '    when `%s` = %s' % (item, _repr(value))
                     print >> out, '      %s' % (e)
                     print >> out
-
                     print >> out, r.render_ctx(e.exception_frame, indent='      ')
                     print >> out
 
@@ -296,10 +215,15 @@ class Interpreter(object):
         print 'Rules'
         print '====='
         for i in sorted(self.rules):
-            print '%3s: %s' % (i, self.rules[i].src)
+            rule = self.rules[i]
+            if rule.init is not None and not rule.initialized:
+                print '%3s: %s  <-- uninitialized' % (i, rule.src)
+            else:
+                print '%3s: %s' % (i, rule.src)
         print
 
     def build(self, fn, *args):
+        # handle a few special cases where the item doesn't have a chart
         if fn == 'cons/2':
             return Cons(*args)
         if fn == 'nil/0':
@@ -308,11 +232,10 @@ class Interpreter(object):
             return MapsTo(*args)
         if fn == '$key/1':
             self.new_fn(fn, '=')
-
+        # if we haven't seen this functor before, it probably doesn't have a
+        # Chart, so lets go ahead and create one.
         if fn not in self.agg_name:
-            # item has no aggregator and this is the first time we're seeing it.
             self.new_fn(fn, None)
-
         return self.chart[fn].insert(args)
 
     def retract_rule(self, idx):
@@ -334,33 +257,39 @@ class Interpreter(object):
             return []
 
         if rule.init is not None:
+            # Forward chained rule --
             # remove update handlers
             for u in rule.updaters:
                 for xs in self.updaters.values():
                     if u in xs:
                         xs.remove(u)
                         assert u not in xs, 'Several occurrences of u in xs'
-            # run initializer in delete mode
-            try:
-                rule.init(emit=self.delete_emit)
-            except (TypeError, ZeroDivisionError):
-                pass
+            if rule.initialized:
+                # run initializer in delete mode
+                try:
+                    rule.init(emit=self.delete_emit)
+                except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError):
+                    # TODO: what happens if there's an error?
+                    pass
         else:
-            assert rule.query is not None
+            # Backchained rule --
             # remove query handler
             self._gbc[rule.head_fn].remove(rule.query)
-            # blast the memo entries for items it helped derive
+            # blast the memo entries for items this rule may have helped derive.
             if rule.head_fn in self.chart:
-                for head in self.chart[rule.head_fn].intern.itervalues():
 
+                # update values before propagating
+                for head in self.chart[rule.head_fn].intern.itervalues():
                     def _emit(item, val, ruleix, variables):
                         item.aggregator.dec(val, ruleix, variables)
-
                     try:
                         rule.query(*head.args, emit=_emit)
-                    except (TypeError, ZeroDivisionError):
+                    except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError):
+                        # TODO: what happens if there's an error?
                         pass
 
+                # propagate new values
+                for head in self.chart[rule.head_fn].intern.itervalues():
                     self.agenda[head] = self.time_step
                     self.time_step += 1
 
@@ -395,7 +324,7 @@ class Interpreter(object):
                 item.value = now
                 continue
 
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt) as e:
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
                 error[item] = (None, [(e, None)])
 
                 now = self.build('$error/0')   # XXX: should go an agenda or run delete?
@@ -403,6 +332,7 @@ class Interpreter(object):
                 item.value = now
                 continue
 
+            # special handling for with_key, forks into two updates
             if hasattr(now, 'fn') and now.fn == 'with_key/2':
                 now, key = now.args
                 dkey = self.build('$key/1', item)
@@ -452,13 +382,15 @@ class Interpreter(object):
 
         for handler in self.updaters[item.fn]:
 
+            # TODO: should only add update handlers after rule has been initialized.
             if not handler.rule.initialized:
                 continue
 
             try:
                 handler(item, val, emit=t_emit)
-            except (TypeError, ZeroDivisionError, KeyboardInterrupt, OverflowError) as e:
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
+                e.traceback = traceback.format_exc()
                 error.append((e, handler))
 
         if error:
@@ -485,11 +417,13 @@ class Interpreter(object):
         if head.value is not None:
             return head.value
 
+        if head.aggregator is None:   # we might not have a rule defining this subgoal.
+            return
+
         head.aggregator.clear()
 
         def _emit(item, val, ruleix, variables):
-            assert item is head, [item, head]
-            head.aggregator.inc(val, ruleix, variables)
+            item.aggregator.inc(val, ruleix, variables)
 
         for h in self._gbc[fn]:
             h(*args, emit=_emit)
@@ -515,7 +449,7 @@ class Interpreter(object):
     def delete_emit(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
 
-    def emit(self, item, val, ruleix, variables, delete): #, aggregator_to_inherit=None):
+    def emit(self, item, val, ruleix, variables, delete):
         if delete:
             item.aggregator.dec(val, ruleix, variables)
         else:
@@ -530,8 +464,6 @@ class Interpreter(object):
         To support the REPL, we try do load these new rules in a transaction --
         if any rule in the newly loaded code is "bad," we simple reject the
         addition of all these the new rules.
-
-        A rule is bad if the compiler rejects it or it's initializer fails.
         """
         assert os.path.exists(filename)
 
@@ -606,8 +538,9 @@ class Interpreter(object):
 
                 rule.init(emit=_emit)
 
-            except (TypeError, ZeroDivisionError) as e:
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
+                e.traceback = traceback.format_exc()
                 failed.append((e, r))
 
             else:
@@ -655,109 +588,3 @@ def peel(fn, item):
     assert isinstance(item, Term)
     assert item.fn == fn
     return item.args
-
-
-def main():
-    parser = argparse.ArgumentParser(description="The dyna interpreter!")
-    parser.add_argument('source', nargs='*', type=path,
-                        help='Path to Dyna source file (or plan if --plan=true).')
-    parser.add_argument('-i', dest='interactive', action='store_true',
-                        help='Fire-up REPL after runing solver..')
-    parser.add_argument('--plan', action='store_true',
-                        help='`source` specifies output of the compiler instead of dyna source code.')
-    parser.add_argument('-o', '--output', dest='output',
-                        type=argparse.FileType('wb'),
-                        help='Write solution to file.')
-    parser.add_argument('--post-process', nargs='*',
-                        help='run post-processor.')
-    parser.add_argument('--load', nargs='*',
-                        help='run loaders.')
-
-    args = parser.parse_args()
-
-    interp = Interpreter()
-
-    crash_handler()
-
-    if args.source:
-
-        if len(args.source) > 1:
-            # concatenate files
-            with file(interp.tmp / 'tmp.dyna', 'wb') as g:
-                for f in args.source:
-                    if not os.path.exists(f):
-                        print 'File %r does not exist.' % f
-                    with file(f) as f:
-                        g.write('\n')
-                        g.write('%'*80)
-                        g.write('\n')
-                        g.write('%% ')
-                        g.write(f.name)
-                        g.write('\n')
-                        g.write(f.read())
-            args.source = g.name
-        else:
-            [args.source] = args.source
-
-        if not os.path.exists(args.source):
-            print 'File %r does not exist.' % args.source
-            return
-
-        if args.plan:
-            # copy plan to tmp directory
-            plan = interp.tmp / args.source.read_hexhash('sha1') + '.plan.py'
-            args.source.copy(plan)
-
-        else:
-            try:
-                plan = interp.dynac(args.source)
-            except DynaCompilerError as e:
-                print e
-                exit(1)
-
-#        if args.profile:
-#            # When profiling, its common practice to disable the garbage collector.
-#            import gc
-#            gc.disable()
-#
-#            from cProfile import Profile
-#            p = Profile()
-#            p.runctx('interp.do(plan)', globals(), locals())
-#            p.dump_stats('prof')
-#
-#            interp.dump_charts()
-#
-#            os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
-#            os.system('pkill snakeviz; snakeviz prof &')
-#            return
-
-        interp.do(plan)
-
-    if args.load:
-        for cmd in args.load:
-            load.run(interp, cmd)
-
-    if args.post_process:
-        for cmd in args.post_process:
-            post.run(interp, cmd)
-
-    if args.load or args.post_process or args.source:
-        interp.dump_charts(args.output)      # should be a post-processor
-
-    if args.interactive or not args.source:
-        from repl import REPL
-        repl = REPL(interp)
-
-        def repl_crash():
-            # all files the interpreter generated
-            with file(dotdynadir / 'crash-repl.log', 'wb') as f:
-                for line in repl.lines:
-                    print >> f, line
-
-        crash_handler.hooks.append(repl_crash)
-
-        repl.cmdloop()
-
-
-if __name__ == '__main__':
-    main()

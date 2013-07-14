@@ -1,40 +1,75 @@
 > :- backchain f/1.
-| f(X) := f(X-1) + f(X-2) for X > 1.
+| :- backchain g/1.
+| f(0) := 0.
 | f(1) := 1.
-| f(0) := 1.
-| a := f(3).
-| b := f(4).
-| c := f(5).
+| f(X) := f(X-1) + f(X-2) for X > 1.
+| a(X) = f(X) for X in range(6).
 
 Changes
 =======
-a = 3.
-b = 5.
-c = 8.
+a(0) = 0.
+a(1) = 1.
+a(2) = 1.
+a(3) = 2.
+a(4) = 3.
+a(5) = 5.
 
-> rules
+% Let's define a few items which will depend on values of `f`
 
-Rules
-=====
-  0: f(X) := f(X-1) + f(X-2) for X > 1.
-  1: f(1) := 1.
-  2: f(0) := 1.
-  3: a := f(3).
-  4: b := f(4).
-  5: c := f(5).
-
-> retract_rule 0
+> s += a(X).
 
 Changes
 =======
-a = null.
-b = null.
-c = null.
+s = 12.
+
+
+> retract_rule 2
+
+Changes
+=======
+a(2) = null.
+a(3) = null.
+a(4) = null.
+a(5) = null.
 f(2) = null.
 f(3) = null.
 f(4) = null.
 f(5) = null.
+s = 1.
+
+
+% Note: that `f(0)` and `f(1)` are still defined by rules 0 and 1,
+% respectively. We know this because they are not `null`-ed out by retracting
+% the rule.
 
 > sol
 
-Solution empty.
+Solution
+========
+s = 1.
+
+a/1
+===
+a(0) = 0.
+a(1) = 1.
+
+
+% Now `f` is factorial
+
+> :- backchain f/1.
+| f(X) := f(X-1) * X for X > 1.
+| f(0) := 1.
+| b(X) = f(X) for X in range(6).
+
+% oh no! a(x) doesn't know that we have a new definition! for `f`, unlike the
+% rule defining `b(X)` which we use the new version of `f` when we run it's
+% initializer.
+
+Changes
+=======
+b(0) = 0.
+b(1) = 1.
+b(2) = 2.
+b(3) = 6.
+b(4) = 24.
+b(5) = 120.
