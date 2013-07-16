@@ -102,7 +102,7 @@ def todyna(x):
         return false
 
     elif isinstance(x, dict):
-        return todyna([MapsTo(k,v) for k,v in x.items()])
+        return todyna([MapsTo(todyna(k), todyna(v)) for k,v in x.items()])
 
     elif isinstance(x, (list, tuple)):
         c = Nil

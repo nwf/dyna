@@ -13,7 +13,6 @@ from stdlib import topython, todyna
 from errors import DynaCompilerError
 from config import dotdynadir
 from errors import show_traceback
-from interpreter import Interpreter, foo, none
 import load, post
 
 

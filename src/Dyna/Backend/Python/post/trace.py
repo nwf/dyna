@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""
-TODO: have ANF output which functors are infix, prefix, nullary, etc.
-"""
-
 import re
 from collections import defaultdict
 

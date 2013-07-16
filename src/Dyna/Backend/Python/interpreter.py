@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, imp, traceback
+import re, os, sys, imp, traceback
 from collections import defaultdict
 from hashlib import sha1
 from path import path
@@ -81,6 +81,11 @@ class Interpreter(object):
         if tmp.exists():
             tmp.rmtree()
         tmp.makedirs_p()
+
+        # coarsening of the program shows which rules might depend on each other
+        # (an over estimate -- high recall, low precision).
+        self.coarse_deps = defaultdict(set)
+        self.rule_by_head = defaultdict(list)
 
     def new_fn(self, fn, agg):
         if self.agg_name[fn] is None:
@@ -187,7 +192,6 @@ class Interpreter(object):
 
         if self.uninitialized_rules:
             self.run_uninitialized()
-
             if self.agenda:
                 self.run_agenda(changed)
 
@@ -202,7 +206,7 @@ class Interpreter(object):
         # changes to aggregators.
         emittiers = []
         t_emit = lambda item, val, ruleix, variables: \
-            emittiers.append((item, val, ruleix, variables, delete))
+           emittiers.append((item, val, ruleix, variables, delete))
 
         error = []
 
@@ -314,12 +318,9 @@ class Interpreter(object):
                 rule.init(emit=_emit)
 
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
-                # TODO: should put stuff in error table, like everything else.
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
-
                 self.error[rule] = e
-
                 failed.append(rule)
             else:
                 rule.initialized = True
@@ -332,8 +333,21 @@ class Interpreter(object):
     # Adding/removing rules
 
     def add_rule(self, index, init=None, query=None, head_fn=None, anf=None):
-
+        assert anf is not None
         assert index not in self.rules
+
+        for (x, label, ys) in anf.unifs:
+            if x == anf.head:
+                assert label == '&'
+                fa = '%s/%d' % (ys[0], len(ys) - 1)
+                if head_fn is not None:
+                    assert head_fn == fa
+                head_fn = fa
+                break
+        else:
+            assert False, 'did not find head'
+        assert head_fn is not None
+
 
         span = hide_ugly_filename(parse_attrs(init or query)['Span'])
         dyna_src = strip_comments(parse_attrs(init or query)['rule'])
@@ -344,6 +358,8 @@ class Interpreter(object):
         rule.src = dyna_src
         rule.anf = anf
         rule.head_fn = head_fn
+
+        self.update_coarse(rule)
 
         if init:
             rule.init = init
@@ -359,11 +375,11 @@ class Interpreter(object):
             assert False, "Can't add rule with out an initializer or query handler."
 
         # XXX: all rules should eventually have ANF tacked on, but until then...
-        if anf is not None:
-            agg, head, evals, unifs, result = anf[2:]
+        #if anf is not None:
+        if True:
             args = (index,
                     dyna_src,
-                    todyna([head, agg, result, evals, unifs]),
+                    todyna([anf.head, anf.agg, anf.result, anf.evals, anf.unifs]),
                     init,
                     query)
 
@@ -373,6 +389,18 @@ class Interpreter(object):
 
             rule.item = self.build(fn, *args)
             self.emit(rule.item, true, ruleix=None, variables=None, delete=False)
+
+    def update_coarse(self, rule):
+        self.rule_by_head[rule.head_fn].append(rule)
+        for (_, label, ys) in rule.anf.evals:
+            [(label, _evalix)] = re.findall('^(.*)@(\d+)$', label)  # remove evaluation index
+            self.coarse_deps[rule.head_fn].add('%s/%d' % (label, len(ys)))
+
+    def recompute_coarse(self):
+        self.rule_by_head.clear()
+        self.coarse_deps.clear()
+        for rule in self.rules.values():
+            self.update_coarse(rule)
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
@@ -426,6 +454,9 @@ class Interpreter(object):
                 for head in self.chart[rule.head_fn].intern.itervalues():
                     self.agenda[head] = self.time_step
                     self.time_step += 1
+
+        self.recompute_coarse()
+        # todo: need coarse deps transitive closure
 
         return self.run_agenda()
 
