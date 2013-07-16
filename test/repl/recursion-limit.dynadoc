@@ -1,0 +1,29 @@
+% in this example we forget to include a base case so we end up recursing
+% forever, but thanks to the python runtime this throws an exception and we
+% catch it.
+
+> :- backchain f/1.
+| f(X) = f(X-1).
+
+% add this rule separately to make sure its an initialization failure
+> a = f(3).
+
+> rules
+
+Rules
+=====
+  0: f(X) = f(X-1).
+  1: a = f(3).  <-- uninitialized
+
+> sol
+
+Solution empty.
+
+Errors
+======
+Uninitialized rules
+===================
+Failed to initialize rule:
+    a = f(3).
+  due to `maximum recursion depth exceeded`
+    a = f(3)=?.

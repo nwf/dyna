@@ -367,7 +367,7 @@ class Interpreter(object):
                     init,
                     query)
 
-            fn = '$rule/%s' % (len(args) + 1)
+            fn = '$rule/%s' % len(args)
             if self.agg_name[fn] is None:
                 self.new_fn(fn, ':=')
 
