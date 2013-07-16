@@ -164,37 +164,28 @@ class REPL(cmd.Cmd, object):
             print "Queries don't end with a dot."
             return
 
-        self.interp.new_rules = set()
+        query = "$query dict= %s." % q
+
+        (new_rules, _changed) = self.default(query, show_changed=False)
 
         try:
-            query = "$query dict= %s." % q
+            [(_, _, results)] = self.interp.chart['$query/0'][:,]
+            return [dict(r) for r in topython(results)]
 
-            self.default(query, show_changed=False)
-
-            try:
-                [(_, _, results)] = self.interp.chart['$query/0'][:,]
-
-                return [dict(r) for r in topython(results)]
-
-            except ValueError:
-                return []
+        except ValueError:
+            return []
 
         finally:
-
-            # cleanup:
-            # retract newly added rules.
-            for r in self.interp.new_rules:
-                if r in self.interp.rules:
-                    self.interp.retract_rule(r)
+            # cleanup: retract temporary rules used to answer query.
+            for r in new_rules:
+                self.interp.retract_rule(r)
 
             try:
-                # drop $out chart
+                # drop temporary chart
                 del self.interp.chart['$query/0']
             except KeyError:
                 # query must have failed.
                 pass
-
-        self.interp.new_rules = set()
 
     def do_vquery(self, q):
         """
@@ -261,16 +252,19 @@ class REPL(cmd.Cmd, object):
 
         try:
             src = self.interp.dynac_code(line + '   %% repl line %s' % self.lineno)
-            changed = self.interp.do(src)
-
         except DynaCompilerError as e:
             print type(e).__name__ + ':'
             print e
             print 'new rule(s) were not added to program.'
             print
         else:
+            new_rules = self.interp.load_plan(src)
+            changed = self.interp.run_agenda()
+
             if show_changed:
                 self._changed(changed)
+
+            return (new_rules, changed)
 
     def _changed(self, changed):
         if not changed:
@@ -298,59 +292,6 @@ class REPL(cmd.Cmd, object):
             self.cmdloop()
         finally:
             readline.write_history_file(self.hist)
-
-#    def do_subscribe(self, line):
-#        """
-#        Establish a subscription to the results of a query.
-#
-#        For example,
-#
-#            > subscribe f(X,X)
-#            > f(1,1) := 1. f(1,2) := 2. f(2,2) := 3.
-#            Changes
-#            =======
-#            f(X,X):
-#                1 where {X=1}
-#
-#        To view all subscriptions:
-#
-#            > subscriptions
-#            f(X):
-#               1 where {X=1}
-#               2 where {X=2}
-#
-#        """
-#        if line.endswith('.'):
-#            print "Queries don't end with a dot."
-#            return
-#        # subscriptions are maintained via forward chaining.
-#        query = '$subscribed(%s, %s) dict= %s.' % (self.lineno, _repr(line), line)
-#        self.default(query)
-#
-#    def do_subscriptions(self, _):
-#        "List subscriptions. See subscribe."
-#        for (_, [_, q], results) in self.interp.chart['$subscribed/2'][:,:,:]:
-#            if results:
-#                print q
-#                for result in results:
-#                    print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
-#        print
-
-#    def _changed_subscriptions(self, changed):
-#
-#        # TODO: this doesn't show changes - it redumps everything.
-#
-#        if not changed:
-#            return
-#        for x, _ in sorted(changed.items()):
-#            if x.fn == '$subscribed/2':
-#                [i, q] = x.args
-#                if x.value:
-#                    print '%s: %s' % (i, q)
-#                    for result in x.value:
-#                        print ' ', _repr(result.value), 'where', drepr(dict(result.variables))
-#        print
-#        self.interp.dump_errors()
 
     def do_help(self, line):
         mod = line.split()
@@ -562,45 +503,35 @@ class REPL(cmd.Cmd, object):
 
     def _trace(self, q, depth_limit=-1):
 
-        self.interp.new_rules = set()
+        query = "$trace dict= _ is (%s), &(%s)." % (q,q)
+
+        (new_rules, _changed) = self.default(query, show_changed=False)
 
         try:
-            query = "$trace dict= _ is (%s), &(%s)." % (q,q)
-
-            self.default(query, show_changed=False)
-
-            try:
-                [(_, _, results)] = self.interp.chart['$trace/0'][:,]
-
-                results = topython(results)
-                results = [dict(r)['$val'] for r in results]
-
-            except ValueError:
-                print 'no items matching `%s`.' % q
-                return
-
-            from post.trace import Tracer
-            tracer = Tracer(self.interp)
-
-            for item in results:
-                print
-                tracer(todyna(item), depth_limit=depth_limit)
-
+            [(_, _, results)] = self.interp.chart['$trace/0'][:,]
+            results = topython(results)
+            results = [dict(r)['$val'] for r in results]
+        except ValueError:
+            print 'no items matching `%s`.' % q
+            return
         finally:
-            # cleanup:
-            # retract newly added rules.
-            for r in self.interp.new_rules:
-                if r in self.interp.rules:
-                    self.interp.retract_rule(r)
+            # cleanup: retract temporary rules used to answer query.
+            for r in new_rules:
+                self.interp.retract_rule(r)
 
-            try:
-                # drop $out chart
-                del self.interp.chart['$trace/0']
-            except KeyError:
-                # query must have failed.
-                pass
+        from post.trace import Tracer
+        tracer = Tracer(self.interp)
 
-        self.interp.new_rules = set()
+        for item in results:
+            print
+            tracer(todyna(item), depth_limit=depth_limit)
+
+        try:
+            # drop temporary chart
+            del self.interp.chart['$trace/0']
+        except KeyError:
+            # query must have failed.
+            pass
 
 
     do_load.__doc__ = do_load.__doc__.format(load=', '.join(load.available))

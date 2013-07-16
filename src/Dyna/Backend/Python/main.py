@@ -10,11 +10,9 @@ import post, load
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
     parser.add_argument('source', nargs='*', type=path,
-                        help='Path to Dyna source file (or plan if --plan=true).')
+                        help='Path to Dyna source file.')
     parser.add_argument('-i', dest='interactive', action='store_true',
                         help='Fire-up REPL after runing solver..')
-    parser.add_argument('--plan', action='store_true',
-                        help='`source` specifies output of the compiler instead of dyna source code.')
     parser.add_argument('-o', '--output', dest='output',
                         type=argparse.FileType('wb'),
                         help='Write solution to file.')
@@ -54,35 +52,14 @@ def main():
             print 'File `%s` does not exist.' % args.source
             return
 
-        if args.plan:
-            # copy plan to tmp directory
-            plan = interp.tmp / args.source.read_hexhash('sha1') + '.plan.py'
-            args.source.copy(plan)
+        try:
+            plan = interp.dynac(args.source)
+        except DynaCompilerError as e:
+            print e
+            exit(1)
 
-        else:
-            try:
-                plan = interp.dynac(args.source)
-            except DynaCompilerError as e:
-                print e
-                exit(1)
-
-#        if args.profile:
-#            # When profiling, its common practice to disable the garbage collector.
-#            import gc
-#            gc.disable()
-#
-#            from cProfile import Profile
-#            p = Profile()
-#            p.runctx('interp.do(plan)', globals(), locals())
-#            p.dump_stats('prof')
-#
-#            interp.dump_charts()
-#
-#            os.system('gprof2dot.py -f pstats prof | dot -Tsvg -o prof.svg && eog prof.svg &')
-#            os.system('pkill snakeviz; snakeviz prof &')
-#            return
-
-        interp.do(plan)
+        interp.load_plan(plan)
+        interp.run_agenda()
 
     if args.load:
         for cmd in args.load:

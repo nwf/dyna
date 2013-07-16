@@ -1,18 +1,52 @@
 #!/usr/bin/env python
 from path import path
 from cStringIO import StringIO
+from subprocess import Popen, PIPE
 
-import sys
-sys.path.append('src/Dyna/Backend/Python')
+import re, sys
+src = 'src/Dyna/Backend/Python'
+sys.path.append(src)
+
+if not path(src).exists():
+    print >> sys.stderr, 'Tests must be run in top level directory.'
+    exit(1)
+
+from utils import red, green
+from dyna_doctest import run
+
+failures = []
+
+print 'End-to-end'
+print '=========='
+
+for z in path('examples/expected').glob("*.py.out"):
+
+    x = re.sub('(examples/)expected/(.*).py.out', r'\1\2.dyna', z)
+    y = x + '.py.out'
+
+    print x,
+    sys.stdout.flush()
+
+    # run ./dyna
+    p = Popen(['./dyna', x, '-o', y], stdout=PIPE, stderr=PIPE)
+    (out, err) = p.communicate()
+
+    assert not p.returncode, out + '\n' + err
+
+    # look at diff
+    p = Popen(['diff', y, z], stdout=PIPE, stderr=PIPE)
+    (out, err) = p.communicate()
+
+    if not p.returncode:
+        print green % 'pass'
+    else:
+        print red % 'fail'
+        failures.append([x, out + '\n' + err])
 
 print
 print 'Doctests'
 print '========'
 
-from dyna_doctest import run
-from utils import red, green
-
-failures = []
 for x in path('test').glob("*/*.dynadoc"):
     print x,
     sys.stdout.flush()
@@ -24,6 +58,7 @@ for x in path('test').glob("*/*.dynadoc"):
         else:
             print green % 'pass'
 
+
 for f, log in failures:
     print
     print '================================================'
@@ -31,5 +66,11 @@ for f, log in failures:
     print '================================================'
     print log
 
+
 if failures:
+    print '================================================'
+    print 'FAILURES (%s)' % len(failures)
+    print '================================================'
+    for f, _ in failures:
+        print f
     exit(1)

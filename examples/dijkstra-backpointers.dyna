@@ -1,6 +1,6 @@
 % Single source shortest path with optimal path extraction.
 
-% Cost of the optimal path from start to each node.  
+% Cost of the optimal path from start to each node.
 path(start) min= 0                   with_key [].
 path(B)     min= path(A) + edge(A,B) with_key A.
 
