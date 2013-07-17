@@ -234,7 +234,8 @@ class Interpreter(object):
             self.emit(*e)
 
     def gbc(self, fn, *args):
-        # TODO: need to distinguish `unknown` from `null`
+        # TODO: need to distinguish `unknown` from `null` when we move to mixed
+        # chaining.
 
         head = self.build(fn, *args)
 
@@ -269,10 +270,10 @@ class Interpreter(object):
         env = imp.load_source('dynamically_loaded_module', filename)
 
         anf = {}
-        if path(filename + '.anf').exists():       # XXX: should have codegen provide this in plan.py
-            with file(filename + '.anf') as f:
-                for x in read_anf(f.read()):
-                    anf[x.ruleix] = x
+        assert path(filename + '.anf').exists()   # XXX: codegen should put this is plan.py
+        with file(filename + '.anf') as f:
+            for x in read_anf(f.read()):
+                anf[x.ruleix] = x
 
         for k,v in [('chart', self.chart),
                     ('build', self.build),
