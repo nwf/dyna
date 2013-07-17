@@ -139,65 +139,56 @@ class Interpreter(object):
             changed = {}
         agenda = self.agenda
         error = self.error
-        while agenda:
+        push = self.push
 
-            item = agenda.pop_smallest()
+        def replace(item, now):
+            "replace current value of ``item``, propagate any changes."
             was = item.value
+            if was == now:
+                # nothing to do.
+                return
+            # delete existing value before so we can replace it
+            if was is not None:
+                push(item, was, delete=True)
+            # clear existing errors -- we only care about errors at new value.
+            if item in self.error:
+                del self.error[item]
+            # new value enters in the chart.
+            item.value = now
+            # push changes
+            if now is not None:
+                push(item, now, delete=False)
+            # make not of change
+            changed[item] = now
+
+
+        while agenda:
+            item = agenda.pop_smallest()
 
             try:
                 now = item.aggregator.fold()
 
-            except AggregatorError as e:
+            except (AggregatorError, ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
+                now = self.build('$error/0')
+                replace(item, now)
                 error[item] = (None, [(e, None)])
 
-                now = self.build('$error/0')   # XXX: should go an agenda or run delete?
-                changed[item] = now
-                item.value = now
-                continue
+            else:
+                # special handling for with_key, forks into two updates
+                if hasattr(now, 'fn') and now.fn == 'with_key/2':
+                    now, key = now.args
+                    replace(self.build('$key/1', item), key)
 
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
-                error[item] = (None, [(e, None)])
+                replace(item, now)
 
-                now = self.build('$error/0')   # XXX: should go an agenda or run delete?
-                changed[item] = now
-                item.value = now
-                continue
-
-            # special handling for with_key, forks into two updates
-            if hasattr(now, 'fn') and now.fn == 'with_key/2':
-                now, key = now.args
-                dkey = self.build('$key/1', item)
-                self.delete_emit(dkey, dkey.value, None, None)
-                self.emit(dkey, key, None, None, delete=False)
-
-            if was == now:
-                continue
-
-            # TODO: handle `was` and `now` at the same time to avoid the two passes.
-            # TODO: will need to propagate was=None when we have question mark
-            if was is not None: # and item not in error:
-                # if `was` is marked as an error we know it didn't propagate.
-                # Thus, we can skip the delete-updates.
-                self.update_dispatcher(item, was, delete=True)
-
-            if item in error:     # only care about errors at new value.
-                del error[item]
-
-            item.value = now
-
-            if now is not None:
-                self.update_dispatcher(item, now, delete=False)
-
-            changed[item] = now
-
-        if self.uninitialized_rules:
-            self.run_uninitialized()
-            if self.agenda:
-                self.run_agenda(changed)
+        # after draining the agenda, try to initialize pending rules
+        self.run_uninitialized()
+        if self.agenda:
+            self.run_agenda(changed)
 
         return changed
 
-    def update_dispatcher(self, item, val, delete):
+    def push(self, item, val, delete):
         """
         Passes update to relevant handlers. Catches errors.
         """
