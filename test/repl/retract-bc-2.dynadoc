@@ -48,9 +48,8 @@ c(3) = null.
 c(4) = null.
 c(5) = null.
 
-% as in `retract-bc.dynadoc`, `a(X)` did not change even tho it ought to. The
-% `c(X)` values get blasted because the don't have an oblivious memoized item
-% inbetween like `h(X)`.
+% TODO (bug): `a(X)` did not change even tho it ought to. The `c(X)` values get
+% blasted because the don't have an obliviously memoized item inbetween, `h(X)`.
 
 > b(X) = h(X) for X in range(6).
 
