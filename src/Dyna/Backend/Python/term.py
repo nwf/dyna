@@ -99,6 +99,11 @@ class Cons(Term):
 #            return
 
 
+class Error(Term):
+    def __init__(self):
+        Term.__init__(self, '$error/0', ())
+
+
 class _Nil(Term):
 
     def __init__(self):

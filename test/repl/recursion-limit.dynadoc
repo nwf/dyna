@@ -8,22 +8,48 @@
 % add this rule separately to make sure its an initialization failure
 > a = f(3).
 
+Changes
+=======
+a = $error.
+
+> b = a + 1.
+
 > rules
 
 Rules
 =====
   0: f(X) = f(X-1).
-  1: a = f(3).  <-- uninitialized
+  1: a = f(3).
+  2: b = a + 1.  <-- uninitialized
+
+> sol
+
+Solution
+========
+a = $error.
+
+Errors
+======
+Error(s) in rule: <repl>
+    f(X) = f(X-1).
+  RuntimeError:
+    when `f(-323)` = null
+      maximum recursion depth exceeded
+      f(X=-323) = f((X=-323 - 1)=-324)=?.
+
+Uninitialized rules
+===================
+Failed to initialize rule:
+    b = a + 1.
+  due to `unsupported operand type(s) for +: 'Error' and 'int'`
+    b = (a=$error + 1)=?.
+
+> retract_rule 0
+
+Changes
+=======
+a = null.
 
 > sol
 
 Solution empty.
-
-Errors
-======
-Uninitialized rules
-===================
-Failed to initialize rule:
-    a = f(3).
-  due to `maximum recursion depth exceeded`
-    a = f(3)=?.

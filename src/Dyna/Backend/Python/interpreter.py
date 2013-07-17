@@ -5,7 +5,7 @@ from collections import defaultdict
 from hashlib import sha1
 from path import path
 
-from term import Term, Cons, Nil, MapsTo
+from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
 from utils import red, parse_attrs, ddict, dynac, read_anf, strip_comments, \
     _repr, hide_ugly_filename, true, false
@@ -100,7 +100,7 @@ class Interpreter(object):
                 c = self.chart[fn]
                 assert c.agg_name is None
                 c.agg_name = agg
-                for item in c.intern.itervalues():
+                for item in c.intern.values():
                     assert item.aggregator is None
                     item.aggregator = c.new_aggregator(item)
         # check for aggregator conflict.
@@ -122,7 +122,7 @@ class Interpreter(object):
             self.new_fn(fn, None)
         return self.chart[fn].insert(args)
 
-    def delete_emit(self, item, val, ruleix, variables):
+    def delete(self, item, val, ruleix, variables):
         self.emit(item, val, ruleix, variables, delete=True)
 
     def emit(self, item, val, ruleix, variables, delete):
@@ -133,60 +133,72 @@ class Interpreter(object):
         self.agenda[item] = self.time_step
         self.time_step += 1
 
-    def run_agenda(self, changed=None):
+    def replace(self, item, now):
+        "replace current value of ``item``, propagate any changes."
+        was = item.value
+        if was == now:
+            # nothing to do.
+            return
+        # delete existing value before so we can replace it
+        if was is not None:
+            self.push(item, was, delete=True)
+        # clear existing errors -- we only care about errors at new value.
+        if item in self.error:
+            del self.error[item]
+        # new value enters in the chart.
+        item.value = now
+        # push changes
+        if now is not None:
+            self.push(item, now, delete=False)
+        # make note of change
+        self.changed[item] = now
+
+    def run_agenda(self):
+        self.changed = {}
+        self._agenda()
+        return self.changed
+
+    def _agenda(self):
         "the main loop"
-        if changed is None:
-            changed = {}
         agenda = self.agenda
-        error = self.error
-        push = self.push
-
-        def replace(item, now):
-            "replace current value of ``item``, propagate any changes."
-            was = item.value
-            if was == now:
-                # nothing to do.
-                return
-            # delete existing value before so we can replace it
-            if was is not None:
-                push(item, was, delete=True)
-            # clear existing errors -- we only care about errors at new value.
-            if item in self.error:
-                del self.error[item]
-            # new value enters in the chart.
-            item.value = now
-            # push changes
-            if now is not None:
-                push(item, now, delete=False)
-            # make not of change
-            changed[item] = now
-
-
         while agenda:
-            item = agenda.pop_smallest()
-
-            try:
-                now = item.aggregator.fold()
-
-            except (AggregatorError, ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
-                now = self.build('$error/0')
-                replace(item, now)
-                error[item] = (None, [(e, None)])
-
-            else:
-                # special handling for with_key, forks into two updates
-                if hasattr(now, 'fn') and now.fn == 'with_key/2':
-                    now, key = now.args
-                    replace(self.build('$key/1', item), key)
-
-                replace(item, now)
-
-        # after draining the agenda, try to initialize pending rules
+            item = self.agenda.pop_smallest()
+            self.pop(item)
+        # after draining the agenda, try to initialize pending rules.
         self.run_uninitialized()
         if self.agenda:
-            self.run_agenda(changed)
+            self._agenda()
 
-        return changed
+    def pop(self, item):
+        """
+        Handle popping `item`: fold `item`'s aggregator to get it's new value
+        (handle errors), propagate changes to the rest of the circuit.
+        """
+
+        if item.aggregator is None:
+            return item
+
+        try:
+            # compute item's new value
+            now = item.aggregator.fold()
+
+        except (AggregatorError, ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
+            # handle error in aggregator
+            now = Error()
+            self.replace(item, now)
+            self.error[item] = (None, [(e, None)])
+
+        else:
+            # issue replacement update
+
+            # special handling for with_key, forks into two updates
+            if hasattr(now, 'fn') and now.fn == 'with_key/2':
+                now, key = now.args
+                self.replace(self.build('$key/1', item), key)
+
+            self.replace(item, now)
+
+        return now
 
     def push(self, item, val, delete):
         """
@@ -218,35 +230,53 @@ class Interpreter(object):
             self.error[item] = (val, error)
             return
 
-        # no exception, accept emissions.
+        # no exceptions, accept emissions.
         for e in emittiers:
-            # an error could happen here, but we assume (by contract) that
-            # this is not possible.
+            # an error could happen here, but we assume (by contract) that this
+            # is not possible.
             self.emit(*e)
 
     def gbc(self, fn, *args):
-        # TODO: need to distinguish `unknown` from `null` when we move to mixed
-        # chaining.
 
-        head = self.build(fn, *args)
+        item = self.build(fn, *args)
 
-        if head.value is not None:
-            return head.value
+        # TODO: we will need to distinguish `unknown` from `null` when we move
+        # to mixed chaining.
+        if item.value is not None:
+            return item.value
 
-        if head.aggregator is None:   # we might not have a rule defining this subgoal.
+        if item.aggregator is None:   # we might not have a rule defining this subgoal.
             return
 
-        head.aggregator.clear()
+        item.aggregator.clear()
 
-        def _emit(item, val, ruleix, variables):
-            item.aggregator.inc(val, ruleix, variables)
+        emits = []
+        def t_emit(item, val, ruleix, variables):
+            emits.append((item, val, ruleix, variables, False))
 
-        for h in self._gbc[fn]:
-            h(*args, emit=_emit)
+        error = []
 
-        head.value = head.aggregator.fold()
+        for handler in self._gbc[item.fn]:
+            try:
+                handler(*args, emit=t_emit)
+            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
+                e.exception_frame = rule_error_context()
+                e.traceback = traceback.format_exc()
+                error.append((e, handler))
 
-        return head.value
+        if error:
+            self.error[item] = (None, error)
+            now = Error()
+            return now
+
+        else:
+            # no exceptions, accept emissions.
+            for e in emits:
+                # an error could happen here, but we assume (by contract) that this
+                # is not possible.
+                self.emit(*e)
+            return self.pop(item)
+
 
     def load_plan(self, filename):
         """
@@ -340,7 +370,6 @@ class Interpreter(object):
             assert False, 'did not find head'
         assert head_fn is not None
 
-
         span = hide_ugly_filename(parse_attrs(init or query)['Span'])
         dyna_src = strip_comments(parse_attrs(init or query)['rule'])
 
@@ -374,11 +403,9 @@ class Interpreter(object):
                     todyna([anf.head, anf.agg, anf.result, anf.evals, anf.unifs]),
                     init,
                     query)
-
             fn = '$rule/%s' % len(args)
             if self.agg_name[fn] is None:
                 self.new_fn(fn, ':=')
-
             rule.item = self.build(fn, *args)
             self.emit(rule.item, true, ruleix=None, variables=None, delete=False)
 
@@ -405,7 +432,7 @@ class Interpreter(object):
 
         # remove $rule
         if hasattr(rule, 'item'):
-            self.delete_emit(rule.item, true, ruleix=None, variables=None)
+            self.delete(rule.item, true, ruleix=None, variables=None)
 
         if rule.init is not None:
             # Forward chained rule --
@@ -418,7 +445,7 @@ class Interpreter(object):
             if rule.initialized:
                 # run initializer in delete mode
                 try:
-                    rule.init(emit=self.delete_emit)
+                    rule.init(emit=self.delete)
                 except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError):
                     # TODO: what happens if there's an error?
                     pass
@@ -429,11 +456,16 @@ class Interpreter(object):
             # Backchained rule --
             # remove query handler
             self._gbc[rule.head_fn].remove(rule.query)
+
             # blast the memo entries for items this rule may have helped derive.
             if rule.head_fn in self.chart:
 
                 # update values before propagating
-                for head in self.chart[rule.head_fn].intern.itervalues():
+                for head in self.chart[rule.head_fn].intern.values():
+
+                    if head in self.error:
+                        del self.error[head]
+
                     def _emit(item, val, ruleix, variables):
                         item.aggregator.dec(val, ruleix, variables)
                     try:
@@ -443,7 +475,7 @@ class Interpreter(object):
                         pass
 
                 # propagate new values
-                for head in self.chart[rule.head_fn].intern.itervalues():
+                for head in self.chart[rule.head_fn].intern.values():
                     self.agenda[head] = self.time_step
                     self.time_step += 1
 

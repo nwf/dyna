@@ -47,11 +47,6 @@ c(2) = null.
 c(3) = null.
 c(4) = null.
 c(5) = null.
-g(1) = null.
-g(2) = null.
-g(3) = null.
-g(4) = null.
-g(5) = null.
 
 % as in `retract-bc.dynadoc`, `a(X)` did not change even tho it ought to. The
 % `c(X)` values get blasted because the don't have an oblivious memoized item

@@ -31,10 +31,6 @@ a(2) = null.
 a(3) = null.
 a(4) = null.
 a(5) = null.
-f(2) = null.
-f(3) = null.
-f(4) = null.
-f(5) = null.
 s = 1.
 
 
@@ -61,12 +57,40 @@ a(1) = 1.
 | f(0) := 1.
 | b(X) = f(X) for X in range(6).
 
-% oh no! a(x) doesn't know that we have a new definition! for `f`, unlike the
-% rule defining `b(X)` which we use the new version of `f` when we run it's
-% initializer.
+% Check that `a(x)` and `s`, know that we have a new definition! for `f`, just
+% like added a new rule
 
 Changes
 =======
+a(2) = 2.
+a(3) = 6.
+a(4) = 24.
+a(5) = 120.
+b(0) = 0.
+b(1) = 1.
+b(2) = 2.
+b(3) = 6.
+b(4) = 24.
+b(5) = 120.
+s = 153.
+
+> sol
+
+Solution
+========
+s = 153.
+
+a/1
+===
+a(0) = 0.
+a(1) = 1.
+a(2) = 2.
+a(3) = 6.
+a(4) = 24.
+a(5) = 120.
+
+b/1
+===
 b(0) = 0.
 b(1) = 1.
 b(2) = 2.

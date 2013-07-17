@@ -278,6 +278,8 @@ class REPL(cmd.Cmd, object):
         print 'Changes'
         print '======='
         for x in sorted(changed):
+            if x.fn in self.interp._gbc:    # skip BC
+                continue
             print '%s = %s.' % (x, _repr(x.value))
         print
 
