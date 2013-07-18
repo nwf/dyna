@@ -143,8 +143,7 @@ class Interpreter(object):
         if was is not None:
             self.push(item, was, delete=True)
         # clear existing errors -- we only care about errors at new value.
-        if item in self.error:
-            del self.error[item]
+        self.clear_error(item)
         # new value enters in the chart.
         item.value = now
         # push changes
@@ -186,7 +185,7 @@ class Interpreter(object):
             # handle error in aggregator
             now = Error()
             self.replace(item, now)
-            self.error[item] = (None, [(e, None)])
+            self.set_error(item, (None, [(e, None)]))
 
         else:
             # issue replacement update
@@ -227,7 +226,7 @@ class Interpreter(object):
                 error.append((e, handler))
 
         if error:
-            self.error[item] = (val, error)
+            self.set_error(item, (val, error))
             return
 
         # no exceptions, accept emissions.
@@ -254,7 +253,7 @@ class Interpreter(object):
         def t_emit(item, val, ruleix, variables):
             emits.append((item, val, ruleix, variables, False))
 
-        error = []
+        errors = []
 
         for handler in self._gbc[item.fn]:
             try:
@@ -262,12 +261,11 @@ class Interpreter(object):
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
-                error.append((e, handler))
+                errors.append((e, handler))
 
-        if error:
-            self.error[item] = (None, error)
-            now = Error()
-            return now
+        if errors:
+            self.set_error(item, (None, errors))
+            return Error()
 
         else:
             # no exceptions, accept emissions.
@@ -333,16 +331,13 @@ class Interpreter(object):
                 def _emit(*args):
                     emits.append(args)
 
-                # clear error, if any
-                if rule in self.error:
-                    del self.error[rule]
-
+                self.clear_error(rule)  # clear errors on rule, if any
                 rule.init(emit=_emit)
 
             except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
-                self.error[rule] = e
+                self.set_error(rule, e)
                 failed.append(rule)
             else:
                 rule.initialized = True
@@ -350,6 +345,16 @@ class Interpreter(object):
                 for e in emits:
                     self.emit(*e, delete=False)
         self.uninitialized_rules = failed
+
+    #___________________________________________________________________________
+    # Error tracking
+
+    def clear_error(self, x):
+        if x in self.error:
+            del self.error[x]
+
+    def set_error(self, x, e):
+        self.error[x] = e
 
     #___________________________________________________________________________
     # Adding/removing rules
@@ -463,8 +468,7 @@ class Interpreter(object):
                 # update values before propagating
                 for head in self.chart[rule.head_fn].intern.values():
 
-                    if head in self.error:
-                        del self.error[head]
+                    self.clear_error(head)
 
                     def _emit(item, val, ruleix, variables):
                         item.aggregator.dec(val, ruleix, variables)
@@ -599,7 +603,14 @@ class Interpreter(object):
                         print >> out, '    %s more ...' % (len(E[r][etype]) - i)
                         break
                     print >> out, '    when `%s` = %s' % (item, _repr(value))
-                    print >> out, '      %s' % (e)
+
+                    if 'maximum recursion depth exceeded' in str(e):
+                        # simplify recurision limit error because if prints some
+                        # unstable stuff.
+                        print >> out, '      maximum recursion depth exceeded'
+                    else:
+                        print >> out, '      %s' % (e)
+
                     print >> out
                     print >> out, r.render_ctx(e.exception_frame, indent='      ')
                     print >> out

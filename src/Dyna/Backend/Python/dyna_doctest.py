@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-import re, sys
-
+import re, sys, traceback
 from interpreter import Interpreter
 from repl import REPL
 from cStringIO import StringIO
-
 from utils import red, green, yellow, strip_comments
 
 
@@ -56,6 +54,8 @@ def run(code, out=None):
         sys.stdout = x = StringIO()
         try:
             repl.onecmd(cmd)
+        except:
+            print >> out, red % traceback.format_exc()
         finally:
             sys.stdout = sys.__stdout__
 
