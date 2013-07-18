@@ -8,17 +8,20 @@ from glob import glob
 
 def or_(x, y):
     if not (isbool(x) and isbool(y)):
-        raise TypeError('')
+        raise TypeError('`|` expected Boolean arguments, got `%s` and `%s`' \
+                            % (type(x).__name__, type(y).__name__))
     return todyna(x or y)
 
 def and_(x, y):
     if not (isbool(x) and isbool(y)):
-        raise TypeError('')
+        raise TypeError('`&` expected Boolean arguments, got `%s` and `%s`' \
+                            % (type(x).__name__, type(y).__name__))
     return todyna(x and y)
 
 def not_(x):
     if not isbool(x):
-        raise TypeError(repr(x))
+        raise TypeError('`!` expected Boolean arguments, got `%s`' \
+                            % type(x).__name__)
     if x:
         return false
     else:
