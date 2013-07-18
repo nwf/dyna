@@ -165,7 +165,7 @@ class REPL(cmd.Cmd, object):
 
         query = "$query dict= %s." % q
 
-        (new_rules, _changed) = self.default(query, show_changed=False)
+        (new_rules, _changed) = self.add_rule(query, show_changed=False)
 
         try:
             [(_, _, results)] = self.interp.chart['$query/0'][:,]
@@ -239,7 +239,7 @@ class REPL(cmd.Cmd, object):
             print '%s = %s.' % (term, _repr(todyna(result['$val'])))
         print
 
-    def default(self, line, show_changed=True):
+    def default(self, line):
         """
         Called on an input line when the command prefix is not recognized.  In
         that case we execute the line as Python code.
@@ -248,7 +248,9 @@ class REPL(cmd.Cmd, object):
         if not line.endswith('.'):
             print "ERROR: Line doesn't end with period."
             return
+        self.add_rule(line)
 
+    def add_rule(self, line, show_changed=True):
         try:
             src = self.interp.dynac_code(line + '   %% repl line %s' % self.lineno)
         except DynaCompilerError as e:
@@ -259,21 +261,16 @@ class REPL(cmd.Cmd, object):
         else:
             new_rules = self.interp.load_plan(src)
             changed = self.interp.run_agenda()
-
             if show_changed:
                 self._changed(changed)
-
             return (new_rules, changed)
 
     def _changed(self, changed):
         if not changed:
             return
-
         changed = [x for x in changed if not x.fn.startswith('$rule/')]
-
         if not changed:
             return
-
         print
         print 'Changes'
         print '======='
@@ -506,7 +503,7 @@ class REPL(cmd.Cmd, object):
 
         query = "$trace dict= _ is (%s), &(%s)." % (q,q)
 
-        (new_rules, _changed) = self.default(query, show_changed=False)
+        (new_rules, _changed) = self.add_rule(query, show_changed=False)
 
         try:
             [(_, _, results)] = self.interp.chart['$trace/0'][:,]
