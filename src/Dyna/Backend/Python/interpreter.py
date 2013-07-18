@@ -139,6 +139,11 @@ class Interpreter(object):
         if was == now:
             # nothing to do.
             return
+        # special handling for with_key, forks a second update
+        self.replace(self.build('$key/1', item), None)     # always clear $key
+        if hasattr(now, 'fn') and now.fn == 'with_key/2':
+            now, key = now.args
+            self.replace(self.build('$key/1', item), key)
         # delete existing value before so we can replace it
         if was is not None:
             self.push(item, was, delete=True)
@@ -188,13 +193,6 @@ class Interpreter(object):
             self.set_error(item, (None, [(e, None)]))
 
         else:
-            # issue replacement update
-
-            # special handling for with_key, forks into two updates
-            if hasattr(now, 'fn') and now.fn == 'with_key/2':
-                now, key = now.args
-                self.replace(self.build('$key/1', item), key)
-
             self.replace(item, now)
 
         return now

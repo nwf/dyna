@@ -19,7 +19,7 @@ failures = []
 print 'End-to-end'
 print '=========='
 
-for z in path('examples/expected').glob("*.py.out"):
+for z in sorted(path('examples/expected').glob("*.py.out")):
 
     x = re.sub('(examples/)expected/(.*).py.out', r'\1\2.dyna', z)
     y = x + '.py.out'
@@ -47,7 +47,7 @@ print
 print 'Doctests'
 print '========'
 
-for x in path('test').glob("*/*.dynadoc"):
+for x in sorted(path('test').glob("*/*.dynadoc")):
     print x,
     sys.stdout.flush()
     with file(x) as f:
