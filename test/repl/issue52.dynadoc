@@ -1,0 +1,56 @@
+> pathto(start) min= 0                     with_key [start].
+| pathto(V)     min= pathto(U) + edge(U,V) with_key [V | bestpath(U)].
+| bestpath(U) = $key(pathto(U)).
+| edge(0,1) min= 5.
+| edge(1,2) min= 10.
+
+*ignore*
+
+> start := 0.
+
+Changes
+=======
+$key(pathto(0)) = [0].
+$key(pathto(1)) = [1, 0].
+$key(pathto(2)) = [2, 1, 0].
+bestpath(0) = [0].
+bestpath(1) = [1, 0].
+bestpath(2) = [2, 1, 0].
+pathto(0) = 0.
+pathto(1) = 5.
+pathto(2) = 15.
+start = 0.
+
+
+> start := -1.   % doesn't clear out old keys.
+
+Changes
+=======
+$key(pathto(-1)) = [-1].
+$key(pathto(0)) = null.
+$key(pathto(1)) = null.
+$key(pathto(2)) = null.
+bestpath(-1) = [-1].
+bestpath(0) = null.
+bestpath(1) = null.
+bestpath(2) = null.
+pathto(-1) = 0.
+pathto(0) = null.
+pathto(1) = null.
+pathto(2) = null.
+start = -1.
+
+> start := 1.    % refreshes keys for 1 and 2 but not for -1 and 0.
+
+Changes
+=======
+$key(pathto(-1)) = null.
+$key(pathto(1)) = [1].
+$key(pathto(2)) = [2, 1].
+bestpath(-1) = null.
+bestpath(1) = [1].
+bestpath(2) = [2, 1].
+pathto(-1) = null.
+pathto(1) = 0.
+pathto(2) = 10.
+start = 1.
