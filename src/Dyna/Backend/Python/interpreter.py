@@ -140,7 +140,9 @@ class Interpreter(object):
             # nothing to do.
             return
         # special handling for with_key, forks a second update
-        self.replace(self.build('$key/1', item), None)     # always clear $key
+        k = self.build('$key/1', item)
+        if k.value is not None:
+            self.replace(k, None)
         if hasattr(now, 'fn') and now.fn == 'with_key/2':
             now, key = now.args
             self.replace(self.build('$key/1', item), key)
@@ -159,7 +161,10 @@ class Interpreter(object):
 
     def run_agenda(self):
         self.changed = {}
-        self._agenda()
+        try:
+            self._agenda()
+        except KeyboardInterrupt:
+            print '^C'
         return self.changed
 
     def _agenda(self):
@@ -186,7 +191,7 @@ class Interpreter(object):
             # compute item's new value
             now = item.aggregator.fold()
 
-        except (AggregatorError, ZeroDivisionError, TypeError, KeyboardInterrupt, OverflowError) as e:
+        except (AggregatorError, ZeroDivisionError, TypeError, OverflowError) as e:
             # handle error in aggregator
             now = Error()
             self.replace(item, now)
@@ -218,7 +223,7 @@ class Interpreter(object):
 
             try:
                 handler(item, val, emit=t_emit)
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 error.append((e, handler))
@@ -256,7 +261,7 @@ class Interpreter(object):
         for handler in self._gbc[item.fn]:
             try:
                 handler(*args, emit=t_emit)
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 errors.append((e, handler))
@@ -272,7 +277,6 @@ class Interpreter(object):
                 # is not possible.
                 self.emit(*e)
             return self.pop(item)
-
 
     def load_plan(self, filename):
         """
@@ -332,7 +336,7 @@ class Interpreter(object):
                 self.clear_error(rule)  # clear errors on rule, if any
                 rule.init(emit=_emit)
 
-            except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 self.set_error(rule, e)
@@ -398,8 +402,6 @@ class Interpreter(object):
         else:
             assert False, "Can't add rule with out an initializer or query handler."
 
-        # XXX: all rules should eventually have ANF tacked on, but until then...
-        #if anf is not None:
         if True:
             args = (index,
                     dyna_src,
@@ -416,7 +418,8 @@ class Interpreter(object):
         self.rule_by_head[rule.head_fn].append(rule)
         for (_, label, ys) in rule.anf.evals:
             [(label, _evalix)] = re.findall('^(.*)@(\d+)$', label)  # remove evaluation index
-            self.coarse_deps[rule.head_fn].add('%s/%d' % (label, len(ys)))
+            b = '%s/%d' % (label, len(ys))
+            self.coarse_deps[b].add(rule.head_fn)
 
     def recompute_coarse(self):
         self.rule_by_head.clear()
@@ -426,6 +429,8 @@ class Interpreter(object):
 
     def retract_rule(self, idx):
         "Retract rule and all of it's edges."
+
+        self.changed = {}
 
         try:
             rule = self.rules.pop(idx)
@@ -444,12 +449,11 @@ class Interpreter(object):
                 for xs in self.updaters.values():
                     if u in xs:
                         xs.remove(u)
-                        assert u not in xs, 'Several occurrences of u in xs'
             if rule.initialized:
                 # run initializer in delete mode
                 try:
                     rule.init(emit=self.delete)
-                except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError):
+                except (ZeroDivisionError, TypeError, RuntimeError, OverflowError):
                     # TODO: what happens if there's an error?
                     pass
             else:
@@ -460,31 +464,37 @@ class Interpreter(object):
             # remove query handler
             self._gbc[rule.head_fn].remove(rule.query)
 
-            # blast the memo entries for items this rule may have helped derive.
-            if rule.head_fn in self.chart:
-
-                # update values before propagating
-                for head in self.chart[rule.head_fn].intern.values():
-
-                    self.clear_error(head)
-
-                    def _emit(item, val, ruleix, variables):
-                        item.aggregator.dec(val, ruleix, variables)
-                    try:
-                        rule.query(*head.args, emit=_emit)
-                    except (ZeroDivisionError, TypeError, KeyboardInterrupt, RuntimeError, OverflowError):
-                        # TODO: what happens if there's an error?
-                        pass
-
-                # propagate new values
-                for head in self.chart[rule.head_fn].intern.values():
-                    self.agenda[head] = self.time_step
-                    self.time_step += 1
+            # recompute memos and dependent memos
+            self.recompute_gbc_memo(rule.head_fn)
 
         self.recompute_coarse()
-        # todo: need coarse deps transitive closure
 
-        return self.run_agenda()
+        self._agenda()
+        return self.changed
+
+    def recompute_gbc_memo(self, fn, visited=None):
+
+        if visited is None:
+            visited = set()
+
+        if fn not in self._gbc or fn in visited:
+            # don't refresh non BC computation be careful not to get stuck in an
+            # infinite loop if there is a cycle in the dep graph
+            return
+
+        visited.add(fn)
+
+        for x in self.chart[fn].intern.values():
+            self.clear_error(x)
+            was = x.value                # remember old value we can do proper replacement update
+            x.value = None               # ignore memo
+            now = self.gbc(fn, *x.args)
+            x.value = was
+            self.replace(x, now)
+
+        # recompute dependent BC memos
+        for v in self.coarse_deps[fn]:
+            self.recompute_gbc_memo(v, visited)
 
     def new_updater(self, fn, ruleix, handler):
         self.updaters[fn].append(handler)

@@ -21,10 +21,9 @@ forceY(V,T) += f(U,V,T) * (y(U,T) - y(V,T)).
 
 % Constants
 a := 0.15.
-niter := 20.
-edgelen := 4.0.   % "the unit edge length"
+niter := 100.
+edgelen := 1.0.   % "the unit edge length"
 
-% should `a` be negative?
 x(U,T) += a * forceX(U,T-1).
 y(U,T) += a * forceY(U,T-1).
 

@@ -3,27 +3,20 @@
 | :- backchain f/1.
 | h(X) += g(X)/2.
 | h(X) += f(X)/2.
-| a(X) = h(X) for X in range(6).
+| a(X) = h(X) for X in range(1,6).
 |
 | g(X) = X*f(X-1) for X > 0.
 | f(X) = X*g(X-1) for X > 0.
 | f(0) = 1.
 | g(0) = 1.
-| c(X) = (f(X) + g(X)) / 2 for X in range(1,6).  % skip the base case.
 
 Changes
 =======
-a(0) = 1.0.
 a(1) = 1.0.
 a(2) = 2.0.
 a(3) = 6.0.
 a(4) = 24.0.
 a(5) = 120.0.
-c(1) = 1.0.
-c(2) = 2.0.
-c(3) = 6.0.
-c(4) = 24.0.
-c(5) = 120.0.
 
 > rules
 
@@ -31,39 +24,33 @@ Rules
 =====
   0: h(X) += g(X)/2.
   1: h(X) += f(X)/2.
-  2: a(X) = h(X) for X in range(6).
+  2: a(X) = h(X) for X in range(1,6).
   3: g(X) = X*f(X-1) for X > 0.
   4: f(X) = X*g(X-1) for X > 0.
   5: f(0) = 1.
   6: g(0) = 1.
-  7: c(X) = (f(X) + g(X)) / 2 for X in range(1,6).
 
 > retract_rule 3
 
 Changes
 =======
-c(1) = null.
-c(2) = null.
-c(3) = null.
-c(4) = null.
-c(5) = null.
+a(1) = 0.5.
+a(2) = null.
+a(3) = null.
+a(4) = null.
+a(5) = null.
 
 % TODO (bug): `a(X)` did not change even tho it ought to. The `c(X)` values get
 % blasted because the don't have an obliviously memoized item inbetween, `h(X)`.
 
-> b(X) = h(X) for X in range(6).
-
-Changes
-=======
-b(0) = 1.0.
-b(1) = 1.0.
-b(2) = 2.0.
-b(3) = 6.0.
-b(4) = 24.0.
-b(5) = 120.0.
+> b(X) = h(X) for X in range(1,6).
 
 % Just to hammer the point home, the rule above shows that `h(X)` values are
 % still memoized! It doesn't know that one of it's antecedents has changed.
+
+Changes
+=======
+b(1) = 0.5.
 
 > sol
 
@@ -71,20 +58,9 @@ Solution
 ========
 a/1
 ===
-a(0) = 1.0.
-a(1) = 1.0.
-a(2) = 2.0.
-a(3) = 6.0.
-a(4) = 24.0.
-a(5) = 120.0.
-
+a(1) = 0.5.
 b/1
 ===
-b(0) = 1.0.
-b(1) = 1.0.
-b(2) = 2.0.
-b(3) = 6.0.
-b(4) = 24.0.
-b(5) = 120.0.
+b(1) = 0.5.
 
 % TODO: redefine `g` see if the other rules pick up the new definition.

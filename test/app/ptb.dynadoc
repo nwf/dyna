@@ -123,15 +123,15 @@
 
 
 % very inefficient way to format trees (not required, just fun to see that we
-% can do it). 
+% can do it).
 %
 % TODO: unbinarize
 %
-> :- backchain tostring/1.
-| tostring(X) := X.
-| tostring(&'@'(X)) := "@" + X.
-| tostring([X,Y]) := "(" + tostring(X) + " " + tostring(Y) + ")".
-| tostring([X,Y,Z]) := "(" + tostring(X) + " " + tostring(Y) + " " + tostring(Z) + ")".
+%> :- backchain tostring/1.
+%| tostring(X) := X.
+%| tostring(&'@'(X)) := "@" + X.
+%| tostring([X,Y]) := "(" + tostring(X) + " " + tostring(Y) + ")".
+%| tostring([X,Y,Z]) := "(" + tostring(X) + " " + tostring(Y) + " " + tostring(Z) + ")".
 
 % collect errors
 %> errors(S) = [tostring(parse(S)), tostring(b(tree(S)))] for parse(S) != b(tree(S)).
