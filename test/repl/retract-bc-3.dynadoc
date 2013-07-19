@@ -1,0 +1,62 @@
+> :- backchain a/1.
+| :- backchain b/1.
+| :- backchain c/1.
+| :- backchain d/1.
+| a(X) = b(X).
+| b(X) = c(X).
+| c(X) = d(X).
+| d(X) = X.
+
+> as(X) = a(X) for X in range(1,5).
+| bs(X) = b(X) for X in range(1,5).
+| cs(X) = c(X) for X in range(1,5).
+| ds(X) = d(X) for X in range(1,5).
+
+Changes
+=======
+as(1) = 1.
+as(2) = 2.
+as(3) = 3.
+as(4) = 4.
+bs(1) = 1.
+bs(2) = 2.
+bs(3) = 3.
+bs(4) = 4.
+cs(1) = 1.
+cs(2) = 2.
+cs(3) = 3.
+cs(4) = 4.
+ds(1) = 1.
+ds(2) = 2.
+ds(3) = 3.
+ds(4) = 4.
+
+> rules
+
+Rules
+=====
+  0: a(X) = b(X).
+  1: b(X) = c(X).
+  2: c(X) = d(X).
+  3: d(X) = X.
+  4: as(X) = a(X) for X in range(1,5).
+  5: bs(X) = b(X) for X in range(1,5).
+  6: cs(X) = c(X) for X in range(1,5).
+  7: ds(X) = d(X) for X in range(1,5).
+
+> retract_rule 2
+
+Changes
+=======
+as(1) = null.
+as(2) = null.
+as(3) = null.
+as(4) = null.
+bs(1) = null.
+bs(2) = null.
+bs(3) = null.
+bs(4) = null.
+cs(1) = null.
+cs(2) = null.
+cs(3) = null.
+cs(4) = null.
