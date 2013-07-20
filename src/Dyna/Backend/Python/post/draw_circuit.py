@@ -7,7 +7,6 @@ import re
 import webbrowser
 from debug import Hypergraph
 from cStringIO import StringIO
-from utils import lexer, subst
 
 HEADER = """
 <html>
