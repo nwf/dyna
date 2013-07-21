@@ -276,7 +276,11 @@ def rule_source(span, src=None):
     """
     Utility for retrieving source code for Parsec error message.
     """
-    [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
+    try:
+        [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
+    except ValueError:
+        return span
+
     (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
 
     if not src:
