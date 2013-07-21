@@ -150,7 +150,7 @@ class REPL(cmd.Cmd, object):
 
     def do_dynac(self, line):
         try:
-            src = self.interp.dynac_code(line)   # might raise DynaCompilerError
+            src = self.interp.dynac_code(line)
         except DynaCompilerError as e:
             src = e.filename
             print e

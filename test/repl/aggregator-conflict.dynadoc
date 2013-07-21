@@ -8,7 +8,8 @@ a = 1.
 > a.
 DynaCompilerError:
 Encountered error in input program:
- Conflicting aggregators; rule <repl>
+ Conflicting aggregators; rule
+  a.
  uses ':-' for a/0 but I had been lead to expect '+='.
 Everything was syntactically valid, but we could not
 see it through.

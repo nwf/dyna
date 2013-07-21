@@ -111,7 +111,7 @@ def dynac(f, out, anf=None, compiler_args=()):
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
-        stderr = hide_ugly_filename(stderr)
+        stderr = hide_ugly_filename(stderr, lambda m: '\n  %s\n' % rule_source(m.group(0)))
         raise DynaCompilerError(stderr, f)
 
 

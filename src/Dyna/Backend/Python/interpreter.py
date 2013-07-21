@@ -86,6 +86,10 @@ class Interpreter(object):
         # (an over estimate -- high recall, low precision).
         self.coarse_deps = defaultdict(set)
         self.rule_by_head = defaultdict(list)
+        self.rule_dep = defaultdict(set)        # rules which depend on a predicate
+
+        # rules which need to be recompiled against new program state.
+        self.recompile = set()
 
     def new_fn(self, fn, agg):
         if self.agg_name[fn] is None:
@@ -291,17 +295,21 @@ class Interpreter(object):
 
         env = imp.load_source('dynamically_loaded_module', filename)
 
-        anf = {}
-        assert path(filename + '.anf').exists()   # XXX: codegen should put this is plan.py
-        with file(filename + '.anf') as f:
-            for x in read_anf(f.read()):
-                anf[x.ruleix] = x
-
         for k,v in [('chart', self.chart),
                     ('build', self.build),
                     ('gbc', self.gbc),
                     ('peel', peel)]:
             setattr(env, k, v)
+
+        anf = {}
+        assert path(filename + '.anf').exists()   # XXX: codegen should put this is plan.py
+        with file(filename + '.anf') as f:
+            contents = f.read().strip() + '\n'
+            for x in read_anf(contents):
+                anf[x.ruleix] = x
+
+        # accept the new parser state
+        self.parser_state = env.parser_state
 
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
@@ -312,19 +320,37 @@ class Interpreter(object):
             self.add_rule(index, query=h, head_fn=fn, anf=anf[index])
 
         for index, h in env.initializers:
+            assert index not in self.rules
             new_rules.add(index)
             self.add_rule(index, init=h, anf=anf[index])
 
         for fn, r, h in env.updaters:
             self.new_updater(fn, r, h)
 
-        # accept the new parser state
-        self.parser_state = env.parser_state
+        # run to fixed point.
+        if self.recompile:
+            try:
+                plan = self.dynac_code('\n'.join(r.src for r in self.recompile))
+            except DynaCompilerError as e:
+                # TODO: it is a little bit strange to ignore the error and
+                # simply print something. However, since the rules in the
+                # recompile list are syntactically valid (well, they at least
+                # were valid) -- this means that errors must be planning
+                # errors... probably all to do with missing BC declarations.
+                print e
+            else:
+                # TODO: reuse old rule index when we recompile.
+                for r in self.recompile:
+                    self.retract_rule(r.index)
+                self.recompile.clear()
+                self.load_plan(plan)
 
+        # we we don't accumulate all changed rules, new_rules return will be new
+        # rules of top-level call.
         return new_rules
 
     def run_uninitialized(self):
-        q = list(self.uninitialized_rules)
+        q = set(self.uninitialized_rules)
         failed = []
         while q:
             rule = q.pop()
@@ -396,9 +422,24 @@ class Interpreter(object):
             self.uninitialized_rules.append(rule)
 
         elif query:
-            self._gbc[head_fn].append(query)
             rule.query = query
             query.rule = rule
+
+            if head_fn not in self._gbc:
+
+                # quick monkey patch assertion.
+                def monkey(_, _args):
+                    assert False, '__getitem__ should never be called because' \
+                        ' `%s` should be backchained' % head_fn
+                self.chart.__getitem__ = monkey
+
+                # retract and replan rules dependent on this predicate which is
+                # now backchained.
+                for d in self.rule_dep[head_fn]:
+                    if rule != d and d.head_fn not in self._gbc:
+                        self.recompile.add(d)
+
+            self._gbc[head_fn].append(query)
 
         else:
             assert False, "Can't add rule with out an initializer or query handler."
@@ -421,10 +462,12 @@ class Interpreter(object):
             [(label, _evalix)] = re.findall('^(.*)@(\d+)$', label)  # remove evaluation index
             b = '%s/%d' % (label, len(ys))
             self.coarse_deps[b].add(rule.head_fn)
+            self.rule_dep[b].add(rule)
 
     def recompute_coarse(self):
         self.rule_by_head.clear()
         self.coarse_deps.clear()
+        self.rule_dep.clear()
         for rule in self.rules.values():
             self.update_coarse(rule)
 
