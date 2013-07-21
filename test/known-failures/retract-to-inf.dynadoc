@@ -1,0 +1,26 @@
+% retract start and this program goes to infinity!
+
+> path(start) min= 0.
+| path(B)     min= path(A) + edge(A,B).
+|
+| edge("a","b") := 1.0.
+| edge("b","c") := 2.0.
+| edge("c","d") := 3.0.
+| edge("c","b") := 4.0.
+| start := "a".
+
+Changes
+=======
+edge("a","b") = 1.0.
+edge("b","c") = 2.0.
+edge("c","b") = 4.0.
+edge("c","d") = 3.0.
+path("a") = 0.
+path("b") = 1.0.
+path("c") = 3.0.
+path("d") = 6.0.
+start = "a".
+
+> retract_rule 6
+
+> sol
