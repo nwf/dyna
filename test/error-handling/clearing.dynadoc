@@ -20,6 +20,8 @@ b = 1.
 
 > a += 1/d.
 
+>>> 1 new errors. Type `sol` for details.
+
 > sol
 
 Solution
@@ -47,6 +49,8 @@ Changes
 a = 2.
 b = 2.
 d = 1.
+
+>>> 1 errors cleared.
 
 % Looks good.
 

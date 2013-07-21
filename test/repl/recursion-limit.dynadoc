@@ -12,7 +12,12 @@ Changes
 =======
 a = $error.
 
+>>> 1 new errors. Type `sol` for details.
+
+
 > b = a + 1.
+
+>>> 1 new errors. Type `sol` for details.
 
 > rules
 
@@ -30,7 +35,7 @@ a = $error.
 
 Errors
 ======
-Error(s) in rule: <repl>
+Error(s) in rule 0: <repl>
     f(X) = f(X-1).
   RuntimeError:
     when `f(-323)` = null
@@ -49,6 +54,8 @@ Failed to initialize rule:
 Changes
 =======
 a = null.
+
+>>> 2 errors cleared.
 
 > sol
 

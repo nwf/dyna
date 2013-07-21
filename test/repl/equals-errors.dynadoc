@@ -15,6 +15,8 @@ Changes
 =======
 a = $error.
 
+>>> 1 new errors. Type `sol` for details.
+
 > sol
 
 Solution
@@ -33,6 +35,9 @@ Error(s) aggregating a/0:
 Changes
 =======
 a = 2.
+
+>>> 1 errors cleared.
+
 
 > sol
 

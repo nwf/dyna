@@ -32,6 +32,8 @@ f(1,2) = 2.
 f(2,1) = 1.
 f(2,2) = 2.
 
+>>> 5 new errors. Type `sol` for details.
+
 > sol
 
 Solution
@@ -61,25 +63,25 @@ Error(s) aggregating a/1:
 Error(s) aggregating d/0:
   TypeError:
     `d`: unsupported operand type(s) for *: 'NoneType' and 'int'
-Error(s) in rule: <repl>
+Error(s) in rule 1: <repl>
     a += 1/b.
   ZeroDivisionError:
     when `b` = 0
       division by zero
       a += (1 / b=0)=?.
-Error(s) in rule: <repl>
+Error(s) in rule 2: <repl>
     c += "" + b.
   TypeError:
     when `b` = 0
       cannot concatenate 'str' and 'int' objects
       c += ("" + b=0)=?.
-Error(s) in rule: <repl>
+Error(s) in rule 4: <repl>
     b := e/0.
   ZeroDivisionError:
     when `e` = 0
       division by zero
       b := (e=0 / 0)=?.
-Error(s) in rule: <repl>
+Error(s) in rule 5: <repl>
     a += e/0.
   ZeroDivisionError:
     when `e` = 0

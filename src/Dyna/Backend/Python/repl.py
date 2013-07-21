@@ -8,12 +8,16 @@ to help.
 """
 
 import re, os, cmd, readline
-from utils import ip, lexer, subst, drepr, _repr, get_module
+from utils import ip, lexer, subst, drepr, _repr, get_module, yellow
 from stdlib import topython, todyna
 from errors import DynaCompilerError
 from config import dotdynadir
 from errors import show_traceback
 import load, post
+
+
+from interpreter import Rule
+from contextlib import contextmanager
 
 
 class REPL(cmd.Cmd, object):
@@ -86,12 +90,13 @@ class REPL(cmd.Cmd, object):
         except ValueError:
             print 'Please specify an integer. Type `help retract_rule` to read more.'
         else:
-            changes = self.interp.retract_rule(idx)
-            if changes is None:
-                print 'List available by typing `rules`'
-                print
-            else:
-                self._changed(changes)
+            with self.error_tracker():
+                changes = self.interp.retract_rule(idx)
+                if changes is None:
+                    print 'List available by typing `rules`'
+                    print
+                else:
+                    self._changed(changes)
 
     def do_exit(self, _):
         """
@@ -259,11 +264,41 @@ class REPL(cmd.Cmd, object):
             print 'new rule(s) were not added to program.'
             print
         else:
-            new_rules = self.interp.load_plan(src)
-            changed = self.interp.run_agenda()
-            if show_changed:
-                self._changed(changed)
+            with self.error_tracker():
+                new_rules = self.interp.load_plan(src)
+                changed = self.interp.run_agenda()
+                if show_changed:
+                    self._changed(changed)
             return (new_rules, changed)
+
+    @contextmanager
+    def error_tracker(self):
+        errors_before = self.interp.error.copy()
+        yield
+        if errors_before.items() != self.interp.error.items():
+            e = set(errors_before) | set(self.interp.error)
+            new_errors = 0
+            cleared_errors = 0
+            for k in e:
+                was = k in errors_before
+                now = k in self.interp.error
+                if isinstance(k, Rule):
+                    k = 'rule index %s' % k.index
+                if was and not now:
+                    #print 'cleared error at `%s`.' % k
+                    cleared_errors += 1
+                elif not was and now:
+                    #print 'new error at `%s`.' % k
+                    new_errors += 1
+            if new_errors and cleared_errors:
+                print yellow % '>>>', '%s new errors, %s errors cleared. Type `sol` for details.\n' \
+                    % (new_errors, cleared_errors)
+            elif new_errors:
+                print yellow % '>>>', '%s new errors. Type `sol` for details.\n' \
+                    % (new_errors,)
+            elif cleared_errors:
+                print yellow % '>>>', '%s errors cleared.\n' \
+                    % (cleared_errors,)
 
     def _changed(self, changed):
         if not changed:

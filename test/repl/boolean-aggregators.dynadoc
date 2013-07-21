@@ -6,6 +6,8 @@ Changes
 =======
 e = $error.
 
+>>> 1 new errors. Type `sol` for details.
+
 > sol
 
 Solution
@@ -24,7 +26,7 @@ Changes
 =======
 e = null.
 
-
+>>> 1 errors cleared.
 
 
 > a :- false.
@@ -49,6 +51,8 @@ Changes
 b = $error.
 c = "horse".
 
+>>> 1 new errors. Type `sol` for details.
+
 
 > sol
 
@@ -72,6 +76,7 @@ Changes
 b = true.
 c = true.
 
+>>> 1 errors cleared.
 
 
 > f(1,2). f(2,2).

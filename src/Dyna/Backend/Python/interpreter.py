@@ -123,6 +123,7 @@ class Interpreter(object):
         return self.chart[fn].insert(args)
 
     def delete(self, item, val, ruleix, variables):
+        self.clear_error(item)
         self.emit(item, val, ruleix, variables, delete=True)
 
     def emit(self, item, val, ruleix, variables, delete):
@@ -438,6 +439,8 @@ class Interpreter(object):
             print 'Rule %s not found.' % idx
             return
 
+        self.clear_error(rule)
+
         # remove $rule
         if hasattr(rule, 'item'):
             self.delete(rule.item, true, ruleix=None, variables=None)
@@ -565,12 +568,6 @@ class Interpreter(object):
     def dump_errors(self, out=None):
         if out is None:
             out = sys.stdout
-        # We only dump the error chart if it's non empty.
-        if not self.error and not self.uninitialized_rules:
-            return
-        print >> out
-        print >> out, red % 'Errors'
-        print >> out, red % '======'
 
         # separate errors into aggregation errors and update handler errors
         I = defaultdict(lambda: defaultdict(list))
@@ -583,7 +580,20 @@ class Interpreter(object):
                 if h is None:
                     I[item.fn][type(e)].append((item, val, e))
                 else:
+                    if h.rule.index not in self.rules:
+                        # TODO: clear all errors pertaining to a rule at
+                        # push-time. This is a temporary filter, which is fine
+                        # for now.
+                        continue
                     E[h.rule][type(e)].append((item, val, e))
+
+        # We only dump the error chart if it's non empty.
+        if not I and not E and not self.uninitialized_rules:
+            return
+
+        print >> out
+        print >> out, red % 'Errors'
+        print >> out, red % '======'
 
         # aggregation errors
         for r in sorted(I, key=lambda r: r.index):
@@ -599,7 +609,7 @@ class Interpreter(object):
 
         # errors pertaining to rules
         for r in sorted(E, key=lambda r: r.index):
-            print >> out, 'Error(s) in rule:', r.span
+            print >> out, 'Error(s) in rule %s:' % r.index, r.span
             print >> out
             for line in r.src.split('\n'):
                 print >> out, '   ', line

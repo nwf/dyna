@@ -48,6 +48,13 @@ print 'Doctests'
 print '========'
 
 for x in sorted(path('test').glob("*/*.dynadoc")):
+
+    if '/ptb.dynadoc' in x:
+        continue
+
+    if '/known-failures/' in x:
+        continue
+
     print x,
     sys.stdout.flush()
     with file(x) as f:

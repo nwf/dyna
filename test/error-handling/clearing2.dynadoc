@@ -6,6 +6,8 @@ d = 0.
 
 > a += 1 / d.
 
+>>> 1 new errors. Type `sol` for details.
+
 > rules
 
 Rules
@@ -35,3 +37,5 @@ Changes
 =======
 a = 1.0.
 d = 1.
+
+>>> 1 errors cleared.

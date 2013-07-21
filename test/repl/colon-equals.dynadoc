@@ -9,6 +9,9 @@ a(1) = 1.
 a(2) = 2.
 b = $error.
 
+>>> 1 new errors. Type `sol` for details.
+
+
 > sol
 
 Solution
@@ -41,6 +44,9 @@ Error(s) aggregating b/0:
 Changes
 =======
 b = 0.
+
+>>> 1 errors cleared.
+
 
 > a(1) := 2. a(2) := 2. b := 0. b := a(X).
 

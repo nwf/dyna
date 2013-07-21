@@ -1,5 +1,7 @@
 > x = cons(1, 2).
 
+>>> 1 new errors. Type `sol` for details.
+
 > sol
 
 Solution empty.
@@ -15,6 +17,8 @@ Failed to initialize rule:
 
 
 > retract_rule 0
+
+>>> 1 errors cleared.
 
 > s set= Y for Y in [3,2,1,[2,1],&f(1)].
 
