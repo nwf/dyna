@@ -4,11 +4,14 @@ from errors import DynaCompilerError
 from errors import crash_handler
 from interpreter import Interpreter
 from repl import REPL
-from config import dotdynadir
+from config import dotdynadir, dynahome
 import post, load
 
 def main():
     parser = argparse.ArgumentParser(description="The dyna interpreter!")
+
+    parser.add_argument('--version', action='store_true',
+                        help='Print version information.')
     parser.add_argument('source', nargs='*', type=path,
                         help='Path to Dyna source file.')
     parser.add_argument('-i', dest='interactive', action='store_true',
@@ -22,6 +25,16 @@ def main():
                         help='run loaders.')
 
     args = parser.parse_args()
+
+    if args.version:
+        import subprocess
+        try:
+            subprocess.Popen("cd %s ; grep '^Version' dyna.cabal" % dynahome, shell=True)
+            subprocess.Popen("cd %s ; git log -n 1 |grep '^Date' " % dynahome, shell=True)
+            subprocess.Popen("cd %s ; git log -n 1 |grep '^commit' " % dynahome, shell=True)
+        except OSError:
+            print 'failed to obtain version info.'
+        exit(0)
 
     interp = Interpreter()
 
