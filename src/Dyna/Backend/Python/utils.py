@@ -7,6 +7,27 @@ from collections import namedtuple
 from cStringIO import StringIO
 
 
+# TODO: This is pretty hacking we should have the codegen produce something
+# easier to serialize/modify/unserialize. XREF:parser-state
+def parse_parser_state(parser_state):
+    backchain = set()
+    ruleix = None
+    iaggr = {}
+    other = []
+    for k, v in re.findall('^:-\s*(\S+) (.*?)\s*\.$', parser_state, re.MULTILINE):
+        if k == 'backchain':
+            [(fn, arity)] = re.findall("'(.*?)'/(\d+)", v)
+            backchain.add('%s/%s' % (fn, arity))
+        elif k == 'iaggr':
+            [(fn, arity, agg)] = re.findall("'(.*?)'/(\d+)\s*(.*)", v)
+            iaggr['%s/%s' % (fn, arity)] = agg
+        elif k == 'ruleix':
+            ruleix = int(v)
+        else:
+            other.append((k,v))
+    return backchain, ruleix, iaggr, other
+
+
 
 class _true(object):
     def __nonzero__(self):

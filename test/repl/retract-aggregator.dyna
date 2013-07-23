@@ -1,0 +1,36 @@
+% After retracting all rules defining a functor/arity user should be allowed to
+% change it's aggregator; Issue #61: can't retract wrong aggregator.
+
+> :- backchain f/1.
+> f(X) = 1.
+
+> retract_rule 0
+
+% now, make it's aggregator '+=' instead of '='
+> f(X) += 1.
+> f(X) += 2.
+
+> query f(1)
+
+f(1) = 3.
+
+% will still be one rule defining f/1
+> retract_rule 1
+
+
+% FIXME, empty changes...
+Changes
+=======
+
+
+% try to change to `:=`
+> f(X) := 100.
+
+DynaCompilerError:
+Encountered error in input program:
+ Conflicting aggregators; rule
+  f(X) := 100.
+ uses ':=' for f/1 but I had been lead to expect '+='.
+Everything was syntactically valid, but we could not
+see it through.
+new rule(s) were not added to program.

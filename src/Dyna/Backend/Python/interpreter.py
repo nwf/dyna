@@ -8,7 +8,7 @@ from path import path
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
 from utils import red, parse_attrs, ddict, dynac, read_anf, strip_comments, \
-    _repr, hide_ugly_filename, true, false
+    _repr, hide_ugly_filename, true, false, parse_parser_state
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -60,10 +60,24 @@ def none():
 
 class Interpreter(object):
 
+    @property
+    def parser_state(self):
+        # TODO: this is pretty hacky. XREF:parser-state
+        bc, rix, agg, other = self.pstate
+        lines = [':-ruleix %d.' % rix]
+        for fn in bc:
+            [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
+            lines.append(":-backchain '%s'/%s." % (fn, arity))
+        for fn, agg in agg.items():
+            [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
+            lines.append(":-iaggr '%s'/%s %s." % (fn, arity, agg))
+        lines.extend(':-%s %s.' % (k,v) for k,v in other)
+        return '\n'.join(lines)
+
     def __init__(self):
         # declarations
         self.agg_name = defaultdict(none)
-        self.parser_state = ''
+        self.pstate = (set(), 0, {}, [])
         self.files = []
         # rules
         self.rules = {}
@@ -276,7 +290,6 @@ class Interpreter(object):
             return Error()
 
         else:
-            # no exceptions, accept emissions.
             for e in emits:
                 # an error could happen here, but we assume (by contract) that this
                 # is not possible.
@@ -308,8 +321,9 @@ class Interpreter(object):
             for x in read_anf(contents):
                 anf[x.ruleix] = x
 
-        # accept the new parser state
-        self.parser_state = env.parser_state
+        # update parser state
+        self.pstate = parse_parser_state(env.parser_state)
+
 
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
@@ -332,8 +346,8 @@ class Interpreter(object):
             try:
                 plan = self.dynac_code('\n'.join(r.src for r in sorted(self.recompile, key=lambda r: r.index)))
             except DynaCompilerError as e:
-                # TODO: it's a bit strange to ignore the error and simply print
-                # the error. However, since the rules in the recompile list are
+                # TODO: it's a bit strange to ignore the error and just print
+                # it. However, since the rules in the recompile list are
                 # syntactically valid (well, they at least they were valid) --
                 # this means that errors must be planning errors... probably all
                 # to do with missing BC declarations.
@@ -530,6 +544,12 @@ class Interpreter(object):
                 self.error[item] = [(e, h) for e, h in self.error[item] if h is not None and h.rule.index == rule.index]
 
         self.recompute_coarse()
+
+        # if now there are no more rules defining a functor
+        if not self.rule_by_head[rule.head_fn]:
+            del self.chart[rule.head_fn]      # delete the chart.
+            del self.agg_name[rule.head_fn]
+            del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
 
         self._agenda()
         return self.changed
