@@ -282,13 +282,19 @@ class REPL(cmd.Cmd, object):
             for k in e:
                 was = k in errors_before
                 now = k in self.interp.error
+
+                if k in self.interp.error:
+                    es = self.interp.error[k]
+                else:
+                    es = ''
+
                 if isinstance(k, Rule):
                     k = 'rule index %s' % k.index
                 if was and not now:
                     #print 'cleared error at `%s`.' % k
                     cleared_errors += 1
                 elif not was and now:
-                    #print 'new error at `%s`.' % k
+#                    print 'new error at `%s`.' % k, es
                     new_errors += 1
             if new_errors and cleared_errors:
                 print yellow % '>>>', '%s new errors, %s errors cleared. Type `sol` for details.\n' \

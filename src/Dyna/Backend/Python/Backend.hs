@@ -53,7 +53,7 @@ aggrs :: S.Set String
 aggrs = S.fromList
   [ "max=" , "min="
   , "+=" , "*="
-  , "&="
+  , "&=" , "|="
   , ":-"
   , "="
   , "majority=" , "mean="

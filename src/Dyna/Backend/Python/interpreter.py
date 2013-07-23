@@ -196,7 +196,7 @@ class Interpreter(object):
             # compute item's new value
             now = item.aggregator.fold()
 
-        except (AggregatorError, ZeroDivisionError, TypeError, OverflowError) as e:
+        except (AggregatorError, ZeroDivisionError, ValueError, TypeError, OverflowError) as e:
             # handle error in aggregator
             now = Error()
             self.replace(item, now)
@@ -228,7 +228,7 @@ class Interpreter(object):
 
             try:
                 handler(item, val, emit=t_emit)
-            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 error.append((e, handler))
@@ -266,7 +266,7 @@ class Interpreter(object):
         for handler in self._gbc[item.fn]:
             try:
                 handler(*args, emit=t_emit)
-            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 errors.append((e, handler))
@@ -330,13 +330,20 @@ class Interpreter(object):
         # run to fixed point.
         if self.recompile:
             try:
-                plan = self.dynac_code('\n'.join(r.src for r in self.recompile))
+                plan = self.dynac_code('\n'.join(r.src for r in sorted(self.recompile, key=lambda r: r.index)))
             except DynaCompilerError as e:
-                # TODO: it is a little bit strange to ignore the error and
-                # simply print something. However, since the rules in the
-                # recompile list are syntactically valid (well, they at least
-                # were valid) -- this means that errors must be planning
-                # errors... probably all to do with missing BC declarations.
+                # TODO: it's a bit strange to ignore the error and simply print
+                # the error. However, since the rules in the recompile list are
+                # syntactically valid (well, they at least they were valid) --
+                # this means that errors must be planning errors... probably all
+                # to do with missing BC declarations.
+                #
+                # TODO: should probably at the very least report compiler errors
+                # in a similar fashion to initialization errors.
+                #
+                # TODO: we probably have to worry about infinite loops -- at the
+                # moment this results in an interpreter crash due to max
+                # recursion limit
                 print e
             else:
                 # TODO: reuse old rule index when we recompile.
@@ -363,7 +370,7 @@ class Interpreter(object):
                 self.clear_error(rule)  # clear errors on rule, if any
                 rule.init(emit=_emit)
 
-            except (ZeroDivisionError, TypeError, RuntimeError, OverflowError) as e:
+            except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
                 self.set_error(rule, e)
@@ -499,7 +506,7 @@ class Interpreter(object):
                 # run initializer in delete mode
                 try:
                     rule.init(emit=self.delete)
-                except (ZeroDivisionError, TypeError, RuntimeError, OverflowError):
+                except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError):
                     # TODO: what happens if there's an error?
                     pass
             else:
@@ -512,6 +519,15 @@ class Interpreter(object):
 
             # recompute memos and dependent memos
             self.recompute_gbc_memo(rule.head_fn)
+
+
+        # clear push-time errors pertaining to this rule
+        for item, x in self.error.items():
+            if isinstance(item, Rule):
+                continue
+            (_, es) = x
+            for e, h in es:
+                self.error[item] = [(e, h) for e, h in self.error[item] if h is not None and h.rule.index == rule.index]
 
         self.recompute_coarse()
 
@@ -623,11 +639,7 @@ class Interpreter(object):
                 if h is None:
                     I[item.fn][type(e)].append((item, val, e))
                 else:
-                    if h.rule.index not in self.rules:
-                        # TODO: clear all errors pertaining to a rule at
-                        # push-time. This is a temporary filter, which is fine
-                        # for now.
-                        continue
+                    assert h.rule.index in self.rules
                     E[h.rule][type(e)].append((item, val, e))
 
         # We only dump the error chart if it's non empty.

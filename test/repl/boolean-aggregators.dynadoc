@@ -18,7 +18,7 @@ Errors
 ======
 Error(s) aggregating e/0:
   TypeError:
-    `e`: 10 is not Boolean.
+    `e`: 10 is not true.
 
 > retract_rule 0
 
@@ -28,14 +28,55 @@ e = null.
 
 >>> 1 errors cleared.
 
+> e :- false.
 
-> a :- false.
+Changes
+=======
+e = $error.
+
+>>> 1 new errors. Type `sol` for details.
+
+
+> e :- true.
+
+% didn't clear error because there is still a false aggregand.
+
+> rules
+
+Rules
+=====
+  1: e :- false.
+  2: e :- true.
+
+> retract_rule 1
+
+Changes
+=======
+e = true.
+>>> 1 errors cleared.
+
+> sol
+
+Solution
+========
+e.             % note the special case printing.
+
+
+> retract_rule 2
+
+Changes
+=======
+e = null.
+
+
+> a |= false.
 
 Changes
 =======
 a = false.
 
-> a :- true.
+
+> a |= true.
 
 Changes
 =======
@@ -58,7 +99,7 @@ c = "horse".
 
 Solution
 ========
-a.
+a = true.
 b = $error.
 c = "horse".
 
@@ -87,7 +128,7 @@ c = true.
 
 Solution
 ========
-a.
+a = true.
 b = true.
 c = true.
 

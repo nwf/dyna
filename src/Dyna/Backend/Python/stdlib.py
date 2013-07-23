@@ -6,6 +6,20 @@ from math import log, exp, sqrt
 from random import random as _random
 from glob import glob
 
+
+#def add(self, x):
+#    if islist(x):
+#        n = len(self.aslist)
+#        m = len(x.aslist)
+#        if n != m:
+#            raise ValueError("Can't add list of unequal lengths (%s and %s)" % (len(self.aslist), len(x.aslist)))
+#        else:
+#            return todyna([a+b for a,b in zip(self.aslist, x.aslist)])
+#    else:
+#        # try to add scalar
+#        return todyna([x+a for a in self.aslist])
+
+
 def or_(x, y):
     if not (isbool(x) and isbool(y)):
         raise TypeError('`|` expected Boolean arguments, got `%s` and `%s`' \

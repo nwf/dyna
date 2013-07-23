@@ -5,6 +5,8 @@ from __future__ import division
 
 # TODO: aggregators might want a reference to the item they are associated with.
 
+# TODO: we should never have a negative multiplicity
+
 import operator
 from collections import Counter
 from utils import drepr, _repr, user_vars, isbool, true, false
@@ -144,7 +146,6 @@ class or_equals(BAggregator):
             for val in s:
                 if not isbool(val):
                     raise TypeError('%s is not Boolean.' % _repr(val))
-
             # TODO: can short circuit as soon as we get a true... but above we
             # check the types.. so we don't get the benefit.
             for val in s:
@@ -152,6 +153,19 @@ class or_equals(BAggregator):
                     return true
             return false
 
+
+class colon_dash(BAggregator):
+    def fold(self):
+        s = [x for x, m in self.iteritems() if m > 0]
+        if len(s):
+            for val in s:
+                if val is not true:
+                    raise TypeError('%s is not true.' % _repr(val))
+            # TODO: can short circuit as soon as we get a true... but above we
+            # check the types.. so we don't get the benefit.
+            for val in s:
+                if val is true:
+                    return true
 
 
 class and_equals(BAggregator):
@@ -161,7 +175,6 @@ class and_equals(BAggregator):
             for val in s:
                 if not isbool(val):
                     raise TypeError('%s is not Boolean.' % _repr(val))
-
             # TODO: can short circuit as soon as we get a false. but above we
             # check the types.. so we don't get the benfit
             for val in s:
@@ -194,7 +207,8 @@ defs = {
     '+=': plus_equals,
     '*=': times_equals,
     '&=': and_equals,
-    ':-': or_equals,
+    ':-': colon_dash,
+    '|=': or_equals,
     'majority=': majority_equals,
     'set=': set_equals,
     'bag=': bag_equals,
