@@ -546,9 +546,12 @@ class Interpreter(object):
 
         # if now there are no more rules defining a functor
         if not self.rule_by_head[rule.head_fn]:
-            del self.chart[rule.head_fn]      # delete the chart.
-            del self.agg_name[rule.head_fn]
-            del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
+            if rule.head_fn in self.chart:
+                del self.chart[rule.head_fn]      # delete the chart.
+            if rule.head_fn in self.agg_name:
+                del self.agg_name[rule.head_fn]
+            if rule.head_fn in self.pstate[2]:
+                del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
 
         self._agenda()
         return self.changed

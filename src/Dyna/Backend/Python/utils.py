@@ -262,7 +262,7 @@ def pretty(t, initialindent=0):
     return f.getvalue()
 
 
-class ANF(namedtuple('ANF', 'lines ruleix agg head evals unifs result')):
+class ANF(namedtuple('ANF', 'span ruleix agg head evals unifs result')):
     pass
 
 
@@ -276,9 +276,9 @@ def read_anf(e):
     def g(x):
         return list(_g(x))
 
-    for lines, ruleix, anf in re.findall('^;; (.*)\n;; index (\d+)\n(\([\w\W]+?)\n(?:\n|$)', e, re.MULTILINE):
+    for span, ruleix, anf in re.findall('^;; (.*)\n;; index (\d+)\n(\([\w\W]+?)\n(?:\n|$)', e, re.MULTILINE):
         for (agg, head, evals, unifs, [_,result]) in parse_sexpr(anf):
-            yield ANF(lines,
+            yield ANF(span,
                       int(ruleix),
                       agg,
                       head,
