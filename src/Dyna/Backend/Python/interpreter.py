@@ -324,7 +324,6 @@ class Interpreter(object):
         # update parser state
         self.pstate = parse_parser_state(env.parser_state)
 
-
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
 

@@ -143,9 +143,10 @@ def hide_ugly_filename(x, replacement='<repl>'):
 
 def lexer(term):
     return re.findall('"[^"]*"'               # string
+                      "|'[^']+'"              # quoted functor
                       '|[a-z][a-zA-Z_0-9]*'   # functor
-                      '|[A-Z_][a-zA-Z0-9_]*'   # variable
-                      '|[(), \[\]|]+'         # parens and comma
+                      '|[A-Z_][a-zA-Z0-9_]*'  # variable
+                      '|[(), \[\]|:]+'        # parens and comma
                       '|[^(), ]+', term)      # everything else
 
 

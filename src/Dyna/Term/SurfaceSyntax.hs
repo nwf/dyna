@@ -82,6 +82,7 @@ defOperSpec = foldr (\(k,v) -> mapInOrCons k v) def more
     , ("with_key" ,[(4,PFIn AssocNone )      ])
 
     , ("->" ,[(5,PFIn AssocNone )      ])
+    , (":"  ,[(5,PFIn AssocRight )     ])
 
     , ("<=" ,[(4,PFIn AssocNone )            ])
     , ("<"  ,[(4,PFIn AssocNone )            ])
@@ -182,6 +183,7 @@ disposTab_prologish t = DisposTab s a
        , (("nil",  0),(SDQuote,[]))
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
        , (("->",2),(SDQuote,[ADQuote, ADQuote]))
+       , ((":",2),(SDQuote,[ADQuote, ADQuote]))       
        ]
 
 -- | Make the default surface syntax more functional.  Here, all functors
@@ -213,6 +215,8 @@ disposTab_dyna t = DisposTab s a
        , (("$key" ,1),(SDEval,[ADQuote]))
        , (("with_key",2),(SDQuote,[ADEval, ADEval]))
        , (("->",2),(SDQuote,[ADQuote, ADQuote]))
+       , ((":",2),(SDQuote,[ADQuote, ADQuote]))
+
        ]
 
 ------------------------------------------------------------------------}}}
