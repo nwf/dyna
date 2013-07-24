@@ -158,13 +158,21 @@ class Interpreter(object):
         if was == now:
             # nothing to do.
             return
+
         # special handling for with_key, forks a second update
         k = self.build('$key/1', item)
-        if k.value is not None:
-            self.replace(k, None)
+
         if hasattr(now, 'fn') and now.fn == 'with_key/2':
             now, key = now.args
-            self.replace(self.build('$key/1', item), key)
+            self.replace(k, key)
+            if was == now:
+                return
+        else:
+            # retract $key when we retract the item or no longer have a with_key
+            # as the value.
+            if k.value is not None:
+                self.replace(k, None)
+
         # delete existing value before so we can replace it
         if was is not None:
             self.push(item, was, delete=True)
