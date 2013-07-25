@@ -29,10 +29,9 @@ def main():
     if args.version:
         import subprocess
         try:
-            subprocess.Popen("cd %s ; grep '^Version' dyna.cabal" % dynahome, shell=True)
-            subprocess.Popen("cd %s ; git log -n 1 |grep '^Date' " % dynahome, shell=True)
-            subprocess.Popen("cd %s ; git log -n 1 |grep '^commit' " % dynahome, shell=True)
-        except OSError:
+            print (dynahome / 'VERSION').text()
+
+        except IOError:
             print 'failed to obtain version info.'
         exit(0)
 

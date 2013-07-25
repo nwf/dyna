@@ -1,6 +1,11 @@
 # -*-  indent-tabs-mode:t;  -*-
 
-all: deps build sphinxbuild
+all: deps build sphinxbuild version
+
+version:
+	echo "Version: Dyna 0.4 pre-release" `git describe --all` > VERSION
+	echo "Build date:" `date` >> VERSION
+	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> VERSION
 
 upstream:
 	git submodule init
@@ -10,8 +15,8 @@ upstream:
 	# cabal install --user external/ekmett-parsers external/ekmett-trifecta
 
 deps:
-	alex --version >/dev/null || cabal install alex
-	happy --version >/dev/null || cabal install happy
+	alex --version 2>/dev/null >/dev/null || cabal install alex
+	happy --version 2>/dev/null >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
 build:
