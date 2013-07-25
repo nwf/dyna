@@ -1,0 +1,81 @@
+
+> a max= 5 with_key "five".
+
+Changes
+=======
+$key(a) = "five".
+a = 5.
+
+> a max= 10 with_key "ten".
+
+Changes
+=======
+$key(a) = "ten".
+a = 10.
+
+> retract_rule 1
+
+Changes
+=======
+$key(a) = "five".
+a = 5.
+
+> retract_rule 0
+
+Changes
+=======
+$key(a) = null.
+a = null.
+
+
+
+> b max= 10 with_key "ten".
+| b max= 5 with_key "five".
+
+Changes
+=======
+$key(b) = "ten".
+b = 10.
+
+> retract_rule 2
+
+Changes
+=======
+$key(b) = "five".
+b = 5.
+
+
+% TODO: (bug) with_key(_,_) > 100
+> c max= 10 with_key "ten".
+| c max= 5 with_key "five".
+| c max= 100.
+
+Changes
+=======
+$key(c) = "ten".
+c = 10.
+
+> retract_rule 4
+
+Changes
+=======
+$key(c) = "five".
+c = 5.
+
+> retract_rule 5
+
+Changes
+=======
+$key(c) = null.
+c = 100.
+
+> sol
+
+Solution
+========
+b = 5.
+c = 100.
+
+$key/1
+======
+$key(b) = "five".
