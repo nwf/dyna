@@ -74,6 +74,13 @@ class Interpreter(object):
         lines.extend(':-%s %s.' % (k,v) for k,v in other)
         return '\n'.join(lines)
 
+    def set_parser_state(self, x):
+        self.pstate = (bc, _rix, _agg, _other) = x
+        for fn in bc:
+            if fn not in self._gbc:    # new backchain declaration
+                for r in self.rule_by_head[fn]:
+                    self.recompile.add(r)
+
     def __init__(self):
         # declarations
         self.agg_name = defaultdict(none)
@@ -240,7 +247,7 @@ class Interpreter(object):
         t_emit = lambda item, val, ruleix, variables: \
            emittiers.append((item, val, ruleix, variables, delete))
 
-        error = []
+        errors = []
 
         for handler in self.updaters[item.fn]:
 
@@ -253,10 +260,10 @@ class Interpreter(object):
             except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
-                error.append((e, handler))
+                errors.append((e, handler))
 
-        if error:
-            self.set_error(item, (val, error))
+        if errors:
+            self.set_error(item, (val, errors))
             return
 
         # no exceptions, accept emissions.
@@ -330,7 +337,7 @@ class Interpreter(object):
                 anf[x.ruleix] = x
 
         # update parser state
-        self.pstate = parse_parser_state(env.parser_state)
+        self.set_parser_state(parse_parser_state(env.parser_state))
 
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
@@ -373,6 +380,13 @@ class Interpreter(object):
                 self.recompile.clear()
                 self.load_plan(plan)
 
+                # TODO: should probably indicate that some rules were recompiled
+                # and no longer in an error state. -- there is a bit of a
+                # mismatch with when we choose not to add a rule... in the try
+                # block above we reject rules on compiler error, but if the
+                # rules existed before and it now longer compiles we just print
+                # the error and add it to the recompile list.
+
         # we we don't accumulate all changed rules, new_rules return will be new
         # rules of top-level call.
         return new_rules
@@ -411,6 +425,8 @@ class Interpreter(object):
             del self.error[x]
 
     def set_error(self, x, e):
+        if not e:
+            self.clear_error(x)
         self.error[x] = e
 
     #___________________________________________________________________________
@@ -453,6 +469,7 @@ class Interpreter(object):
             rule.query = query
             query.rule = rule
 
+            # fix dependents
             if head_fn not in self._gbc:
 
                 # quick monkey patch assertion.
@@ -468,6 +485,12 @@ class Interpreter(object):
                         self.recompile.add(d)
 
             self._gbc[head_fn].append(query)
+
+            if head_fn in self.chart:
+                # if we've added a new rule we need to recompute memos for
+                # existing memos. (TODO: can do slightly better than recompute
+                # -- only need to evaluate contributions from this new rule)
+                self.recompute_gbc_memo(head_fn)
 
         else:
             assert False, "Can't add rule with out an initializer or query handler."
@@ -541,14 +564,12 @@ class Interpreter(object):
             # recompute memos and dependent memos
             self.recompute_gbc_memo(rule.head_fn)
 
-
         # clear push-time errors pertaining to this rule
         for item, x in self.error.items():
             if isinstance(item, Rule):
                 continue
-            (_, es) = x
-            for e, h in es:
-                self.error[item] = [(e, h) for e, h in self.error[item] if h is not None and h.rule.index == rule.index]
+            (v, es) = x
+            self.error[item] = (v, [(e, h) for e, h in es if h is None or h.rule.index == rule.index])
 
         self.recompute_coarse()
 
@@ -570,7 +591,7 @@ class Interpreter(object):
             visited = set()
 
         if fn not in self._gbc or fn in visited:
-            # don't refresh non BC computation be careful not to get stuck in an
+            # don't refresh non-BC computation be careful not to get stuck in an
             # infinite loop if there is a cycle in the dep graph
             return
 
@@ -604,6 +625,9 @@ class Interpreter(object):
         """
         filename = path(filename)
         self.files.append(filename)
+
+        # TODO: crashlogs/amareshj:2013-07-01:22:26:54:13412.log -- file doesn't exist.
+
         out = self.tmp / filename.read_hexhash('sha1') + '.plan.py'
         #out = filename + '.plan.py'
         self.files.append(out)

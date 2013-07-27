@@ -5,6 +5,7 @@ TODO: option for strict number of columns.
 
 import re
 from utils import true
+from path import path
 
 class tsv(object):
     """
@@ -30,6 +31,10 @@ class tsv(object):
         self.name = name
 
     def main(self, filename, delim='\t'):
+        filename = path(filename)
+        if not filename.exists():
+            print 'file `%s` does not exist.' % filename
+            return
 
         interp = self.interp
         name = self.name

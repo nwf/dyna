@@ -1,5 +1,4 @@
 > :- backchain f/1.
-| :- backchain g/1.
 | f(0) := 0.
 | f(1) := 1.
 | f(X) := f(X-1) + f(X-2) for X > 1.
@@ -55,6 +54,7 @@ a(1) = 1.
 > :- backchain f/1.
 | f(X) := f(X-1) * X for X > 1.
 | f(0) := 1.
+| f(0) := 5.
 | b(X) = f(X) for X in range(6).
 
 % Check that `a(x)` and `s`, know that we have a new definition! for `f`, just
