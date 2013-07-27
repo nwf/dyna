@@ -99,6 +99,7 @@ def get_module(cmd, sub):
 
 black, red, green, yellow, blue, magenta, cyan, white = \
     map('\033[3%sm%%s\033[0m'.__mod__, range(8))
+bold = '\033[1m%s\033[0m'
 
 
 _comments = re.compile('%.*$', re.MULTILINE)
