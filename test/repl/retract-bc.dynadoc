@@ -54,7 +54,6 @@ a(1) = 1.
 > :- backchain f/1.
 | f(X) := f(X-1) * X for X > 1.
 | f(0) := 1.
-| f(0) := 5.
 | b(X) = f(X) for X in range(6).
 
 % Check that `a(x)` and `s`, know that we have a new definition! for `f`, just
@@ -62,27 +61,28 @@ a(1) = 1.
 
 Changes
 =======
+a(0) = 1.  % a(1) doesn't change.
 a(2) = 2.
 a(3) = 6.
 a(4) = 24.
 a(5) = 120.
-b(0) = 0.
+b(0) = 1.
 b(1) = 1.
 b(2) = 2.
 b(3) = 6.
 b(4) = 24.
 b(5) = 120.
-s = 153.
+s = 154.
 
 > sol
 
 Solution
 ========
-s = 153.
+s = 154.
 
 a/1
 ===
-a(0) = 0.
+a(0) = 1.
 a(1) = 1.
 a(2) = 2.
 a(3) = 6.
@@ -91,7 +91,7 @@ a(5) = 120.
 
 b/1
 ===
-b(0) = 0.
+b(0) = 1.
 b(1) = 1.
 b(2) = 2.
 b(3) = 6.

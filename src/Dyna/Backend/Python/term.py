@@ -14,18 +14,19 @@ class Term(object):
         self.aggregator = None
 
     def __eq__(self, other):
-        if other is None:
+        try:
+            return (self.fn, self.args) == (other.fn, other.args)
+        except AttributeError:
             return False
-        if not isinstance(other, Term):
-            return False
-        return self.fn == other.fn and self.args == other.args
+
+    def __hash__(self):
+        return hash((self.fn, self.args))
 
     def __cmp__(self, other):
-        if other is None:
+        try:
+            return cmp((self.fn, self.args), (other.fn, other.args))
+        except AttributeError:
             return 1
-        if not isinstance(other, Term):
-            return 1
-        return cmp((self.fn, self.args), (other.fn, other.args))
 
     def __repr__(self):
         "Pretty print a term. Will retrieve the complete (ground) term."
@@ -33,24 +34,6 @@ class Term(object):
         if not self.args:
             return fn
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
-
-#    def __getstate__(self):
-#        return (self.fn, self.args, self.value, self.aggregator)
-
-#    def __setstate__(self, state):
-#        (self.fn, self.args, self.value, self.aggregator) = state
-
-#    def __add__(self, _):
-#        raise TypeError("Can't subtract terms.")
-
-#    def __sub__(self, _):
-#        raise TypeError("Can't add terms.")
-
-#    def __mul__(self, _):
-#        raise TypeError("Can't multiply terms.")
-
-#    def __div__(self, _):
-#        raise TypeError("Can't divide terms.")
 
 
 class Cons(Term):
@@ -83,14 +66,14 @@ class Cons(Term):
     def __iter__(self):
         return iter(self.aslist)
 
-    def __eq__(self, other):
-        try:
-            return self.aslist == other.aslist
-        except AttributeError:
-            return False
+#    def __eq__(self, other):
+#        try:
+#            return self.aslist == other.aslist
+#        except AttributeError:
+#            return False
 
-    def __hash__(self):
-        return hash(tuple(self.aslist))
+#    def __hash__(self):
+#        return hash(tuple(self.aslist))
 
 #    def __cmp__(self, other):
 #        try:
@@ -123,11 +106,11 @@ class _Nil(Term):
     def __iter__(self):
         return iter([])
 
-    def __eq__(self, other):
-        try:
-            return self.aslist == other.aslist
-        except AttributeError:
-            return False
+#    def __eq__(self, other):
+#        try:
+#            return self.aslist == other.aslist
+#        except AttributeError:
+#            return False
 
 #    def __cmp__(self, other):
 #        try:

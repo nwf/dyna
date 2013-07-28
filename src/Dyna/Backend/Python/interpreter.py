@@ -60,10 +60,20 @@ def none():
 
 class Interpreter(object):
 
-    @property
-    def parser_state(self):
+    def parser_state(self, ruleix=None):
         # TODO: this is pretty hacky. XREF:parser-state
-        bc, rix, agg, other = self.pstate
+        bc, _rix, agg, other = self.pstate
+
+        # ignore ruleix in pstate. We'll manage this ourselves.
+        if ruleix is None:
+            if not self.rules:
+                rix = 0
+            else:
+                rix = max(self.rules) + 1 # next available
+            rix = max(rix, _rix)
+        else:
+            rix = ruleix  # override
+
         lines = [':-ruleix %d.' % rix]
         for fn in bc:
             [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
@@ -159,40 +169,6 @@ class Interpreter(object):
         self.agenda[item] = self.time_step
         self.time_step += 1
 
-    def replace(self, item, now):
-        "replace current value of ``item``, propagate any changes."
-        was = item.value
-        if was == now:
-            # nothing to do.
-            return
-
-        # special handling for with_key, forks a second update
-        k = self.build('$key/1', item)
-
-        if hasattr(now, 'fn') and now.fn == 'with_key/2':
-            now, key = now.args
-            self.replace(k, key)
-            if was == now:
-                return
-        else:
-            # retract $key when we retract the item or no longer have a with_key
-            # as the value.
-            if k.value is not None:
-                self.replace(k, None)
-
-        # delete existing value before so we can replace it
-        if was is not None:
-            self.push(item, was, delete=True)
-        # clear existing errors -- we only care about errors at new value.
-        self.clear_error(item)
-        # new value enters in the chart.
-        item.value = now
-        # push changes
-        if now is not None:
-            self.push(item, now, delete=False)
-        # make note of change
-        self.changed[item] = now
-
     def run_agenda(self):
         self.changed = {}
         try:
@@ -217,24 +193,50 @@ class Interpreter(object):
         Handle popping `item`: fold `item`'s aggregator to get it's new value
         (handle errors), propagate changes to the rest of the circuit.
         """
-
         if item.aggregator is None:
             return item
-
         try:
             # compute item's new value
             now = item.aggregator.fold()
-
         except (AggregatorError, ZeroDivisionError, ValueError, TypeError, OverflowError) as e:
             # handle error in aggregator
             now = Error()
             self.replace(item, now)
             self.set_error(item, (None, [(e, None)]))
-
         else:
             self.replace(item, now)
-
         return now
+
+    def replace(self, item, now):
+        "replace current value of ``item``, propagate any changes."
+        was = item.value
+        if was == now:
+            # nothing to do.
+            return
+        # special handling for with_key, forks a second update
+        k = self.build('$key/1', item)
+        if hasattr(now, 'fn') and now.fn == 'with_key/2':
+            now, key = now.args
+            self.replace(k, key)
+            if was == now:
+                return
+        else:
+            # retract $key when we retract the item or no longer have a with_key
+            # as the value.
+            if k.value is not None:
+                self.replace(k, None)
+        # delete existing value before so we can replace it
+        if was is not None:
+            self.push(item, was, delete=True)
+        # clear existing errors -- we only care about errors at new value.
+        self.clear_error(item)
+        # new value enters in the chart.
+        item.value = now
+        # push changes
+        if now is not None:
+            self.push(item, now, delete=False)
+        # make note of change
+        self.changed[item] = now
 
     def push(self, item, val, delete):
         """
@@ -281,8 +283,15 @@ class Interpreter(object):
         if item.value is not None:
             return item.value
 
+        return self.force_gbc(item)
+
+    def force_gbc(self, item):
+        "Skips memo on item check."
+
         if item.aggregator is None:   # we might not have a rule defining this subgoal.
             return
+
+        self.clear_error(item)
 
         item.aggregator.clear()
 
@@ -294,7 +303,7 @@ class Interpreter(object):
 
         for handler in self._gbc[item.fn]:
             try:
-                handler(*args, emit=t_emit)
+                handler(*item.args, emit=t_emit)
             except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
@@ -304,14 +313,12 @@ class Interpreter(object):
             self.set_error(item, (None, errors))
             return Error()
 
-        else:
-            for e in emits:
-                # an error could happen here, but we assume (by contract) that this
-                # is not possible.
-                self.emit(*e)
-            return self.pop(item)
+        for e in emits:
+            self.emit(*e)
 
-    def load_plan(self, filename):
+        return self.pop(item)
+
+    def load_plan(self, filename, recurse=True):
         """
         Compile, load, and execute new dyna rules.
 
@@ -348,48 +355,69 @@ class Interpreter(object):
             self.add_rule(index, query=h, head_fn=fn, anf=anf[index])
 
         for index, h in env.initializers:
-            assert index not in self.rules
             new_rules.add(index)
             self.add_rule(index, init=h, anf=anf[index])
 
         for fn, r, h in env.updaters:
             self.new_updater(fn, r, h)
 
-        # run to fixed point.
-        if self.recompile:
-            try:
-                plan = self.dynac_code('\n'.join(r.src for r in sorted(self.recompile, key=lambda r: r.index)))
-            except DynaCompilerError as e:
-                # TODO: it's a bit strange to ignore the error and just print
-                # it. However, since the rules in the recompile list are
-                # syntactically valid (well, they at least they were valid) --
-                # this means that errors must be planning errors... probably all
-                # to do with missing BC declarations.
-                #
-                # TODO: should probably at the very least report compiler errors
-                # in a similar fashion to initialization errors.
-                #
-                # TODO: we probably have to worry about infinite loops -- at the
-                # moment this results in an interpreter crash due to max
-                # recursion limit
-                print e
-            else:
-                # TODO: reuse old rule index when we recompile.
-                for r in self.recompile:
-                    self.retract_rule(r.index)
-                self.recompile.clear()
-                self.load_plan(plan)
+        if self.recompile and recurse:
 
-                # TODO: should probably indicate that some rules were recompiled
-                # and no longer in an error state. -- there is a bit of a
-                # mismatch with when we choose not to add a rule... in the try
-                # block above we reject rules on compiler error, but if the
-                # rules existed before and it now longer compiles we just print
-                # the error and add it to the recompile list.
+            # TODO: it's a bit strange to ignore the error and just print
+            # it. However, since the rules in the recompile list are
+            # syntactically valid (well, they at least they were valid) -- this
+            # means that errors must be planning errors... probably all to do
+            # with missing BC declarations.
+            #
+            # TODO: should probably at the very least report compiler errors in
+            # a similar fashion to initialization errors.
+            #
+            # TODO: we probably have to worry about infinite loops -- at the
+            # moment this results in an interpreter crash due to max recursion
+            # limit
+            #
+            # TODO: should probably indicate that some rules were recompiled and
+            # no longer in an error state. -- there is a bit of a mismatch with
+            # when we choose not to add a rule... in the try block above we
+            # reject rules on compiler error, but if the rules existed before
+            # and it now longer compiles we just print the error and add it to
+            # the recompile list.
+            #
+            # TODO: maybe we should handle recompilation more like we do
+            # uninitialized rules.
+
+            # run to fixed point.
+            while True:
+                failed = set()
+                for r in list(self.recompile):
+                    try:
+                        plan = self.recompile_rule(r)
+                    except DynaCompilerError as e:
+                        failed.add(r)
+                        self.set_error(r, e)
+                    else:
+                        self.retract_rule(r.index)
+                        self.load_plan(plan, recurse=False)
+                if failed == self.recompile:   # no progress
+                    break
+                self.recompile = failed
 
         # we we don't accumulate all changed rules, new_rules return will be new
         # rules of top-level call.
         return new_rules
+
+    def recompile_rule(self, r):
+        "returns a plan, it's up to you to retract the old rule and load the plan"
+        pstate = self.parser_state(ruleix=r.index)   # override ruleix
+        code = r.src
+        x = sha1()
+        x.update(pstate)
+        x.update(code)
+        dyna = self.tmp / ('%s.dyna' % x.hexdigest())
+        with file(dyna, 'wb') as f:
+            f.write(pstate)
+            f.write(code)
+        return self.dynac(dyna)
 
     def run_uninitialized(self):
         q = set(self.uninitialized_rules)
@@ -401,10 +429,8 @@ class Interpreter(object):
                 emits = []
                 def _emit(*args):
                     emits.append(args)
-
                 self.clear_error(rule)  # clear errors on rule, if any
                 rule.init(emit=_emit)
-
             except (ZeroDivisionError, ValueError, TypeError, RuntimeError, OverflowError) as e:
                 e.exception_frame = rule_error_context()
                 e.traceback = traceback.format_exc()
@@ -412,7 +438,6 @@ class Interpreter(object):
                 failed.append(rule)
             else:
                 rule.initialized = True
-                # process emits
                 for e in emits:
                     self.emit(*e, delete=False)
         self.uninitialized_rules = failed
@@ -448,15 +473,20 @@ class Interpreter(object):
             assert False, 'did not find head'
         assert head_fn is not None
 
+        # TODO: have backend send this information alongside the rule.
         span = hide_ugly_filename(parse_attrs(init or query)['Span'])
         dyna_src = strip_comments(parse_attrs(init or query)['rule'])
 
-        rule = self.rules[index] = Rule(index)
+        rule = Rule(index)
 
         rule.span = span
         rule.src = dyna_src
         rule.anf = anf
         rule.head_fn = head_fn
+
+        #assert index not in self.rules, {'new': rule, 'old': self.rules[index]}
+
+        self.rules[index] = rule
 
         self.update_coarse(rule)
 
@@ -598,12 +628,7 @@ class Interpreter(object):
         visited.add(fn)
 
         for x in self.chart[fn].intern.values():
-            self.clear_error(x)
-            was = x.value                # remember old value we can do proper replacement update
-            x.value = None               # ignore memo
-            now = self.gbc(fn, *x.args)
-            x.value = was
-            self.replace(x, now)
+            self.force_gbc(x)
 
         # recompute dependent BC memos
         for v in self.coarse_deps[fn]:
@@ -636,12 +661,13 @@ class Interpreter(object):
 
     def dynac_code(self, code):
         "Compile a string of dyna code."
+        pstate = self.parser_state()
         x = sha1()
-        x.update(self.parser_state)
+        x.update(pstate)
         x.update(code)
         dyna = self.tmp / ('%s.dyna' % x.hexdigest())
         with file(dyna, 'wb') as f:
-            f.write(self.parser_state)  # include parser state if any.
+            f.write(pstate)  # include parser state if any.
             f.write(code)
         return self.dynac(dyna)
 
@@ -691,13 +717,13 @@ class Interpreter(object):
             (val, es) = x
             for e, h in es:
                 if h is None:
-                    I[item.fn][type(e)].append((item, val, e))
+                    I[item.fn][type(e)].append((item, e))
                 else:
                     assert h.rule.index in self.rules
                     E[h.rule][type(e)].append((item, val, e))
 
         # We only dump the error chart if it's non empty.
-        if not I and not E and not self.uninitialized_rules:
+        if not I and not E and not self.uninitialized_rules and not self.recompile:
             return
 
         print >> out
@@ -705,13 +731,13 @@ class Interpreter(object):
         print >> out, red % '======'
 
         # aggregation errors
-        for r in sorted(I, key=lambda r: r.index):
-            print >> out, 'Error(s) aggregating %s:' % r
-            for etype in I[r]:
+        for fn in sorted(I):
+            print >> out, 'Error(s) aggregating %s:' % fn
+            for etype in I[fn]:
                 print >> out, '  %s:' % etype.__name__
-                for i, (item, value, e) in enumerate(sorted(I[r][etype])):
+                for i, (item, e) in enumerate(sorted(I[fn][etype])):
                     if i >= 5:
-                        print >> out, '    %s more ...' % (len(I[r][etype]) - i)
+                        print >> out, '    %s more ...' % (len(I[fn][etype]) - i)
                         break
                     print >> out, '    `%s`: %s' % (item, e)
                 print >> out
@@ -732,8 +758,8 @@ class Interpreter(object):
                     print >> out, '    when `%s` = %s' % (item, _repr(value))
 
                     if 'maximum recursion depth exceeded' in str(e):
-                        # simplify recurision limit error because if prints some
-                        # unstable stuff.
+                        # simplify recurision limit error because it prints some
+                        # unpredictable stuff.
                         print >> out, '      maximum recursion depth exceeded'
                     else:
                         print >> out, '      %s' % (e)
@@ -746,12 +772,25 @@ class Interpreter(object):
         if self.uninitialized_rules:
             print >> out, red % 'Uninitialized rules'
             print >> out, red % '==================='
-            for rule in self.uninitialized_rules:
+            for rule in sorted(self.uninitialized_rules, key=lambda r: r.index):
                 e = self.error[rule]
                 print >> out, 'Failed to initialize rule:'
                 print >> out, '   ', rule.src
                 print >> out, '  due to `%s`' % e
                 print >> out, rule.render_ctx(e.exception_frame, indent='    ')
+                print >> out
+
+        # rules which failed to recompile
+        if self.recompile:
+            print >> out, red % 'Failed to recompile'
+            print >> out, red % '==================='
+            for rule in sorted(self.recompile, key=lambda r: r.index):
+                e = self.error[rule]
+                print >> out, 'Failed to recompile rule:'
+                print >> out, '   ', rule.src
+                print >> out, '  with error'
+                for line in str(e).split('\n'):
+                    print >> out, '   ', line
                 print >> out
 
         print >> out

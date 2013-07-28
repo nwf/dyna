@@ -38,9 +38,9 @@ Errors
 Error(s) in rule 0: <repl>
     f(X) = f(X-1).
   RuntimeError:
-    when `f(-323)` = null
+    when `f(-241)` = null
       maximum recursion depth exceeded
-      f(X=-323) = f((X=-323 - 1)=-324)=?.
+      f(X=-241) = f((X=-241 - 1)=-242)=?.
 
 Uninitialized rules
 ===================
