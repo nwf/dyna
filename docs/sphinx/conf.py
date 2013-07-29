@@ -2,6 +2,7 @@
 #
 # Dyna documentation build configuration file, created by
 # sphinx-quickstart on Fri May 24 03:04:25 2013.
+# Subsequently edited by nwf, jason.
 #
 # This file is execfile()d with the current directory set to its containing dir.
 #
@@ -30,9 +31,11 @@ extensions = [ 'sphinx.ext.todo'
              , 'sphinx.ext.graphviz'
              , 'sphinx.ext.ifconfig'
              , 'sphinx.ext.extlinks'
+#             , 'sphinx.ext.intersphinx'
              ]
 
 # Add any paths that contain templates here, relative to this directory.
+# templates_path = ['_templates']
 templates_path = []
 
 # The suffix of source filenames.
@@ -45,7 +48,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Dyna2'
+project = u'Dyna'
 copyright = u'2013, Jason Eisner, Nathaniel Wesley Filardo, Tim Vieira, et al.'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -133,6 +136,7 @@ html_theme = 'default'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
+# html_static_path = ['_static']
 html_static_path = []
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
@@ -243,7 +247,7 @@ texinfo_documents = [
   ('index', 'Dyna', u'Dyna Documentation',
    u'Jason Eisner, Nathaniel Wesley Filardo, Tim Vieira, et al.',
    'Dyna',
-   u'Logic programming language',
+   u'A declarative programming language focused on building computational circuits',
    'Miscellaneous'),
 ]
 
@@ -258,8 +262,16 @@ texinfo_documents = [
 
 # -- Miscellaneous Options -----------------------------------------------------
 
+# Replace "py" with "dy" as primary domain.  
+# To make this useful, we need to write an extension that defines a Dyna domain 
+# with dy:dynabase, dy:item, dy:type, dy:command, dy:operator, dy:aggregator, etc.
+primary_domain = "dy"
+
 # rst_prolog = ""
 
 extlinks = {'dynasrc': ('https://www.github.com/nwf/dyna/blob/master/%s', '')
            ,'githubbug': ("https://github.com/nwf/dyna/issues/%s", 'issue ')
            }
+
+# Example configuration for intersphinx: refer to the Python standard library.
+# intersphinx_mapping = {'http://docs.python.org/': None}
