@@ -63,8 +63,6 @@ class Interpreter(object):
     def parser_state(self, ruleix=None):
         # TODO: this is pretty hacky. XREF:parser-state
         bc, _rix, agg, other = self.pstate
-
-        # ignore ruleix in pstate. We'll manage this ourselves.
         if ruleix is None:
             if not self.rules:
                 rix = 0
@@ -72,8 +70,7 @@ class Interpreter(object):
                 rix = max(self.rules) + 1 # next available
             rix = max(rix, _rix)
         else:
-            rix = ruleix  # override
-
+            rix = ruleix  # override rule index from pstate
         lines = [':-ruleix %d.' % rix]
         for fn in bc:
             [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
@@ -82,6 +79,7 @@ class Interpreter(object):
             [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
             lines.append(":-iaggr '%s'/%s %s." % (fn, arity, agg))
         lines.extend(':-%s %s.' % (k,v) for k,v in other)
+        lines.append('\n')
         return '\n'.join(lines)
 
     def set_parser_state(self, x):
@@ -104,7 +102,6 @@ class Interpreter(object):
         self.agenda = prioritydict()
         self.chart = foo(self.agg_name)
         self.error = {}
-        self.uninitialized_rules = []
         # misc
         self.time_step = 0
         # interpretor needs a place for it's temporary files.
@@ -112,15 +109,14 @@ class Interpreter(object):
         if tmp.exists():
             tmp.rmtree()
         tmp.makedirs_p()
-
         # coarsening of the program shows which rules might depend on each other
-        # (an over estimate -- high recall, low precision).
         self.coarse_deps = defaultdict(set)
-        self.rule_by_head = defaultdict(list)
+        self.rule_by_head = defaultdict(set)
         self.rule_dep = defaultdict(set)        # rules which depend on a predicate
-
         # rules which need to be recompiled against new program state.
         self.recompile = set()
+        # forward chaining rules which failed to initialize
+        self.uninitialized_rules = []
 
     def new_fn(self, fn, agg):
         if self.agg_name[fn] is None:
@@ -350,9 +346,9 @@ class Interpreter(object):
             self.new_fn(k, v)
 
         new_rules = set()
-        for fn, index, h in env.queries:
+        for _, index, h in env.queries:
             new_rules.add(index)
-            self.add_rule(index, query=h, head_fn=fn, anf=anf[index])
+            self.add_rule(index, query=h, anf=anf[index])
 
         for index, h in env.initializers:
             new_rules.add(index)
@@ -361,46 +357,8 @@ class Interpreter(object):
         for fn, r, h in env.updaters:
             self.new_updater(fn, r, h)
 
-        if self.recompile and recurse:
-
-            # TODO: it's a bit strange to ignore the error and just print
-            # it. However, since the rules in the recompile list are
-            # syntactically valid (well, they at least they were valid) -- this
-            # means that errors must be planning errors... probably all to do
-            # with missing BC declarations.
-            #
-            # TODO: should probably at the very least report compiler errors in
-            # a similar fashion to initialization errors.
-            #
-            # TODO: we probably have to worry about infinite loops -- at the
-            # moment this results in an interpreter crash due to max recursion
-            # limit
-            #
-            # TODO: should probably indicate that some rules were recompiled and
-            # no longer in an error state. -- there is a bit of a mismatch with
-            # when we choose not to add a rule... in the try block above we
-            # reject rules on compiler error, but if the rules existed before
-            # and it now longer compiles we just print the error and add it to
-            # the recompile list.
-            #
-            # TODO: maybe we should handle recompilation more like we do
-            # uninitialized rules.
-
-            # run to fixed point.
-            while True:
-                failed = set()
-                for r in list(self.recompile):
-                    try:
-                        plan = self.recompile_rule(r)
-                    except DynaCompilerError as e:
-                        failed.add(r)
-                        self.set_error(r, e)
-                    else:
-                        self.retract_rule(r.index)
-                        self.load_plan(plan, recurse=False)
-                if failed == self.recompile:   # no progress
-                    break
-                self.recompile = failed
+        if recurse:
+            self.run_recompile()
 
         # we we don't accumulate all changed rules, new_rules return will be new
         # rules of top-level call.
@@ -418,6 +376,35 @@ class Interpreter(object):
             f.write(pstate)
             f.write(code)
         return self.dynac(dyna)
+
+    def run_recompile(self):
+        # TODO: it's a bit strange to ignore the error and just print
+        # it. However, since the rules in the recompile list are
+        # syntactically valid (well, they at least they were valid) -- this
+        # means that errors must be planning errors... probably all to do
+        # with missing BC declarations.
+        #
+        # TODO: we probably have to worry about infinite loops -- at the
+        # moment this results in an interpreter crash due to max recursion
+        # limit
+        #
+        # TODO: maybe we should handle recompilation more like we do
+        # uninitialized rules.
+        # run to fixed point.
+        while self.recompile:
+            failed = set()
+            for r in list(self.recompile):
+                try:
+                    plan = self.recompile_rule(r)
+                except DynaCompilerError as e:
+                    failed.add(r)
+                    self.set_error(r, e)
+                else:
+                    self.retract_rule(r.index)
+                    self.load_plan(plan, recurse=False)
+            if failed == self.recompile:   # no progress
+                break
+            self.recompile = failed
 
     def run_uninitialized(self):
         q = set(self.uninitialized_rules)
@@ -457,36 +444,23 @@ class Interpreter(object):
     #___________________________________________________________________________
     # Adding/removing rules
 
-    def add_rule(self, index, init=None, query=None, head_fn=None, anf=None):
+    def add_rule(self, index, init=None, query=None, anf=None):
         assert anf is not None
         assert index not in self.rules
 
         for (x, label, ys) in anf.unifs:
             if x == anf.head:
                 assert label == '&'
-                fa = '%s/%d' % (ys[0], len(ys) - 1)
-                if head_fn is not None:
-                    assert head_fn == fa
-                head_fn = fa
+                head_fn = '%s/%d' % (ys[0], len(ys) - 1)
                 break
         else:
             assert False, 'did not find head'
-        assert head_fn is not None
 
-        # TODO: have backend send this information alongside the rule.
-        span = hide_ugly_filename(parse_attrs(init or query)['Span'])
-        dyna_src = strip_comments(parse_attrs(init or query)['rule'])
-
-        rule = Rule(index)
-
-        rule.span = span
-        rule.src = dyna_src
+        self.rules[index] = rule = Rule(index)
+        rule.span = hide_ugly_filename(parse_attrs(init or query)['Span'])
+        rule.src = strip_comments(parse_attrs(init or query)['rule'])
         rule.anf = anf
         rule.head_fn = head_fn
-
-        #assert index not in self.rules, {'new': rule, 'old': self.rules[index]}
-
-        self.rules[index] = rule
 
         self.update_coarse(rule)
 
@@ -527,7 +501,7 @@ class Interpreter(object):
 
         if True:
             args = (index,
-                    dyna_src,
+                    rule.src,
                     todyna([anf.head, anf.agg, anf.result, anf.evals, anf.unifs]),
                     init,
                     query)
@@ -538,7 +512,7 @@ class Interpreter(object):
             self.emit(rule.item, true, ruleix=None, variables=None, delete=False)
 
     def update_coarse(self, rule):
-        self.rule_by_head[rule.head_fn].append(rule)
+        self.rule_by_head[rule.head_fn].add(rule)
         for (_, label, ys) in rule.anf.evals:
             [(label, _evalix)] = re.findall('^(.*)@(\d+)$', label)  # remove evaluation index
             b = '%s/%d' % (label, len(ys))
@@ -603,7 +577,7 @@ class Interpreter(object):
 
         self.recompute_coarse()
 
-        # if now there are no more rules defining a functor
+        # if there are no more rules defining a functor; clear some of the state
         if not self.rule_by_head[rule.head_fn]:
             if rule.head_fn in self.chart:
                 del self.chart[rule.head_fn]      # delete the chart.
