@@ -17,5 +17,9 @@ def run(interp, line):
         return
 
     m = get_module('load', module)(interp, name)
-    exec 'm.main(%s)' % args
+    try:
+        exec 'm.main(%s)' % args
+    except SyntaxError as e:
+        print 'Syntax error: %s' % e
+        return
     return interp.run_agenda()

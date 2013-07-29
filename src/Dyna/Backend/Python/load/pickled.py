@@ -7,7 +7,7 @@ TODO: Can we merge a pickled interpreter into an existing one?
 """
 
 import cPickle
-
+from path import path
 
 class pickled(object):
 
@@ -16,6 +16,10 @@ class pickled(object):
         self.name = name
 
     def main(self, filename):
+        filename = path(filename)
+        if not filename.exists():
+            print 'file `%s` does not exist.' % filename
+            return
         with file(filename, 'r') as f:
             interp = cPickle.load(f)
         return interp

@@ -8,13 +8,13 @@ to help.
 """
 
 import re, os, cmd, readline
-from utils import ip, lexer, subst, drepr, _repr, get_module, yellow
+from utils import ip, lexer, subst, drepr, _repr, get_module, yellow, \
+    green, bold
 from stdlib import topython, todyna
 from errors import DynaCompilerError
 from config import dotdynadir
 from errors import show_traceback
 import load, post
-
 
 from interpreter import Rule
 from contextlib import contextmanager
@@ -43,7 +43,7 @@ class REPL(cmd.Cmd, object):
 
     @property
     def prompt(self):
-        return '> '
+        return bold % green % '> '
 
     def do_rules(self, _):
         """
@@ -263,6 +263,7 @@ class REPL(cmd.Cmd, object):
             print e
             print 'new rule(s) were not added to program.'
             print
+            return ([], {})
         else:
             with self.error_tracker():
                 new_rules = self.interp.load_plan(src)

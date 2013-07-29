@@ -1,0 +1,27 @@
+% stale backchaining memos when new rules are added (#66)
+
+> :- backchain sum/1.
+> sum(N) += K for K in range(N).
+> query sum(10)
+
+sum(10) = 45.
+
+> sum(N) += 10000.
+
+> query sum(10)
+
+sum(10) = 10045.
+
+> query sum(11)
+
+sum(11) = 10055.
+
+> query sum(9)
+
+sum(9) = 10036.
+
+% Also, sum(9) would have been memoized wrong as well (from during the stale
+% sum(10) computation) if we'd defined like this:
+
+% sum(0) += 0.
+% sum(N) += N + sum(N_1) for N > 0.

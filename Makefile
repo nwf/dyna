@@ -19,7 +19,7 @@ deps:
 	happy --version 2>/dev/null >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
-build:
+build: version
 	cabal configure --user --enable-tests
 	cabal build
 

@@ -1,7 +1,7 @@
 from cStringIO import StringIO
 from utils import parse_sexpr
 from stdlib import todyna
-
+from path import path
 
 class sexpr(object):
     """
@@ -26,6 +26,10 @@ class sexpr(object):
         self.name = name
 
     def main(self, filename):
+        filename = path(filename)
+        if not filename.exists():
+            print 'file `%s` does not exist.' % filename
+            return
 
         interp = self.interp
         name = self.name

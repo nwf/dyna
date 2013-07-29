@@ -1,4 +1,5 @@
 import re
+from path import path
 
 class matrix(object):
     """
@@ -55,6 +56,10 @@ class matrix(object):
     # TODO: option for strict width
     # TODO: option for stripping comments
     def main(self, filename, astype=float, delim='\s+'):
+        filename = path(filename)
+        if not filename.exists():
+            print 'file `%s` does not exist.' % filename
+            return
 
         interp = self.interp
 

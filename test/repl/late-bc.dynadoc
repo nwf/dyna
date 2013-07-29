@@ -16,8 +16,8 @@ a(4) = 4.
 
 Rules
 =====
+  0: a(X) = f(X) for X in range(1,5).
   1: f(X) = X.
-  2: a(X) = f(X) for X in range(1,5).  % originally index 0, now 2.
 
 
 > foo(X) += bar(X).
@@ -26,14 +26,47 @@ Rules
 > :- backchain bar/1.
 > bar(X) = X+1.
 
-Encountered error in input program:
- Unable to plan initializers for rule(s):
-  foo(X) += bar(X).
-  foo(X) += 2*bar(X).
-Everything was syntactically valid, but we could not
-see it through.
+>>> 2 new errors. Type `sol` for details.
+
+> sol
+
+Solution
+========
+a/1
+===
+a(1) = 1.
+a(2) = 2.
+a(3) = 3.
+a(4) = 4.
+
+
+Errors
+======
+
+Failed to recompile
+===================
+Failed to recompile rule:
+    foo(X) += bar(X).
+  with error
+    Encountered error in input program:
+     Unable to plan initializers for rule(s):
+      foo(X) += bar(X).
+    Everything was syntactically valid, but we could not
+    see it through.
+
+Failed to recompile rule:
+    foo(X) += 2*bar(X).
+  with error
+    Encountered error in input program:
+     Unable to plan initializers for rule(s):
+      foo(X) += 2*bar(X).
+    Everything was syntactically valid, but we could not
+    see it through.
 
 > :- backchain foo/1.
+
+>>> 2 errors cleared.
+
 > query foo(3)
 
 foo(3) = 12.
