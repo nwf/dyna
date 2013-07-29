@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Hello World tutorial page
    This file is enumerated in the toctree of tutorial/index.rst
 

@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Manual index
    This file is enumerated in the toctree directive of index.rst
 

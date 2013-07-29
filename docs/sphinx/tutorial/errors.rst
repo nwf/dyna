@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Tutorial chapter on errors
    This file is enumerated in the toctree directive of /tutorial/index.rst
 

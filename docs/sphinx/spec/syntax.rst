@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Syntax
 
 ******

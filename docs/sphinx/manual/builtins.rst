@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Builtins
    Here we describe the primitives available by default.
 

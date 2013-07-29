@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-g
 .. Dijkstra tutorial page
    This file is enumerated in the toctree of tutorial/index.rst
 

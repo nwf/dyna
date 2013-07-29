@@ -1,8 +1,9 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Spec glossary
    This file is enumerated in the toctree of spec/index.rst
 
-Specification Glossary
-######################
+Dyna Glossary
+#############
 
 .. glossary::
 

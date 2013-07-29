@@ -95,8 +95,11 @@ exclude_patterns = ['_build']
 # output. They are ignored by default.
 #show_authors = False
 
+# Default language for syntax highlighting
+highlight_language = 'none'   # eventually change to 'dyna'
+
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+# pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
 #modindex_common_prefix = []

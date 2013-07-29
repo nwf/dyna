@@ -1,3 +1,4 @@
+.. -*- compile-command: "make -C .. html" -*-
 .. Pragmas
    This file documents the pragma assertions our pipeline understands.
 
