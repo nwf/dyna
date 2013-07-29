@@ -153,25 +153,30 @@ class Crux(object):
         explode = ('%s %s %s' % (self.get_function(rule.anf.head)[1:],  # drop quote on head
                                  green % rule.anf.agg,
                                  self.get_function(rule.anf.result)))
-
         if side:
             side = '    ' + ', '.join('%s %s' % ('for', x,) for x in side) + '.'
-            explode += ','
         else:
             explode += '.'
-
         lines = [explode]
-
         if side:
             lines.append(side)
-
         return lines
 
     def get_function(self, x):
+        self.visited = set()
+        return self._get_function(x)
+
+    def _get_function(self, x):
         """
         String of symbolic representation of ``x``, a variable or function, in
         this expresion graph.
         """
+
+        if x not in ('true', 'false'):
+            if x in self.visited:
+                return red % '*cycle@%s*' % x
+        self.visited.add(x)
+
         g = self.graph
         if isinstance(x, debug.Edge):
 
@@ -181,12 +186,12 @@ class Crux(object):
 
             if label == '=':
                 [b] = x.body
-                return self.get_function(b)
+                return self._get_function(b)
 
             if not x.body:  # arity 0
                 return label
 
-            fn_args = [self.get_function(y) for y in x.body]
+            fn_args = [self._get_function(y) for y in x.body]
 
             # infix
             if (not label[0].isalpha() and label[0] not in ('$','&') and len(fn_args) == 2) \
@@ -204,18 +209,18 @@ class Crux(object):
 
             # handle multiple values (can happen at unification nodes)
             if len(g.incoming[x]) > 1:
-                return ' = '.join('(%s%s)' % (self.get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
+                return ' = '.join('(%s%s)' % (self._get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
 
             [e] = g.incoming[x]
 
             if e.label == '=':
-                return self.get_function(e)
+                return self._get_function(e)
 
             # handle lists
-            if e.label == '& nil':
+            elif e.label == '& nil':
                 return '[]'
 
-            if e.label == '& cons':
+            elif e.label == '& cons':
                 _e = e
                 a = []
                 while e.label == '& cons':
@@ -236,14 +241,15 @@ class Crux(object):
                     # xs = 'uX'
 
                     [e] = g.incoming[xs]
-                    a.append(self.get_function(x))
+                    a.append(self._get_function(x))
 
                 if e.label == '& nil':
                     return '[%s]' % ', '.join(a)
                 else:
-                    return self.get_function(_e)          # malformed list.
+                    return self._get_function(_e)          # malformed list.
 
-            if e.label.startswith('&'):
-                return self.get_function(e)
+            elif e.label.startswith('&'):
+                return self._get_function(e)
 
-            return self.get_function(e) + (cyan % '=%s' % self.values(x))
+            else:
+                return self._get_function(e) + (cyan % '=%s' % self.values(x))

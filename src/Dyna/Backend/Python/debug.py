@@ -109,7 +109,8 @@ class Hypergraph(object):
 
                 # connect body variables to edge crux
                 for b in e.body:
-                    print >> f, '"%s" -> "%s" [arrowhead=none];' % (b, id(e))
+#                    print >> f, '"%s" -> "%s" [arrowhead=none];' % (b, id(e))
+                    print >> f, '"%s" -> "%s";' % (b, id(e))
 #                    print >> f, '"%s" -> "%s";' % (b, id(e))
 
                 # connect head variables to edge

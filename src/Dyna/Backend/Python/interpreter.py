@@ -41,6 +41,12 @@ class Rule(object):
         c = Crux(head=None, rule=self, body=None, vs = ctx)
         return '\n'.join(indent + line for line in c.format())
 
+    def debug(self):
+        import debug
+        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
+            f.write(self.src)
+        debug.main(f.name)
+
 
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
 # state
