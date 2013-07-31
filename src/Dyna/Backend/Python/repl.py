@@ -43,7 +43,7 @@ class REPL(cmd.Cmd, object):
 
     @property
     def prompt(self):
-        return bold % green % '> '
+        return '> '
 
     def do_rules(self, _):
         """

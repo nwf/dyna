@@ -276,7 +276,7 @@ class Interpreter(object):
             # is not possible.
             self.emit(*e)
 
-    def gbc(self, fn, *args):
+    def gbc(self, fn, args):
 
         item = self.build(fn, *args)
 

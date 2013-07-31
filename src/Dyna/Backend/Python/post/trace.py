@@ -172,9 +172,10 @@ class Crux(object):
         this expresion graph.
         """
 
-        if x not in ('true', 'false'):
-            if x in self.visited:
-                return red % '*cycle@%s*' % x
+        #if x not in ('true', 'false'):
+        #    if x in self.visited:
+        #        #return red % '*cycle@%s*' % x
+        #        return x
         self.visited.add(x)
 
         g = self.graph

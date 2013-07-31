@@ -234,10 +234,7 @@ ground2underscore x = if isGround x then "_" else pretty (x^.mv_var)
 
 piterate :: [ModedVar] -> Doc e
 piterate vs = if length vs == 0 then "_"
-              else parens $
-       sepBy "," (map ground2underscore vs)
-       <> "," -- add a comma to ensure tuple.
-
+              else "[" <> sepBy "," (map ground2underscore vs) <> "]"
 
 -- filterGround :: [ModedVar] -> [DVar]
 -- filterGround = map (^.mv_var) . filter (not.nGround.(^.mv_mi))
@@ -260,7 +257,7 @@ pdope_ _ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
                            <> (parens $ pfas f vs <> comma
-                                <> (sepBy "," $ map pretty vs))
+                                <> (sepBy "," $ map pretty vs)) 
 
 pdope_ _ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
@@ -292,8 +289,8 @@ pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc = do
    vcat
    [     pretty (o^.mv_var)
      <+> equals
-     <+> "gbc"
-     <> tupled (pfas f m : map (pretty . _mv_var) m)
+     <+> "gbc(" <> pfas f m <> ",[" <> sepBy "," (map (pretty . _mv_var) m) <> "])"
+
 
 --- needs an opbuild
    , ("d" <> pretty dookie)

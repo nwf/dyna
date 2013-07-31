@@ -3,7 +3,17 @@ import re, sys, traceback
 from interpreter import Interpreter
 from repl import REPL
 from cStringIO import StringIO
-from utils import red, green, yellow, strip_comments
+from utils import bold, red, green, yellow, strip_comments
+
+
+def diff(expect, got):
+    with file('/tmp/expect','wb') as A:
+        A.write(expect)
+    with file('/tmp/got','wb') as B:
+        B.write(got)
+    from subprocess import Popen, PIPE
+    p = Popen(['colordiff', A.name, B.name], stdout=PIPE, stderr=PIPE)
+    return p.communicate()[0]
 
 
 def extract(code):
@@ -51,10 +61,12 @@ def run(code, out=None):
             repl.cmdloop()
             continue
 
+        exception = False
         sys.stdout = x = StringIO()
         try:
             repl.onecmd(cmd)
         except:
+            exception = True
             print >> out, red % traceback.format_exc()
         finally:
             sys.stdout = sys.__stdout__
@@ -62,13 +74,17 @@ def run(code, out=None):
         got = clean(x.getvalue())
         expect = clean(expect)
 
-        if expect == '*ignore*':
+        if expect == '*ignore*' and not exception:
             continue
 
-        if expect != got:
+        if expect != got or exception:
             print >> out, green % expect
             print >> out, red % got
+            print >> out, bold % yellow % '=== diff ======'
+            print >> out, diff(expect, got).strip()
+            print >> out, bold % yellow % '==============='
             errors += 1
+
         else:
             print >> out
             print >> out, got
