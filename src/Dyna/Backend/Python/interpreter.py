@@ -583,16 +583,25 @@ class Interpreter(object):
 
         self.recompute_coarse()
 
+        self._agenda()
+
         # if there are no more rules defining a functor; clear some of the state
         if not self.rule_by_head[rule.head_fn]:
             if rule.head_fn in self.chart:
-                del self.chart[rule.head_fn]      # delete the chart.
+                # clear aggregators
+                chart = self.chart[rule.head_fn]
+                chart.agg_name = None
+                for item in chart.intern.values():
+                    item.aggregator = None
+                # make sure chart is cleared out
+                for item in chart.intern.values():
+                    assert item.value is None
+                    assert item not in self.error
             if rule.head_fn in self.agg_name:
                 del self.agg_name[rule.head_fn]
             if rule.head_fn in self.pstate[2]:
                 del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
 
-        self._agenda()
         return self.changed
 
     def recompute_gbc_memo(self, fn, visited=None):

@@ -43,6 +43,8 @@ class BAggregator(Counter, Aggregator):
         self[val] -= 1
     def fromkeys(self, *_):
         assert False, "This method should never be called."
+    def empty(self):
+        return not any(m > 0 for m in self.itervalues())
 
 
 class ColonEquals(BAggregator):
@@ -91,8 +93,9 @@ class DictEquals(BAggregator):
         self[val, vs] -= 1
 
     def fold(self):
-        from stdlib import todyna
-        return todyna([b + (('$val', v),) for (v, b), cnt in self.iteritems() if cnt > 0])
+        if not self.empty():
+            from stdlib import todyna
+            return todyna([b + (('$val', v),) for (v, b), cnt in self.iteritems() if cnt > 0])
 
 
 class majority_equals(BAggregator):
