@@ -134,12 +134,7 @@ class Interpreter(object):
             # a value, which didn't have a value before -- i.e. was only used as
             # structure.
             if fn in self.chart:
-                c = self.chart[fn]
-                assert c.agg_name is None
-                c.agg_name = agg
-                for item in c.intern.values():
-                    assert item.aggregator is None
-                    item.aggregator = c.new_aggregator(item)
+                self.chart[fn].set_aggregator(agg)
         # check for aggregator conflict.
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
@@ -588,15 +583,7 @@ class Interpreter(object):
         # if there are no more rules defining a functor; clear some of the state
         if not self.rule_by_head[rule.head_fn]:
             if rule.head_fn in self.chart:
-                # clear aggregators
-                chart = self.chart[rule.head_fn]
-                chart.agg_name = None
-                for item in chart.intern.values():
-                    item.aggregator = None
-                # make sure chart is cleared out
-                for item in chart.intern.values():
-                    assert item.value is None
-                    assert item not in self.error
+                self.chart[rule.head_fn].set_aggregator(None)
             if rule.head_fn in self.agg_name:
                 del self.agg_name[rule.head_fn]
             if rule.head_fn in self.pstate[2]:

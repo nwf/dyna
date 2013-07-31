@@ -225,7 +225,7 @@ def aggregator(name, term):
     if name is None:
         return None
 
-    if name == ':=':
+    elif name == ':=':
         return ColonEquals()
 
     elif name == '=':
