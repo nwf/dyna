@@ -196,7 +196,11 @@ class Crux(object):
 
             # infix
             if (not label[0].isalpha() and label[0] not in ('$','&') and len(fn_args) == 2) \
-                    or label in ('in', 'and', 'or', 'with_key', '->', 'is'):
+                    or label in ('in', 'with_key', '&with_key', '->', '&->', 'is'):
+
+                if label in {'&with_key', '->', '&->'}:
+                    label = label[1:]
+
                 [a,b] = fn_args
                 return '(%s %s %s)' % (a, label, b)
             return '%s(%s)' % (label, ', '.join(fn_args))
@@ -225,24 +229,12 @@ class Crux(object):
                 _e = e
                 a = []
                 while e.label == '& cons':
-
-                    # TODO: crashlogs/abarany:2013-07-24:11:47:31:17823.log
-                    x, xs = e.body           # e = _a3 = & cons(uV, uX)
-
-                    # g.incoming = {
-                    #  '_a5': [_a5 = edge@1(uX, uU, uV)],
-                    #  '_a4': [_a4 = pathto@0(uU)],
-                    #  '_a3': [_a3 = & cons(uV, uX)],
-                    #  '_a2': [_a2 = +@2(_a4, _a5)],
-                    #  'uU': [],
-                    #  '_t1': [_t1 = & with_key(_a2, _a3)],
-                    #  'uV': [],
-                    #  '_t0': [_t0 = & pathto(uV)], 'uX': []
-                    # }
-                    # xs = 'uX'
-
-                    [e] = g.incoming[xs]
+                    x, xs = e.body
                     a.append(self._get_function(x))
+                    if not g.incoming[xs]:
+                        a.append(self._get_function(xs))
+                        break
+                    [e] = g.incoming[xs]
 
                 if e.label == '& nil':
                     return '[%s]' % ', '.join(a)

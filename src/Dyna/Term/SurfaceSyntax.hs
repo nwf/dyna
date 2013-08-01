@@ -178,12 +178,12 @@ disposTab_prologish t = DisposTab s a
        , (("false",0),(SDQuote,[]))
        -- key
        , (("$key" ,1),(SDEval,[ADQuote]))
-       , (("with_key",2),(SDQuote,[ADEval, ADEval]))
+       , (("with_key",2),(SDQuote,[ADEval,ADEval]))
        -- lists
        , (("nil",  0),(SDQuote,[]))
        , (("cons", 2),(SDQuote,[ADEval,ADEval]))
-       , (("->",2),(SDQuote,[ADQuote, ADQuote]))
-       , ((":",2),(SDQuote,[ADQuote, ADQuote]))       
+       , (("->",   2),(SDQuote,[ADEval,ADEval]))
+       , ((":",    2),(SDQuote,[ADEval,ADEval]))
        ]
 
 -- | Make the default surface syntax more functional.  Here, all functors
@@ -214,9 +214,9 @@ disposTab_dyna t = DisposTab s a
        -- key
        , (("$key" ,1),(SDEval,[ADQuote]))
        , (("with_key",2),(SDQuote,[ADEval, ADEval]))
-       , (("->",2),(SDQuote,[ADQuote, ADQuote]))
-       , ((":",2),(SDQuote,[ADQuote, ADQuote]))
-
+       -- tuples
+       , (("->",   2),(SDQuote,[ADEval,ADEval]))
+       , ((":",    2),(SDQuote,[ADEval,ADEval]))
        ]
 
 ------------------------------------------------------------------------}}}

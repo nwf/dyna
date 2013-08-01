@@ -9,8 +9,10 @@ from utils import bold, red, green, yellow, strip_comments
 def diff(expect, got):
     with file('/tmp/expect','wb') as A:
         A.write(expect)
+        A.write('\n')
     with file('/tmp/got','wb') as B:
         B.write(got)
+        B.write('\n')
     from subprocess import Popen, PIPE
     p = Popen(['colordiff', A.name, B.name], stdout=PIPE, stderr=PIPE)
     return p.communicate()[0]
@@ -18,11 +20,7 @@ def diff(expect, got):
 
 def extract(code):
     for block in re.compile('^> ', re.MULTILINE).split(code):
-        cmd = []
-        expect = []
-
-        reading = True
-
+        cmd, expect, reading = [], [], True
         for i, line in enumerate(block.split('\n')):
             if (line.startswith('|') or i == 0) and reading:
                 if line.startswith('|'):
@@ -31,7 +29,6 @@ def extract(code):
             else:
                 reading = False
                 expect.append(line)
-
         yield '\n'.join(cmd).strip(), '\n'.join(expect).strip()
 
 

@@ -20,6 +20,10 @@ from glob import glob
 #        return todyna([x+a for a in self.aslist])
 
 
+def lookup(k, alist):
+    a = dict(alist)
+    return a.get(k)
+
 def or_(x, y):
     if not (isbool(x) and isbool(y)):
         raise TypeError('`|` expected Boolean arguments, got `%s` and `%s`' \

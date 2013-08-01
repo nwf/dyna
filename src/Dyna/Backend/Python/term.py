@@ -98,4 +98,4 @@ class MapsTo(NoIntern, Term):
     def __init__(self, k, v):
         super(MapsTo, self).__init__('->/2', (k, v))
     def __repr__(self):
-        return '%s -> %s' % self.args
+        return '%s -> %s' % tuple(map(_repr, self.args))

@@ -28,6 +28,12 @@ def parse_parser_state(parser_state):
     return backchain, ruleix, iaggr, other
 
 
+def indent(x, indent=''):
+    if isinstance(x, basestring):
+        return re.compile('^(.*)$', flags=re.MULTILINE).sub(indent + r'\1', x)
+    else:
+        return [indent + y for y in x]
+
 
 class _true(object):
     def __nonzero__(self):
