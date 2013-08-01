@@ -23,14 +23,14 @@ def main():
                         help='run post-processor.')
     parser.add_argument('--load', nargs='*',
                         help='run loaders.')
+    parser.add_argument('--debug', action='store_true',
+                        help='Debug planner, normalizer and parser.')
 
     args = parser.parse_args()
 
     if args.version:
-        import subprocess
         try:
             print (dynahome / 'VERSION').text()
-
         except IOError:
             print 'failed to obtain version info.'
         exit(0)
@@ -63,6 +63,11 @@ def main():
         if not args.source.exists():
             print 'File `%s` does not exist.' % args.source
             return
+
+        if args.debug:
+            import debug
+            debug.main(args.source, browser=True)
+            exit(1)
 
         try:
             plan = interp.dynac(args.source)
