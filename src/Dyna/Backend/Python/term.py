@@ -17,6 +17,8 @@ class Term(object):
         return self is other
 
     def __cmp__(self, other):
+        if self is other:
+            return 0
         try:
             return cmp((self.fn, self.args), (other.fn, other.args))
         except AttributeError:
@@ -52,6 +54,15 @@ class Cons(NoIntern, Term):
         self.aggregator = NoAggregator
         self.aslist = [self.head] + self.tail.aslist
 
+    def __cmp__(self, other):
+        try:
+            if other.fn == 'cons/2':
+                return cmp(self.aslist, other.aslist)   # faster
+            else:
+                return cmp(self.fn, other.fn)
+        except AttributeError:
+            return 1
+
     def __repr__(self):
         return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
@@ -80,9 +91,6 @@ class _Nil(Term):
 
     def __repr__(self):
         return '[]'
-
-#    def __contains__(self, x):
-#        return false
 
     def like_chart(self):
         return iter([])
