@@ -21,6 +21,7 @@ test/*/*.out
 test/*/*.plan
 test/*/*.plan.py
 test/*/*.anf
+crashlogs/
 
 libpeerconnection.log
 
