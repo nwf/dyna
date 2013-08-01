@@ -14,13 +14,7 @@ class Term(object):
         self.aggregator = None
 
     def __eq__(self, other):
-        try:
-            return (self.fn, self.args) == (other.fn, other.args)
-        except AttributeError:
-            return False
-
-    def __hash__(self):
-        return hash((self.fn, self.args))
+        return self is other
 
     def __cmp__(self, other):
         try:
@@ -36,7 +30,18 @@ class Term(object):
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
 
 
-class Cons(Term):
+class NoIntern(Term):
+    "Mix-in which adds hash and equality method for terms which aren't interned."
+    def __eq__(self, other):
+        try:
+            return (self.fn, self.args) == (other.fn, other.args)
+        except AttributeError:
+            return False
+    def __hash__(self):
+        return hash((self.fn, self.args))
+
+
+class Cons(NoIntern, Term):
 
     def __init__(self, head, tail):
         if not (isinstance(tail, Cons) or tail is Nil):
@@ -50,12 +55,6 @@ class Cons(Term):
     def __repr__(self):
         return '[%s]' % (', '.join(map(_repr, self.aslist)))
 
-#    def __contains__(self, x):
-#        if x in self.aslist:
-#            return true
-#        else:
-#            return false
-
     def like_chart(self):
         for a in self.aslist:
             if not isinstance(a, Term):
@@ -66,23 +65,8 @@ class Cons(Term):
     def __iter__(self):
         return iter(self.aslist)
 
-#    def __eq__(self, other):
-#        try:
-#            return self.aslist == other.aslist
-#        except AttributeError:
-#            return False
 
-#    def __hash__(self):
-#        return hash(tuple(self.aslist))
-
-#    def __cmp__(self, other):
-#        try:
-#            return cmp(self.aslist, other.aslist)
-#        except AttributeError:
-#            return
-
-
-class Error(Term):
+class Error(NoIntern, Term):
     def __init__(self):
         Term.__init__(self, '$error/0', ())
 
@@ -106,24 +90,12 @@ class _Nil(Term):
     def __iter__(self):
         return iter([])
 
-#    def __eq__(self, other):
-#        try:
-#            return self.aslist == other.aslist
-#        except AttributeError:
-#            return False
-
-#    def __cmp__(self, other):
-#        try:
-#            return cmp(self.aslist, other.aslist)
-#        except AttributeError:
-#            return 1
-
 
 Nil = _Nil()
 
 
-class MapsTo(Term):
+class MapsTo(NoIntern, Term):
     def __init__(self, k, v):
         super(MapsTo, self).__init__('->/2', (k, v))
     def __repr__(self):
-        return '%s -> %s' % self.args
+        return '%s -> %s' % tuple(map(_repr, self.args))

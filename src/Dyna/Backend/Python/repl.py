@@ -5,15 +5,16 @@ TODO: subscriptions: unsubscribe, only show changes
 
 TODO: help should print call signature of loads and post-processors in addition
 to help.
+
+TODO: check for errors in query and trace
 """
 
 import re, os, cmd, readline
 from utils import ip, lexer, subst, drepr, _repr, get_module, yellow, \
     green, bold
 from stdlib import topython, todyna
-from errors import DynaCompilerError
+from errors import DynaCompilerError, show_traceback
 from config import dotdynadir
-from errors import show_traceback
 import load, post
 
 from interpreter import Rule
@@ -43,7 +44,7 @@ class REPL(cmd.Cmd, object):
 
     @property
     def prompt(self):
-        return bold % green % '> '
+        return '> '
 
     def do_rules(self, _):
         """
@@ -277,6 +278,7 @@ class REPL(cmd.Cmd, object):
         errors_before = self.interp.error.copy()
         yield
         if errors_before.items() != self.interp.error.items():
+
             e = set(errors_before) | set(self.interp.error)
             new_errors = 0
             cleared_errors = 0
@@ -295,7 +297,7 @@ class REPL(cmd.Cmd, object):
                     #print 'cleared error at `%s`.' % k
                     cleared_errors += 1
                 elif not was and now:
-#                    print 'new error at `%s`.' % k, es
+                    #print 'new error at `%s`.' % k, es
                     new_errors += 1
             if new_errors and cleared_errors:
                 print yellow % '>>>', '%s new errors, %s errors cleared. Type `sol` for details.\n' \

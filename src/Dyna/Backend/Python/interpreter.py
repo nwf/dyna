@@ -8,7 +8,7 @@ from path import path
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
 from utils import red, parse_attrs, ddict, dynac, read_anf, strip_comments, \
-    _repr, hide_ugly_filename, true, false, parse_parser_state
+    _repr, hide_ugly_filename, true, false, parse_parser_state, magenta, indent
 
 from prioritydict import prioritydict
 from config import dotdynadir
@@ -32,6 +32,18 @@ class Rule(object):
         self.anf = None
         self.head_fn = None
 
+    def __eq__(self, other):
+        return self.index == other.index
+
+    def hash(self):
+        return self.index
+
+    def __cmp__(self, other):
+        try:
+            return cmp(self.index, other.index)
+        except AttributeError:
+            return 1
+
     def __repr__(self):
         return 'Rule(%s, %r)' % (self.index, self.src)
 
@@ -40,6 +52,12 @@ class Rule(object):
         from post.trace import Crux
         c = Crux(head=None, rule=self, body=None, vs = ctx)
         return '\n'.join(indent + line for line in c.format())
+
+    def debug(self):
+        import debug
+        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
+            f.write(self.src)
+        debug.main(f.name)
 
 
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
@@ -87,7 +105,7 @@ class Interpreter(object):
         for fn in bc:
             if fn not in self._gbc:    # new backchain declaration
                 for r in self.rule_by_head[fn]:
-                    self.recompile.add(r)
+                    self.needs_recompile(r)
 
     def __init__(self):
         # declarations
@@ -128,12 +146,7 @@ class Interpreter(object):
             # a value, which didn't have a value before -- i.e. was only used as
             # structure.
             if fn in self.chart:
-                c = self.chart[fn]
-                assert c.agg_name is None
-                c.agg_name = agg
-                for item in c.intern.values():
-                    assert item.aggregator is None
-                    item.aggregator = c.new_aggregator(item)
+                self.chart[fn].set_aggregator(agg)
         # check for aggregator conflict.
         assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
 
@@ -179,7 +192,7 @@ class Interpreter(object):
         while agenda:
             item = self.agenda.pop_smallest()
             self.pop(item)
-        # after draining the agenda, try to initialize pending rules.
+        self.run_recompile()
         self.run_uninitialized()
         if self.agenda:
             self._agenda()
@@ -270,15 +283,10 @@ class Interpreter(object):
             # is not possible.
             self.emit(*e)
 
-    def gbc(self, fn, *args):
-
+    def gbc(self, fn, args):
         item = self.build(fn, *args)
-
-        # TODO: we will need to distinguish `unknown` from `null` when we move
-        # to mixed chaining.
         if item.value is not None:
             return item.value
-
         return self.force_gbc(item)
 
     def force_gbc(self, item):
@@ -314,7 +322,7 @@ class Interpreter(object):
 
         return self.pop(item)
 
-    def load_plan(self, filename, recurse=True):
+    def load_plan(self, filename):
         """
         Compile, load, and execute new dyna rules.
 
@@ -357,11 +365,6 @@ class Interpreter(object):
         for fn, r, h in env.updaters:
             self.new_updater(fn, r, h)
 
-        if recurse:
-            self.run_recompile()
-
-        # we we don't accumulate all changed rules, new_rules return will be new
-        # rules of top-level call.
         return new_rules
 
     def recompile_rule(self, r):
@@ -377,34 +380,29 @@ class Interpreter(object):
             f.write(code)
         return self.dynac(dyna)
 
+    def needs_recompile(self, r):
+        self.retract_rule(r.index)   # clears errors
+        self.recompile.add(r)
+
     def run_recompile(self):
-        # TODO: it's a bit strange to ignore the error and just print
-        # it. However, since the rules in the recompile list are
-        # syntactically valid (well, they at least they were valid) -- this
-        # means that errors must be planning errors... probably all to do
-        # with missing BC declarations.
-        #
-        # TODO: we probably have to worry about infinite loops -- at the
-        # moment this results in an interpreter crash due to max recursion
-        # limit
-        #
-        # TODO: maybe we should handle recompilation more like we do
-        # uninitialized rules.
         # run to fixed point.
         while self.recompile:
+            success = set()
             failed = set()
             for r in list(self.recompile):
                 try:
-                    plan = self.recompile_rule(r)
+                    r.plan = self.recompile_rule(r)
                 except DynaCompilerError as e:
                     failed.add(r)
                     self.set_error(r, e)
                 else:
-                    self.retract_rule(r.index)
-                    self.load_plan(plan, recurse=False)
-            if failed == self.recompile:   # no progress
-                break
+                    success.add(r)
+                    self.clear_error(r)
             self.recompile = failed
+            if not success:
+                break
+            for r in success:
+                self.load_plan(r.plan)
 
     def run_uninitialized(self):
         q = set(self.uninitialized_rules)
@@ -486,7 +484,7 @@ class Interpreter(object):
                 # now backchained.
                 for d in self.rule_dep[head_fn]:
                     if rule != d and d.head_fn not in self._gbc:
-                        self.recompile.add(d)
+                        self.needs_recompile(d)
 
             self._gbc[head_fn].append(query)
 
@@ -577,16 +575,17 @@ class Interpreter(object):
 
         self.recompute_coarse()
 
+        self._agenda()
+
         # if there are no more rules defining a functor; clear some of the state
         if not self.rule_by_head[rule.head_fn]:
             if rule.head_fn in self.chart:
-                del self.chart[rule.head_fn]      # delete the chart.
+                self.chart[rule.head_fn].set_aggregator(None)
             if rule.head_fn in self.agg_name:
                 del self.agg_name[rule.head_fn]
             if rule.head_fn in self.pstate[2]:
                 del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
 
-        self._agenda()
         return self.changed
 
     def recompute_gbc_memo(self, fn, visited=None):
@@ -595,8 +594,8 @@ class Interpreter(object):
             visited = set()
 
         if fn not in self._gbc or fn in visited:
-            # don't refresh non-BC computation be careful not to get stuck in an
-            # infinite loop if there is a cycle in the dep graph
+            # don't refresh non-BC computation. Also, be careful not to get
+            # stuck in an infinite loop if there is a cycle in the dep graph
             return
 
         visited.add(fn)
@@ -737,6 +736,9 @@ class Interpreter(object):
                         print >> out, '      maximum recursion depth exceeded'
                     else:
                         print >> out, '      %s' % (e)
+
+                    #print >> out
+                    #print >> out, magenta % indent(e.traceback.rstrip(), indent='        ')
 
                     print >> out
                     print >> out, r.render_ctx(e.exception_frame, indent='      ')

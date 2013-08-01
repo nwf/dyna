@@ -153,25 +153,31 @@ class Crux(object):
         explode = ('%s %s %s' % (self.get_function(rule.anf.head)[1:],  # drop quote on head
                                  green % rule.anf.agg,
                                  self.get_function(rule.anf.result)))
-
         if side:
             side = '    ' + ', '.join('%s %s' % ('for', x,) for x in side) + '.'
-            explode += ','
         else:
             explode += '.'
-
         lines = [explode]
-
         if side:
             lines.append(side)
-
         return lines
 
     def get_function(self, x):
+        self.visited = set()
+        return self._get_function(x)
+
+    def _get_function(self, x):
         """
         String of symbolic representation of ``x``, a variable or function, in
         this expresion graph.
         """
+
+        #if x not in ('true', 'false'):
+        #    if x in self.visited:
+        #        #return red % '*cycle@%s*' % x
+        #        return x
+        self.visited.add(x)
+
         g = self.graph
         if isinstance(x, debug.Edge):
 
@@ -181,16 +187,20 @@ class Crux(object):
 
             if label == '=':
                 [b] = x.body
-                return self.get_function(b)
+                return self._get_function(b)
 
             if not x.body:  # arity 0
                 return label
 
-            fn_args = [self.get_function(y) for y in x.body]
+            fn_args = [self._get_function(y) for y in x.body]
 
             # infix
             if (not label[0].isalpha() and label[0] not in ('$','&') and len(fn_args) == 2) \
-                    or label in ('in', 'and', 'or', 'with_key', '->', 'is'):
+                    or label in ('in', 'with_key', '&with_key', '->', '&->', 'is'):
+
+                if label in {'&with_key', '->', '&->'}:
+                    label = label[1:]
+
                 [a,b] = fn_args
                 return '(%s %s %s)' % (a, label, b)
             return '%s(%s)' % (label, ', '.join(fn_args))
@@ -204,46 +214,35 @@ class Crux(object):
 
             # handle multiple values (can happen at unification nodes)
             if len(g.incoming[x]) > 1:
-                return ' = '.join('(%s%s)' % (self.get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
+                return ' = '.join('(%s%s)' % (self._get_function(e), (cyan % '=%s' % self.values(e.head))) for e in g.incoming[x])
 
             [e] = g.incoming[x]
 
             if e.label == '=':
-                return self.get_function(e)
+                return self._get_function(e)
 
             # handle lists
-            if e.label == '& nil':
+            elif e.label == '& nil':
                 return '[]'
 
-            if e.label == '& cons':
+            elif e.label == '& cons':
                 _e = e
                 a = []
                 while e.label == '& cons':
-
-                    # TODO: crashlogs/abarany:2013-07-24:11:47:31:17823.log
-                    x, xs = e.body           # e = _a3 = & cons(uV, uX)
-
-                    # g.incoming = {
-                    #  '_a5': [_a5 = edge@1(uX, uU, uV)],
-                    #  '_a4': [_a4 = pathto@0(uU)],
-                    #  '_a3': [_a3 = & cons(uV, uX)],
-                    #  '_a2': [_a2 = +@2(_a4, _a5)],
-                    #  'uU': [],
-                    #  '_t1': [_t1 = & with_key(_a2, _a3)],
-                    #  'uV': [],
-                    #  '_t0': [_t0 = & pathto(uV)], 'uX': []
-                    # }
-                    # xs = 'uX'
-
+                    x, xs = e.body
+                    a.append(self._get_function(x))
+                    if not g.incoming[xs]:
+                        a.append(self._get_function(xs))
+                        break
                     [e] = g.incoming[xs]
-                    a.append(self.get_function(x))
 
                 if e.label == '& nil':
                     return '[%s]' % ', '.join(a)
                 else:
-                    return self.get_function(_e)          # malformed list.
+                    return self._get_function(_e)          # malformed list.
 
-            if e.label.startswith('&'):
-                return self.get_function(e)
+            elif e.label.startswith('&'):
+                return self._get_function(e)
 
-            return self.get_function(e) + (cyan % '=%s' % self.values(x))
+            else:
+                return self._get_function(e) + (cyan % '=%s' % self.values(x))

@@ -16,6 +16,12 @@ class Chart(object):
     def new_aggregator(self, term):
         return aggregator(self.agg_name, term)
 
+    def set_aggregator(self, agg):
+        self.agg_name = agg
+        for item in self.intern.values():
+            assert item.value is None           # shouldn't aggregator when non-null.
+            item.aggregator = self.new_aggregator(item)
+
     def __repr__(self):
         rows = [term for term in self.intern.values() if term.value is not None]
         if not rows:
