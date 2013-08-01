@@ -144,6 +144,10 @@ class REPL(cmd.Cmd, object):
         """
         Development tool. Used for view Dyna's intermediate representations.
         """
+        if not line:
+            rules = self.interp.rules.values()
+            rules.sort()
+            line = '\n'.join('%% rule %s\n%s\n' % (r.index, r.src) for r in rules)
         import debug
         with file(dotdynadir / 'repl-debug-line.dyna', 'wb') as f:
             f.write(line)
