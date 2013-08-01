@@ -5,6 +5,8 @@ TODO: subscriptions: unsubscribe, only show changes
 
 TODO: help should print call signature of loads and post-processors in addition
 to help.
+
+TODO: check for errors in query and trace
 """
 
 import re, os, cmd, readline
