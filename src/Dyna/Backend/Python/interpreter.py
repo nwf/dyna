@@ -7,8 +7,8 @@ from path import path
 
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
-from utils import red, parse_attrs, ddict, dynac, read_anf, strip_comments, \
-    _repr, hide_ugly_filename, true, false, parse_parser_state, magenta, indent
+from utils import red, parse_attrs, dynac, read_anf, strip_comments, _repr, \
+    hide_ugly_filename, true, false, parse_parser_state, magenta, indent
 
 from prioritydict import prioritydict
 from config import dotdynadir
