@@ -8,7 +8,7 @@ import re, os, shutil, webbrowser
 from collections import defaultdict
 from utils import dynac, read_anf
 from config import dynahome
-from path import path
+from IPython.external.path import path
 from warnings import warn
 
 try:

@@ -579,6 +579,21 @@ class REPL(cmd.Cmd, object):
             # query must have failed.
             pass
 
-
     do_load.__doc__ = do_load.__doc__.format(load=', '.join(load.available))
     do_post.__doc__ = do_post.__doc__.format(post=', '.join(post.available))
+
+    def do_paste(self, _):
+        """
+        Add a new rule to program by pasting from clipboard. The advantage of
+        using this paste` command is that newlines within will not break a rule
+        definition.
+
+        TODO: support execution of other commands, e.g. 'load' or 'sol'.
+        """
+        from IPython.core.hooks import clipboard_get
+        x = clipboard_get(None)
+        print x
+        if raw_input('%s ok? [Y/n] ' % yellow % '>>>') == 'n':  # control-c works too
+            pass
+        else:
+            self.default(x)

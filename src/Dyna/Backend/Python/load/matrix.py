@@ -1,5 +1,6 @@
 import re
-from path import path
+from IPython.external.path import path
+
 
 class matrix(object):
     """

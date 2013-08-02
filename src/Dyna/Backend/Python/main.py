@@ -1,5 +1,5 @@
 import argparse
-from path import path
+from IPython.external.path import path
 from errors import DynaCompilerError
 from errors import crash_handler
 from interpreter import Interpreter

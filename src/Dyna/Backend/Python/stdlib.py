@@ -1,4 +1,4 @@
-import re
+import re, os
 from term import Term, Cons, Nil, MapsTo
 from collections import Counter
 from utils import pretty, pretty_print, true, false, null, isbool
