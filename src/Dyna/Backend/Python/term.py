@@ -20,7 +20,10 @@ class Term(object):
         if self is other:
             return 0
         try:
-            return cmp((self.fn, self.args), (other.fn, other.args))
+            if self.fn == other.fn:
+                return cmp(self.args, other.args)
+            else:
+                return cmp(self.fn, other.fn)
         except AttributeError:
             return 1
 

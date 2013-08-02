@@ -1,7 +1,8 @@
 from cStringIO import StringIO
 from utils import parse_sexpr
 from stdlib import todyna
-from path import path
+from IPython.external.path import path
+
 
 class sexpr(object):
     """

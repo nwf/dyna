@@ -3,7 +3,7 @@
 import re, os, sys, imp, traceback
 from collections import defaultdict
 from hashlib import sha1
-from path import path
+from IPython.external.path import path
 
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart

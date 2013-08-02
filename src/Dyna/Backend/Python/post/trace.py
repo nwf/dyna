@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import re
-from collections import defaultdict
 
 import debug
 from draw_circuit import infer_edges
-from utils import yellow, green, cyan, red, _repr
+from utils import yellow, green, cyan, red, _repr, groupby
 
 
 class trace(object):
@@ -47,13 +46,6 @@ class Tracer(object):
                             groups = self.items,
                             interp = self.interp,
                             depth_limit = depth_limit))
-
-
-def groupby(key, data):
-    g = defaultdict(list)
-    for x in data:
-        g[key(x)].append(x)
-    return dict(g)
 
 
 def dig(head, visited, tail, groups, interp, depth_limit=-1):

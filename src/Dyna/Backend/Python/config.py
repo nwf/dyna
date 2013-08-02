@@ -1,5 +1,5 @@
 import os
-from path import path
+from IPython.external.path import path
 
 dotdynadir = path('~/.dyna').expand()
 if not dotdynadir.exists():

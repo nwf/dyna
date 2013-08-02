@@ -1,10 +1,17 @@
 import re
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
-from path import path
+from IPython.external.path import path
 from subprocess import Popen, PIPE
 from config import dynahome, dotdynadir
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from cStringIO import StringIO
+
+
+def groupby(key, data):
+    g = defaultdict(list)
+    for x in data:
+        g[key(x)].append(x)
+    return dict(g)
 
 
 # TODO: This is pretty hacking we should have the codegen produce something
@@ -103,9 +110,13 @@ def get_module(cmd, sub):
         return m
 
 
-black, red, green, yellow, blue, magenta, cyan, white = \
-    map('\033[3%sm%%s\033[0m'.__mod__, range(8))
+red, green, yellow, blue, magenta, cyan, white = \
+    map('\033[3%sm%%s\033[0m'.__mod__, range(1,8))
 bold = '\033[1m%s\033[0m'
+
+
+# TODO: use fabulous colors
+#from fabulous.color import red, green, yellow, blue, magenta, cyan, white, bold, underline
 
 
 _comments = re.compile('%.*$', re.MULTILINE)
@@ -139,7 +150,7 @@ def dynac(f, out, anf=None, compiler_args=()):
     stdout, stderr = p.communicate()
     if p.returncode:
         assert not stdout.strip(), [stdout, stderr]
-        stderr = hide_ugly_filename(stderr, lambda m: '\n  %s\n' % rule_source(m.group(0)))
+        stderr = hide_ugly_filename(stderr, lambda m: '\n  %s\n' % span_to_src(m.group(0)))
         raise DynaCompilerError(stderr, f)
 
 
@@ -297,13 +308,14 @@ def read_anf(e):
 def parse_attrs(fn):
     attrs = dict(re.findall('\s*(\S+):\s*(.*)\s*\n', fn.__doc__.strip()))
     if 'Span' in attrs:
-        attrs['rule'] = rule_source(attrs['Span']).strip()
+        attrs['rule'] = span_to_src(attrs['Span']).strip()
     return attrs
 
 
-def rule_source(span, src=None):
+def span_to_src(span, src=None):
     """
-    Utility for retrieving source code for Parsec error message.
+    Utility for retrieving source code for Parsec error message (there is
+    nothing specific about rules)
     """
     try:
         [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
