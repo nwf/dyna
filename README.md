@@ -26,7 +26,7 @@ programs, you'll need to set up the Python backend. For that you'll need `Python
 
 Optionally, installing the following will enable certain extension
 
-    $ easy_install pygments matplotlib numpy
+    $ easy_install pygments matplotlib
     $ apt-get install graphviz
 
 Now you're ready to build.
