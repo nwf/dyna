@@ -32,9 +32,7 @@ def dynac(f, out, anf=None, compiler_args=()):
     cmd = ['%s/dist/build/dyna/dyna' % dynahome,
            '-B', 'python', '-o', out, f]
 
-    if anf is None:
-        cmd += ['--dump-anf=' + out + '.anf']
-    else:
+    if anf is not None:
         cmd += ['--dump-anf=' + anf]
 
     cmd += compiler_args
