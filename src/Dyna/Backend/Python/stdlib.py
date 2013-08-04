@@ -68,10 +68,7 @@ def eq(x,y):
     return todyna(x == y)
 
 def not_eq(x, y):
-    if x != y:
-        return true
-    else:
-        return false
+    return todyna(x != y)
 
 _range = range
 def range(*x):

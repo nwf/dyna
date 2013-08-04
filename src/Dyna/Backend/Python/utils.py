@@ -1,5 +1,5 @@
 import re
-from path import path  # used by other modules
+from external.path import path  # used by other modules
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
 from config import dynahome, dotdynadir
 from collections import namedtuple, defaultdict
