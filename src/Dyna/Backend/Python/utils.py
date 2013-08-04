@@ -224,28 +224,32 @@ def pretty(t, initialindent=0):
 
 
 class ANF(namedtuple('ANF', 'span ruleix agg head evals unifs result')):
-    pass
+
+    @staticmethod
+    def read(span, index, x):
+        def _g(x):
+            for var, val in x:
+                if isinstance(val, list):
+                    yield (var, val[0], val[1:])
+                else:
+                    yield (var, val, [])
+        def g(x):
+            return list(_g(x))
+
+        [(agg, head, evals, unifs, [_, result])] = parse_sexpr(x)
+
+        return ANF(span,
+                   index,
+                   agg,
+                   head,
+                   g(evals[1:]),
+                   g(unifs[1:]),
+                   result)
 
 
 def read_anf(e):
-    def _g(x):
-        for var, val in x:
-            if isinstance(val, list):
-                yield (var, val[0], val[1:])
-            else:
-                yield (var, val, [])
-    def g(x):
-        return list(_g(x))
-
-    for span, ruleix, anf in re.findall('^;; (.*)\n;; index (\d+)\n(\([\w\W]+?)\n(?:\n|$)', e, re.MULTILINE):
-        for (agg, head, evals, unifs, [_,result]) in parse_sexpr(anf):
-            yield ANF(span,
-                      int(ruleix),
-                      agg,
-                      head,
-                      g(evals[1:]),
-                      g(unifs[1:]),
-                      result)
+    for span, ruleix, x in re.findall('^;; (.*)\n;; index (\d+)\n(\([\w\W]+?)\n(?:\n|$)', e, re.MULTILINE):
+        yield ANF.read(span, int(ruleix), x)
 
 
 def parse_attrs(fn):

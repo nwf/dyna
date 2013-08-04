@@ -28,6 +28,7 @@ import qualified Data.Maybe                 as MA
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Analysis.ANF
+import           Dyna.Analysis.ANFPretty
 -- import           Dyna.Analysis.Aggregation
 import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
@@ -257,7 +258,7 @@ pdope_ _ (OPWrap v vs f) = return $ pretty v
                            <+> equals
                            <+> "build"
                            <> (parens $ pfas f vs <> comma
-                                <> (sepBy "," $ map pretty vs)) 
+                                <> (sepBy "," $ map pretty vs))
 
 pdope_ _ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> equals
@@ -351,11 +352,16 @@ printInitializer :: Handle -> S.Set DFunctAr
                  -> Rule -> Cost -> Actions PyDopeBS -> IO ()
 printInitializer fh bc rule cost dope = do
   displayIO fh $ renderPretty 1.0 100
-                 $ "def" <+> char '_' <> tupled ["emit"] <> colon
+               $  "def" <+> char '_' <> tupled ["emit"] <> colon
                    `above` (indent 4 $ printPlanHeader rule cost Nothing)
                    `above` pdope bc dope
                    <> line
-                   <> "initializers.append((" <> (pretty $ r_index rule) <> ", _" <> "))"
+                   <> "initializers.append"
+                   <> parens (tupled [ pretty $ r_index rule
+                                     , "_"
+                                     , squotes $ prettySpanLoc $ r_span rule
+                                     , "'''" <> (renderANF rule) <> "'''"
+                                     ])
                    <> line
                    <> line
                    <> line
@@ -398,7 +404,12 @@ printQuery fh bc (f,a) rule vs cost dope = do
                  `above` pdope bc dope
                  <> line
                  <> "queries.append"
-                 <> parens (tupled [pfa f a, pretty $ r_index rule, "_"])
+                 <> parens (tupled [pfa f a
+                                    , pretty $ r_index rule
+                                    , "_"
+                                    , squotes $ prettySpanLoc $ r_span rule
+                                    , "'''" <> (renderANF rule) <> "'''"
+                                    ])
                  <> line
                  <> line
                  <> line
@@ -424,6 +435,7 @@ driver am ups is bc qp pr fh = do
   hPutStrLn fh ""
   hPutStrLn fh $ "queries = []"
   hPutStrLn fh $ "agg_decl = {}"
+  hPutStrLn fh $ "rule = []"
   hPutStrLn fh $ "updaters = []"
   hPutStrLn fh $ "initializers = []"
 
@@ -449,8 +461,8 @@ driver am ups is bc qp pr fh = do
     printInitializer fh bc r c a
 
   hPutStrLn fh $ "# ==Queries=="
-
   forM_ qp $ \(fa,r,(vs,(c,a))) -> printQuery fh bc fa r vs c a
+
 
 ------------------------------------------------------------------------}}}
 -- Export                                                               {{{

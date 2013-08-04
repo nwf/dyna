@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
-from utils import red, parse_attrs, read_anf, _repr, hide_ugly_filename, \
+from utils import red, ANF, span_to_src, _repr, hide_ugly_filename, \
     true, false, magenta, indent, path
 
 from prioritydict import prioritydict
@@ -306,13 +306,6 @@ class Interpreter(object):
                     ('peel', peel)]:
             setattr(env, k, v)
 
-        anf = {}
-        assert path(filename + '.anf').exists()   # XXX: codegen should put this is plan.py
-        with file(filename + '.anf') as f:
-            contents = f.read().strip() + '\n'
-            for x in read_anf(contents):
-                anf[x.ruleix] = x
-
         # update parser state
         self.set_parser_state(env.parser_state)
 
@@ -320,13 +313,13 @@ class Interpreter(object):
             self.new_fn(k, v)
 
         new_rules = set()
-        for _, index, h in env.queries:
+        for _, index, h, span, anf in env.queries:
             new_rules.add(index)
-            self.add_rule(index, query=h, anf=anf[index])
+            self.add_rule(index, span, ANF.read(span, index, anf), query=h)
 
-        for index, h in env.initializers:
+        for index, h, span, anf in env.initializers:
             new_rules.add(index)
-            self.add_rule(index, init=h, anf=anf[index])
+            self.add_rule(index, span, ANF.read(span, index, anf), init=h)
 
         for fn, r, h in env.updaters:
             self.new_updater(fn, r, h)
@@ -419,8 +412,7 @@ class Interpreter(object):
     #___________________________________________________________________________
     # Adding/removing rules
 
-    def add_rule(self, index, init=None, query=None, anf=None):
-        assert anf is not None
+    def add_rule(self, index, span, anf, init=None, query=None):
         assert index not in self.rules
 
         for (x, label, ys) in anf.unifs:
@@ -432,8 +424,8 @@ class Interpreter(object):
             assert False, 'did not find head'
 
         self.rules[index] = rule = Rule(index)
-        rule.span = hide_ugly_filename(parse_attrs(init or query)['Span'])
-        rule.src = parse_attrs(init or query)['rule']
+        rule.span = hide_ugly_filename(span)
+        rule.src = span_to_src(span).strip()
         rule.anf = anf
         rule.head_fn = head_fn
 

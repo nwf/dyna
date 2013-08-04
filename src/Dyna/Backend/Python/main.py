@@ -43,7 +43,7 @@ def main():
 
         if len(args.source) > 1:
             # concatenate files
-            with file(interp.tmp / 'tmp.dyna', 'wb') as g:
+            with file(interp.compiler.tmp / 'tmp.dyna', 'wb') as g:
                 for f in args.source:
                     if not f.exists():
                         print 'File `%s` does not exist.' % f
