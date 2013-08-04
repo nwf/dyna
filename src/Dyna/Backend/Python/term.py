@@ -1,5 +1,4 @@
 from utils import _repr
-from aggregator import NoAggregator
 
 
 # TODO: codegen should output a derived Term instance for each functor
@@ -54,7 +53,7 @@ class Cons(NoIntern, Term):
         self.head = head
         self.tail = tail
         Term.__init__(self, 'cons/2', (head, tail))
-        self.aggregator = NoAggregator
+        self.aggregator = None
         self.aslist = [self.head] + self.tail.aslist
 
     def __cmp__(self, other):
@@ -89,7 +88,7 @@ class _Nil(Term):
 
     def __init__(self):
         Term.__init__(self, 'nil/0', ())
-        self.aggregator = NoAggregator
+        self.aggregator = None
         self.aslist = []
 
     def __repr__(self):

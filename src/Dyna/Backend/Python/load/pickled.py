@@ -7,7 +7,7 @@ TODO: Can we merge a pickled interpreter into an existing one?
 """
 
 import cPickle
-from IPython.external.path import path
+from utils import path
 
 
 class pickled(object):

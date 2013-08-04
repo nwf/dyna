@@ -11,6 +11,7 @@ import operator
 from collections import Counter
 from utils import drepr, _repr, user_vars, isbool, true, false
 from errors import AggregatorError
+from stdlib import todyna
 
 
 class NoAggregatorError(Exception):
@@ -94,7 +95,6 @@ class DictEquals(BAggregator):
 
     def fold(self):
         if not self.empty():
-            from stdlib import todyna
             return todyna([b + (('$val', v),) for (v, b), cnt in self.iteritems() if cnt > 0])
 
 
@@ -188,7 +188,6 @@ class and_equals(BAggregator):
 
 class set_equals(BAggregator):
     def fold(self):
-        from stdlib import todyna
         s = {x for x, m in self.iteritems() if m > 0}
         if len(s):
             return todyna(s)
@@ -197,7 +196,6 @@ class set_equals(BAggregator):
 class bag_equals(BAggregator):
     def fold(self):
         if any(m > 0 for m in self.itervalues()):
-            from stdlib import todyna
             x = list(Counter(self).elements())
             x.sort()
             return todyna(x)

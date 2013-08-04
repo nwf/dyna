@@ -2,19 +2,17 @@
 
 import re, os, sys, imp, traceback
 from collections import defaultdict
-from hashlib import sha1
-from IPython.external.path import path
 
 from term import Term, Cons, Nil, MapsTo, Error
 from chart import Chart
-from utils import red, parse_attrs, dynac, read_anf, strip_comments, _repr, \
-    hide_ugly_filename, true, false, parse_parser_state, magenta, indent
+from utils import red, parse_attrs, read_anf, _repr, hide_ugly_filename, \
+    true, false, magenta, indent, path
 
 from prioritydict import prioritydict
 from config import dotdynadir
 from errors import rule_error_context, AggregatorError, DynaCompilerError
 from stdlib import todyna
-
+from dynac import Compiler
 
 #sys.setrecursionlimit(10000)
 
@@ -78,40 +76,13 @@ def none():
 
 class Interpreter(object):
 
-    def parser_state(self, ruleix=None):
-        # TODO: this is pretty hacky. XREF:parser-state
-        bc, _rix, agg, other = self.pstate
-        if ruleix is None:
-            if not self.rules:
-                rix = 0
-            else:
-                rix = max(self.rules) + 1 # next available
-            rix = max(rix, _rix)
-        else:
-            rix = ruleix  # override rule index from pstate
-        lines = [':-ruleix %d.' % rix]
-        for fn in bc:
-            [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
-            lines.append(":-backchain '%s'/%s." % (fn, arity))
-        for fn, agg in agg.items():
-            [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
-            lines.append(":-iaggr '%s'/%s %s." % (fn, arity, agg))
-        lines.extend(':-%s %s.' % (k,v) for k,v in other)
-        lines.append('\n')
-        return '\n'.join(lines)
-
-    def set_parser_state(self, x):
-        self.pstate = (bc, _rix, _agg, _other) = x
-        for fn in bc:
-            if fn not in self._gbc:    # new backchain declaration
-                for r in self.rule_by_head[fn]:
-                    self.needs_recompile(r)
-
     def __init__(self):
-        # declarations
+        self.compiler = Compiler()
+        # parser state
         self.agg_name = defaultdict(none)
-        self.pstate = (set(), 0, {}, [])
-        self.files = []
+        self.bc = set()
+        self.other = []
+        self.ruleix = 0
         # rules
         self.rules = {}
         self.updaters = defaultdict(list)
@@ -120,13 +91,9 @@ class Interpreter(object):
         self.agenda = prioritydict()
         self.chart = foo(self.agg_name)
         self.error = {}
+        self.changed = {}
         # misc
         self.time_step = 0
-        # interpretor needs a place for it's temporary files.
-        self.tmp = tmp = (dotdynadir / 'tmp' / str(os.getpid()))
-        if tmp.exists():
-            tmp.rmtree()
-        tmp.makedirs_p()
         # coarsening of the program shows which rules might depend on each other
         self.coarse_deps = defaultdict(set)
         self.rule_by_head = defaultdict(set)
@@ -304,7 +271,6 @@ class Interpreter(object):
             emits.append((item, val, ruleix, variables, False))
 
         errors = []
-
         for handler in self._gbc[item.fn]:
             try:
                 handler(*item.args, emit=t_emit)
@@ -348,7 +314,7 @@ class Interpreter(object):
                 anf[x.ruleix] = x
 
         # update parser state
-        self.set_parser_state(parse_parser_state(env.parser_state))
+        self.set_parser_state(env.parser_state)
 
         for k, v in env.agg_decl.items():
             self.new_fn(k, v)
@@ -367,18 +333,29 @@ class Interpreter(object):
 
         return new_rules
 
+    def set_parser_state(self, x):
+        (bc, _rix, _agg, _other) = self.compiler.read_parser_state(x)
+        # update misc parser state
+        self.other = _other
+        # update backchain predicates
+        for fn in bc:
+            self.bc.add(fn)
+            if fn not in self._gbc:    # new backchain declaration
+                for r in self.rule_by_head[fn]:
+                    self.needs_recompile(r)
+        # update ruleix
+        if not self.rules:
+            self.ruleix = _rix
+        else:
+            self.ruleix = max(max(self.rules) + 1, _rix)   # next available
+        # update fn->aggregator map
+        for fn, agg in _agg.items():
+            self.new_fn(fn, agg)
+
     def recompile_rule(self, r):
         "returns a plan, it's up to you to retract the old rule and load the plan"
-        pstate = self.parser_state(ruleix=r.index)   # override ruleix
-        code = r.src
-        x = sha1()
-        x.update(pstate)
-        x.update(code)
-        dyna = self.tmp / ('%s.dyna' % x.hexdigest())
-        with file(dyna, 'wb') as f:
-            f.write(pstate)
-            f.write(code)
-        return self.dynac(dyna)
+        pstate = self.compiler.parser_state(self.bc, r.index, self.agg_name, self.other)   # override ruleix
+        return self.compiler.dynac_code(r.src, pstate)
 
     def needs_recompile(self, r):
         self.retract_rule(r.index)   # clears errors
@@ -388,17 +365,17 @@ class Interpreter(object):
         # run to fixed point.
         while self.recompile:
             success = set()
-            failed = set()
+            failure = set()
             for r in list(self.recompile):
                 try:
                     r.plan = self.recompile_rule(r)
                 except DynaCompilerError as e:
-                    failed.add(r)
+                    failure.add(r)
                     self.set_error(r, e)
                 else:
                     success.add(r)
                     self.clear_error(r)
-            self.recompile = failed
+            self.recompile = failure
             if not success:
                 break
             for r in success:
@@ -456,7 +433,7 @@ class Interpreter(object):
 
         self.rules[index] = rule = Rule(index)
         rule.span = hide_ugly_filename(parse_attrs(init or query)['Span'])
-        rule.src = strip_comments(parse_attrs(init or query)['rule'])
+        rule.src = parse_attrs(init or query)['rule']
         rule.anf = anf
         rule.head_fn = head_fn
 
@@ -473,13 +450,6 @@ class Interpreter(object):
 
             # fix dependents
             if head_fn not in self._gbc:
-
-                # quick monkey patch assertion.
-                def monkey(_, _args):
-                    assert False, '__getitem__ should never be called because' \
-                        ' `%s` should be backchained' % head_fn
-                self.chart.__getitem__ = monkey
-
                 # retract and replan rules dependent on this predicate which is
                 # now backchained.
                 for d in self.rule_dep[head_fn]:
@@ -583,8 +553,6 @@ class Interpreter(object):
                 self.chart[rule.head_fn].set_aggregator(None)
             if rule.head_fn in self.agg_name:
                 del self.agg_name[rule.head_fn]
-            if rule.head_fn in self.pstate[2]:
-                del self.pstate[2][rule.head_fn]  # remove fn aggr def from parser state
 
         return self.changed
 
@@ -621,28 +589,12 @@ class Interpreter(object):
         Compile a file full of dyna code. Note: this routine does not pass along
         parser_state.
         """
-        filename = path(filename)
-        self.files.append(filename)
-
-        # TODO: crashlogs/amareshj:2013-07-01:22:26:54:13412.log -- file doesn't exist.
-
-        out = self.tmp / filename.read_hexhash('sha1') + '.plan.py'
-        #out = filename + '.plan.py'
-        self.files.append(out)
-        dynac(filename, out)
-        return out
+        return self.compiler.dynac(filename)
 
     def dynac_code(self, code):
         "Compile a string of dyna code."
-        pstate = self.parser_state()
-        x = sha1()
-        x.update(pstate)
-        x.update(code)
-        dyna = self.tmp / ('%s.dyna' % x.hexdigest())
-        with file(dyna, 'wb') as f:
-            f.write(pstate)  # include parser state if any.
-            f.write(code)
-        return self.dynac(dyna)
+        pstate = self.compiler.parser_state(self.bc, self.ruleix, self.agg_name, self.other)
+        return self.compiler.dynac_code(code, pstate)
 
     #___________________________________________________________________________
     # Routines for showing things to the user.

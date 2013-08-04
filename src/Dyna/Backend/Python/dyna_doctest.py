@@ -3,7 +3,7 @@ import re, sys, traceback
 from interpreter import Interpreter
 from repl import REPL
 from cStringIO import StringIO
-from utils import bold, red, green, yellow, strip_comments
+from utils import bold, red, green, yellow
 
 
 def diff(expect, got):
@@ -32,10 +32,16 @@ def extract(code):
         yield '\n'.join(cmd).strip(), '\n'.join(expect).strip()
 
 
+def strip_comments(src):
+    return re.compile('%.*$', re.MULTILINE).sub('', src)
+
+def remove_color(x):
+    return re.sub('\033\[[0-9;]+m', '', x)
+
 def clean(x):
     # remove whitespace at end of line
     # remove ansi color codes
-    return re.compile('(\s*)$', re.MULTILINE).sub('', re.sub('\033\[\d+m', '', strip_comments(x)).strip())
+    return re.compile('(\s*)$', re.MULTILINE).sub('', remove_color(strip_comments(x))).strip()
 
 
 def run(code, out=None):

@@ -5,7 +5,7 @@ TODO: option for strict number of columns.
 
 import re
 from utils import true
-from IPython.external.path import path
+from path import path
 
 
 class tsv(object):

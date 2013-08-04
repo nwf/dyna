@@ -6,9 +6,8 @@ normalization process.
 
 import re, os, shutil, webbrowser
 from collections import defaultdict
-from utils import dynac, read_anf
+from utils import read_anf, path
 from config import dynahome
-from IPython.external.path import path
 from warnings import warn
 
 try:
@@ -267,6 +266,7 @@ def main(dynafile, browser=True):
         print >> html, '<div id="dopamine-pane" style=""></div>'
         print >> html, '<div id="update-handler-pane" style=""></div>'
 
+        from dynac import dynac
         dynac(dynafile,
               out = d / 'plan',
               anf = d / 'anf',

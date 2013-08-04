@@ -1,7 +1,6 @@
 import re
+from path import path  # used by other modules
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
-from IPython.external.path import path
-from subprocess import Popen, PIPE
 from config import dynahome, dotdynadir
 from collections import namedtuple, defaultdict
 from cStringIO import StringIO
@@ -12,27 +11,6 @@ def groupby(key, data):
     for x in data:
         g[key(x)].append(x)
     return dict(g)
-
-
-# TODO: This is pretty hacking we should have the codegen produce something
-# easier to serialize/modify/unserialize. XREF:parser-state
-def parse_parser_state(parser_state):
-    backchain = set()
-    ruleix = None
-    iaggr = {}
-    other = []
-    for k, v in re.findall('^:-\s*(\S+) (.*?)\s*\.$', parser_state, re.MULTILINE):
-        if k == 'backchain':
-            [(fn, arity)] = re.findall("'(.*?)'/(\d+)", v)
-            backchain.add('%s/%s' % (fn, arity))
-        elif k == 'iaggr':
-            [(fn, arity, agg)] = re.findall("'(.*?)'/(\d+)\s*(.*)", v)
-            iaggr['%s/%s' % (fn, arity)] = agg
-        elif k == 'ruleix':
-            ruleix = int(v)
-        else:
-            other.append((k,v))
-    return backchain, ruleix, iaggr, other
 
 
 def indent(x, indent=''):
@@ -117,41 +95,6 @@ bold = '\033[1m%s\033[0m'
 
 # TODO: use fabulous colors
 #from fabulous.color import red, green, yellow, blue, magenta, cyan, white, bold, underline
-
-
-_comments = re.compile('%.*$', re.MULTILINE)
-def strip_comments(src):
-    return _comments.sub('', src).strip()
-
-
-def dynac(f, out, anf=None, compiler_args=()):
-    """
-    Run compiler on file, ``f``, write results to ``out``. Raises
-    ``DynaCompilerError`` on failure.
-    """
-    from errors import DynaCompilerError
-
-    f = path(f)
-    if not f.exists():
-        raise DynaCompilerError("File '%s' does not exist." % f)
-
-    cmd = ['%s/dist/build/dyna/dyna' % dynahome,
-           '-B', 'python', '-o', out, f]
-
-    if anf is None:
-        cmd += ['--dump-anf=' + out + '.anf']
-    else:
-        cmd += ['--dump-anf=' + anf]
-
-    cmd += compiler_args
-
-    p = Popen(cmd, stdout=PIPE, stderr=PIPE)
-
-    stdout, stderr = p.communicate()
-    if p.returncode:
-        assert not stdout.strip(), [stdout, stderr]
-        stderr = hide_ugly_filename(stderr, lambda m: '\n  %s\n' % span_to_src(m.group(0)))
-        raise DynaCompilerError(stderr, f)
 
 
 def hide_ugly_filename(x, replacement='<repl>'):

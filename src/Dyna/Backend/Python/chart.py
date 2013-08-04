@@ -19,7 +19,7 @@ class Chart(object):
     def set_aggregator(self, agg):
         self.agg_name = agg
         for item in self.intern.values():
-            assert item.value is None   # shouldn't change aggregator when non-null.
+            assert item.value is None, [item, item.value, item.aggregator]   # shouldn't change aggregator when non-null.
             item.aggregator = self.new_aggregator(item)
 
     def __repr__(self):

@@ -1,5 +1,5 @@
 import re
-from IPython.external.path import path
+from utils import path
 
 
 class matrix(object):
