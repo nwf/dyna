@@ -3,6 +3,7 @@
 *.pyc
 *.swp
 *.pyc
+.coverage
 
 *.d   # debugger's output directory.
 
