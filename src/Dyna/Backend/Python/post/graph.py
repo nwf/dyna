@@ -1,6 +1,7 @@
 import pylab as pl
 from matplotlib.animation import FuncAnimation
 from collections import defaultdict
+from stdlib import topython
 
 class graph(object):
     """
@@ -41,10 +42,10 @@ class graph(object):
                 print 'frame', t, 'missing.'
             for item in frame[t]:
                 if item.fn == 'line/2':
-                    [(a,b), (c,d)] = item.args
+                    [(a,b), (c,d)] = map(topython, item.args)
                     ax.plot([a,c], [b,d], color='b', alpha=0.5)
                 elif item.fn == 'text/2':
-                    (s,(x,y)) = item.args
+                    (s,(x,y)) = map(topython, item.args)
                     ax.text(x,y,s)
                 else:
                     print 'dont know how to render', item
