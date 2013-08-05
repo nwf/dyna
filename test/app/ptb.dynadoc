@@ -117,10 +117,9 @@
 | sentence(S) = reverse(s(S, slen(S))).
 |
 | goal(S) max= phrase(S, "ROOT", 0, length(sentence(S))).
-| parse(S) = path(S, "ROOT", 0, length(sentence(S))).
+| parse(S) := path(S, "ROOT", 0, length(sentence(S))).
 
   *ignore*
-
 
 % very inefficient way to format trees (not required, just fun to see that we
 % can do it).
@@ -134,7 +133,8 @@
 %| tostring([X,Y,Z]) := "(" + tostring(X) + " " + tostring(Y) + " " + tostring(Z) + ")".
 
 % collect errors
-%> errors(S) = [tostring(parse(S)), tostring(b(tree(S)))] for parse(S) != b(tree(S)).
+%> errors(S) = parse(S) != b(tree(S)) for tree(S).
+%
 %  *ignore*
 
 % report accuracy
@@ -144,12 +144,15 @@
 
 Changes
 =======
-accuracy = 0.9130434782608695.
-correct = 21.0.
+accuracy = 0.9565217391304348.
+correct = 22.0.
 ntrees = 23.
 
-% inspect errors
-%> query errors(S)
+% inspect errors -- can't get null parses.
+
+%> vquery parse(X)
+
+% query errors(X)
 %errors(12) = ["(ROOT (S (NP Laura) (VP (VP (V (V say) -s) (SBAR that (S (NP George) (VP (Modal might) (VP (V sleep)))))) (PP (P on) (NP (Det the) (N floor))))) !)", "(ROOT (S (NP Laura) (VP (V (V say) -s) (SBAR that (S (NP George) (VP (VP (Modal might) (VP (V sleep))) (PP (P on) (NP (Det the) (N floor)))))))) !)"].
 %errors(21) = ["(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))))) (@VP and (VP (VP (V (V sleep) -ed)) (PP (P on) (NP (Det the) (N floor))))))) .)", "(ROOT (S (NP (NP (Det the) (N (Adj (Adj fine) (@Adj and (Adj blue))) (N woman))) (@NP and (NP (Det every) (N man)))) (VP (VP (Modal must) (VP (V have) (VP (VP (V (V eat) -ed) (NP (Det two) (N (N sandwich) -s))) (@VP and (VP (V (V sleep) -ed)))))) (PP (P on) (NP (Det the) (N floor))))) .)"].
 

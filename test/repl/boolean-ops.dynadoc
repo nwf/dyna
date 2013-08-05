@@ -24,3 +24,35 @@ y = "yes".
 > query f(X) == true
 
 f("bool") == true = true.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Type errors
+
+> x1 := "a" & true.
+| x2 := true & "a".
+
+>>> 2 new errors. Type `sol` for details.
+
+> y1 := "a" | true.
+| y2 := true | "a".
+
+>>> 2 new errors. Type `sol` for details.
+
+> zzz := !"a".
+
+>>> 1 new errors. Type `sol` for details.
+
+
+
+% correct behavior
+
+> xx := true & true.
+| yy := false | true.
+| zz := !(!xx).
+
+Changes
+=======
+xx = true.
+yy = true.
+zz = true.

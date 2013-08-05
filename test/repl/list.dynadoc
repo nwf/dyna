@@ -168,3 +168,16 @@ foobar([1, 3]) = true.
 foobar([]) = true.
 foobar(a,b) = true.
 foobar(a,c) = true.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Errors
+
+> xxx = 1 for X in 1234.
+
+>>> 1 new errors. Type `sol` for details.
+
+> xxx = 1 in 1234.
+
+>>> 1 new errors. Type `sol` for details.

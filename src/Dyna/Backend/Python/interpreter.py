@@ -43,7 +43,7 @@ class Rule(object):
             return 1
 
     def __repr__(self):
-        return 'Rule(%s, %r)' % (self.index, self.src)
+        return '%3s: %s' % (self.index, self.src)
 
     def render_ctx(self, ctx, indent=''):
         # TODO: highlight expression which caused the error.
@@ -51,11 +51,11 @@ class Rule(object):
         c = Crux(head=None, rule=self, body=None, vs = ctx)
         return '\n'.join(indent + line for line in c.format())
 
-    def debug(self):
-        import debug
-        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
-            f.write(self.src)
-        debug.main(f.name)
+#    def debug(self):
+#        import debug
+#        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
+#            f.write(self.src)
+#        debug.main(f.name)
 
 
 # TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
@@ -169,8 +169,6 @@ class Interpreter(object):
         Handle popping `item`: fold `item`'s aggregator to get it's new value
         (handle errors), propagate changes to the rest of the circuit.
         """
-        if item.aggregator is None:
-            return item
         try:
             # compute item's new value
             now = item.aggregator.fold()
@@ -279,14 +277,25 @@ class Interpreter(object):
                 e.traceback = traceback.format_exc()
                 errors.append((e, handler))
 
+        if hasattr(self, 'was') and self.was:
+            was = self.was
+            if item in was:
+                if item.value != was[item]:
+                    item.value = was[item]
+
         if errors:
+            e = Error()
+            self.push(item, e, delete=False)
+
+            # Force value to error, since aggregator might ignore it. This is
+            # not correct XREF:agg-error
+            self.replace(item, e)
             self.set_error(item, (None, errors))
-            return Error()
-
-        for e in emits:
-            self.emit(*e)
-
-        return self.pop(item)
+            return e
+        else:
+            for e in emits:
+                self.emit(*e)
+            return self.pop(item)
 
     def load_plan(self, filename):
         """
@@ -406,8 +415,6 @@ class Interpreter(object):
             del self.error[x]
 
     def set_error(self, x, e):
-        if not e:
-            self.clear_error(x)
         self.error[x] = e
 
     #___________________________________________________________________________
@@ -422,7 +429,7 @@ class Interpreter(object):
                 head_fn = '%s/%d' % (ys[0], len(ys) - 1)
                 break
         else:
-            assert False, 'did not find head'
+            raise AssertionError('Did not find head.')
 
         self.rules[index] = rule = Rule(index)
         rule.span = hide_ugly_filename(span)
@@ -458,7 +465,7 @@ class Interpreter(object):
                 self.recompute_gbc_memo(head_fn)
 
         else:
-            assert False, "Can't add rule with out an initializer or query handler."
+            raise AssertionError("Can't add rule with out an initializer or query handler.")
 
         if True:
             args = (index,
@@ -522,6 +529,7 @@ class Interpreter(object):
                 self.uninitialized_rules.remove(rule)
 
         else:
+
             # Backchained rule --
             # remove query handler
             self._gbc[rule.head_fn].remove(rule.query)
@@ -544,8 +552,8 @@ class Interpreter(object):
         if not self.rule_by_head[rule.head_fn]:
             if rule.head_fn in self.chart:
                 self.chart[rule.head_fn].set_aggregator(None)
-            if rule.head_fn in self.agg_name:
-                del self.agg_name[rule.head_fn]
+            #if rule.head_fn in self.agg_name: rule can't exist with out an aggregator
+            del self.agg_name[rule.head_fn]
 
         return self.changed
 
@@ -554,15 +562,29 @@ class Interpreter(object):
         if visited is None:
             visited = set()
 
-        if fn not in self._gbc or fn in visited:
+        if fn not in self.bc or fn in visited:
             # don't refresh non-BC computation. Also, be careful not to get
             # stuck in an infinite loop if there is a cycle in the dep graph
             return
 
         visited.add(fn)
 
+        # YUCK: find some was to avoid this...
+        self.was = {x: x.value for x in self.chart[fn].intern.values()}
+
         for x in self.chart[fn].intern.values():
-            self.force_gbc(x)
+            x.value = None       # avoid memo
+
+        for x in self.chart[fn].intern.values():
+            now = self.force_gbc(x)
+
+            if now != self.was[x]:
+                self.changed[x] = now
+            else:
+                if x in self.changed:
+                    del self.changed[x]
+
+        self.was = None
 
         # recompute dependent BC memos
         for v in self.coarse_deps[fn]:
@@ -723,9 +745,9 @@ class Interpreter(object):
         for i in sorted(self.rules):
             rule = self.rules[i]
             if rule.init is not None and not rule.initialized:
-                print '%3s: %s  <-- uninitialized' % (i, rule.src)
+                print '%s  <-- uninitialized' % rule
             else:
-                print '%3s: %s' % (i, rule.src)
+                print rule
         print
 
 

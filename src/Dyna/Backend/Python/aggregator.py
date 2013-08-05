@@ -151,24 +151,19 @@ class or_equals(BAggregator):
                     raise TypeError('%s is not Boolean.' % _repr(val))
             # TODO: can short circuit as soon as we get a true... but above we
             # check the types.. so we don't get the benefit.
-            for val in s:
-                if val is true:
-                    return true
-            return false
+            return todyna(any(s))
 
 
 class colon_dash(BAggregator):
     def fold(self):
         s = [x for x, m in self.iteritems() if m > 0]
+        for val in s:
+            if val is not true:
+                raise TypeError('%s is not true.' % _repr(val))
+        # TODO: can short circuit as soon as we get a true... but above we check
+        # the types.. so we don't get the benefit.
         if len(s):
-            for val in s:
-                if val is not true:
-                    raise TypeError('%s is not true.' % _repr(val))
-            # TODO: can short circuit as soon as we get a true... but above we
-            # check the types.. so we don't get the benefit.
-            for val in s:
-                if val is true:
-                    return true
+            return true
 
 
 class and_equals(BAggregator):

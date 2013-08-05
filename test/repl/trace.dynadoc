@@ -70,6 +70,18 @@ b = 3
                   |
                   └─ continue as before (shared structure)
 
+
+
+> trace b --limit=1
+
+b = 3
+|
+└─ := 3
+   b := f(3)=3.
+   |
+   └─ *max depth*
+
+
 > :- backchain foo/1.
 | :- backchain bar/2.
 | foo(X) = X+1.
