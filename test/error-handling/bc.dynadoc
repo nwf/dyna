@@ -1,0 +1,32 @@
+> :- backchain a/0.
+| a += 1/0.
+| b = a.
+
+Changes
+=======
+b = $error.
+>>> 1 new errors. Type `sol` for details.
+
+> rules
+
+Rules
+=====
+  0: a += 1/0.
+  1: b = a.
+
+> retract_rule 0
+
+Changes
+=======
+b = null.
+
+>>> 1 errors cleared.
+
+> sol
+
+Solution empty.
+
+%
+%> a = &foo.
+%
+%> sol
