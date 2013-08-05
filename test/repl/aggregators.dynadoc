@@ -1,0 +1,94 @@
+> a majority= 1.
+| a majority= 1.
+| a majority= 1.
+| a majority= 2.
+| a majority= 2.
+
+Changes
+=======
+a = 1.
+
+%> rules
+%Rules
+%=====
+%  0: a majority= 1.
+%  1: a majority= 1.
+%  2: a majority= 1.
+%  3: a majority= 2.
+%  4: a majority= 2.
+
+
+% ties are broken arbitrarily
+> retract_rule 0
+> retract_rule 1
+
+Changes
+=======
+a = 2.
+
+% retract remaining rules to make sure the aggregator goes null
+> retract_rule 2
+> retract_rule 3
+> retract_rule 4
+
+Changes
+=======
+a = null.
+
+
+> a mean= 1.
+| a mean= 2.
+| a mean= 3.
+
+Changes
+=======
+a = 2.0.
+
+%> rules
+%
+%Rules
+%=====
+%  5: a mean= 1.
+%  6: a mean= 2.
+%  7: a mean= 3.
+
+> retract_rule 5
+
+Changes
+=======
+a = 2.5.
+
+> retract_rule 6
+
+Changes
+=======
+a = 3.0.
+
+> retract_rule 7
+
+Changes
+=======
+a = null.
+
+
+
+% A few simple tests for `*=`
+
+> a *= 3.
+| a *= 3.
+
+Changes
+=======
+a = 9.
+
+> retract_rule 8
+
+Changes
+=======
+a = 3.
+
+> retract_rule 9
+
+Changes
+=======
+a = null.

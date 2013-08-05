@@ -377,6 +377,7 @@ class Interpreter(object):
     def run_uninitialized(self):
         q = set(self.uninitialized_rules)
         failed = []
+        # run to fixed point
         while q:
             rule = q.pop()
             try:
@@ -533,7 +534,7 @@ class Interpreter(object):
             if isinstance(item, Rule):
                 continue
             (v, es) = x
-            self.error[item] = (v, [(e, h) for e, h in es if h is None or h.rule.index == rule.index])
+            self.error[item] = (v, [(e, h) for e, h in es if h is None or h.rule == rule])
 
         self.recompute_coarse()
 
@@ -577,10 +578,7 @@ class Interpreter(object):
     # Communication with Dyna compiler
 
     def dynac(self, filename):
-        """
-        Compile a file full of dyna code. Note: this routine does not pass along
-        parser_state.
-        """
+        "Compile a string of dyna code."
         return self.compiler.dynac(filename)
 
     def dynac_code(self, code):
@@ -660,7 +658,7 @@ class Interpreter(object):
                 print >> out
 
         # errors pertaining to rules
-        for r in sorted(E, key=lambda r: r.index):
+        for r in sorted(E):
             print >> out, 'Error(s) in rule %s:' % r.index, r.span
             print >> out
             for line in r.src.split('\n'):
@@ -692,7 +690,7 @@ class Interpreter(object):
         if self.uninitialized_rules:
             print >> out, red % 'Uninitialized rules'
             print >> out, red % '==================='
-            for rule in sorted(self.uninitialized_rules, key=lambda r: r.index):
+            for rule in sorted(self.uninitialized_rules):
                 e = self.error[rule]
                 print >> out, 'Failed to initialize rule:'
                 print >> out, '   ', rule.src
@@ -704,7 +702,7 @@ class Interpreter(object):
         if self.recompile:
             print >> out, red % 'Failed to recompile'
             print >> out, red % '==================='
-            for rule in sorted(self.recompile, key=lambda r: r.index):
+            for rule in sorted(self.recompile):
                 e = self.error[rule]
                 print >> out, 'Failed to recompile rule:'
                 print >> out, '   ', rule.src

@@ -531,7 +531,7 @@ class REPL(cmd.Cmd, object):
         """
 
         if not q.strip():
-            print 'No query specified. Type `help trace` for usage information.'
+            print 'No query specified. Type `help trace` for usage.'
             return
 
         if q.endswith('.'):

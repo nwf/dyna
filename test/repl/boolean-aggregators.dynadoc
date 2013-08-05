@@ -36,6 +36,18 @@ e = $error.
 
 >>> 1 new errors. Type `sol` for details.
 
+> sol
+
+Solution
+========
+e = $error.
+
+Errors
+======
+Error(s) aggregating e/0:
+  TypeError:
+    `e`: false is not true.
+
 
 > e :- true.
 
@@ -136,3 +148,34 @@ f/2
 ===
 f(1,2).
 f(2,2).
+
+
+% type checking for `|=`
+
+> foo |= 10.
+
+Changes
+=======
+foo = $error.
+>>> 1 new errors. Type `sol` for details.
+
+
+> goo &= true.
+
+Changes
+=======
+goo = true.
+
+> goo &= false.
+
+Changes
+=======
+goo = false.
+
+
+> goo &= 10.
+
+Changes
+=======
+goo = $error.
+>>> 1 new errors. Type `sol` for details.

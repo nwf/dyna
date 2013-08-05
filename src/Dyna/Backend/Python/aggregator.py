@@ -23,13 +23,13 @@ class NoAggregatorError(Exception):
 
 class Aggregator(object):
     def fold(self):
-        raise AggregatorError("item doesn't have an aggregator.")
+        raise NotImplementedError('')
     def inc(self, _val, _ruleix, _variables):
-        pass
+        raise NotImplementedError('')
     def dec(self, _val, _ruleix, _variables):
-        pass
+        raise NotImplementedError('')
     def clear(self):
-        pass
+        raise NotImplementedError('')
 
 
 NoAggregator = Aggregator()
@@ -43,7 +43,7 @@ class BAggregator(Counter, Aggregator):
     def dec(self, val, _ruleix, _variables):
         self[val] -= 1
     def fromkeys(self, *_):
-        assert False, "This method should never be called."
+        raise NotImplementedError("This method should never be called.")
     def empty(self):
         return not any(m > 0 for m in self.itervalues())
 
@@ -100,7 +100,7 @@ class DictEquals(BAggregator):
 
 class majority_equals(BAggregator):
     def fold(self):
-        [(k,c)] = self.most_common(1)
+        [(k,c)] = self.most_common(1)   # how are ties handled?
         if c > 0:
             return k
 

@@ -1,0 +1,121 @@
+> rules
+
+No rules found.
+
+> a += 1.
+
+Changes
+=======
+a = 1.
+
+> rules
+
+Rules
+=====
+  0: a += 1.
+
+> a += 1
+
+ERROR: Line doesn't end with period.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Retract rule
+
+> retract_rule asdf
+
+Please specify an integer. Type `help retract_rule` to read more.
+
+> retract_rule 1000
+
+Rule 1000 not found.
+List available by typing `rules`
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Query
+
+> query
+
+No query specified. Type `help query` for usage.
+
+> query a.
+
+Queries don't end with a dot.
+
+> query a
+
+a = 1.
+
+%%% TODO: a query with an error > query a/0
+
+> query xxxx
+
+No results.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% vquery
+
+> vquery
+
+No query specified. Type `help query` for usage.
+
+> vquery a.
+
+Queries don't end with a dot.
+
+> vquery a
+
+1 where {}
+
+> vquery xxxx
+
+No results.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% trace
+
+> trace
+
+No query specified. Type `help trace` for usage.
+
+> trace a.
+
+Queries don't end with a dot.
+
+> trace xxxx
+
+no items matching `xxxx`.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Help
+
+> help query
+
+      Query solution.
+
+        Consider the following example;
+          > f(1) := 1.
+          > f(2) := 4.
+
+        There a few versions of query:
+
+         - `vquery` shows variable bindings
+            > vquery f(X)
+            1 where {X=1}
+            4 where {X=1}
+
+         - `query` shows variable bindings applied to query
+            > query f(X)
+            f(1) = 1.
+            f(2) = 4.
+
+         - `trace` is an introspection tool for visualizing the derivation of an
+           item and its value. Type `help trace` for more information.
+
+> help vquery
+
+See query.

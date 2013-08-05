@@ -12,8 +12,8 @@ class Term(object):
         self.value = None
         self.aggregator = None
 
-    def __eq__(self, other):
-        return self is other
+#    def __eq__(self, other):
+#        return self is other
 
     def __cmp__(self, other):
         if self is other:
@@ -75,8 +75,8 @@ class Cons(NoIntern, Term):
             else:
                 yield a, (None,), a
 
-    def __iter__(self):
-        return iter(self.aslist)
+#    def __iter__(self):
+#        return iter(self.aslist)
 
 
 class Error(NoIntern, Term):
@@ -97,8 +97,8 @@ class _Nil(Term):
     def like_chart(self):
         return iter([])
 
-    def __iter__(self):
-        return iter([])
+#    def __iter__(self):
+#        return iter([])
 
 
 Nil = _Nil()

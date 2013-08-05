@@ -29,13 +29,13 @@ class Chart(object):
 
         heading = [self.name, '='*len(self.name)]
 
-        # special handing or-equals aggregators -- only list true facts (and errors)
+        # special handing `:-` aggregator -- only list true facts (and errors)
         if self.agg_name == ':-':
             lines = []
             for term in sorted(rows):
                 if term.value is true:
                     lines.append('%s.' % _repr(term))
-                elif term.value:  # e.g. $error
+                else:                                           # e.g. $error
                     lines.append('%s = %s.' % (_repr(term), _repr(term.value)))
             if self.arity != 0:
                 lines = heading + lines # heading

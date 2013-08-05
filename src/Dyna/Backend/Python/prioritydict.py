@@ -33,28 +33,20 @@ class prioritydict(dict):
         self._heap = [(v, k) for k, v in self.iteritems()]
         heapify(self._heap)
 
-    def smallest(self):
-        """
-        Return the item with the lowest priority.
-
-        Raises IndexError if the object is empty.
-        """
-        heap = self._heap
-        v, k = heap[0]
-        while k not in self or self[k] != v:
-            heappop(heap)
-            v, k = heap[0]
-        return k
-
     def pop_smallest(self):
         """
         Return the item with the lowest priority and remove it.
 
         Raises IndexError if the object is empty.
         """
+
+        # Implementation note: Since we don't eagerly remove an element when
+        # it's priority changes, we need to filter our pops to make sure the
+        # priority isn't stale.
+
         heap = self._heap
         v, k = heappop(heap)
-        while k not in self or self[k] != v:
+        while k not in self or self[k] != v:   # while `k` is stale
             v, k = heappop(heap)
         del self[k]
         return k
