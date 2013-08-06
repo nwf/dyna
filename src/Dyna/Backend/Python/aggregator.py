@@ -95,7 +95,7 @@ class DictEquals(BAggregator):
 
     def fold(self):
         if not self.empty():
-            return todyna([b + (('$val', v),) for (v, b), cnt in self.iteritems() if cnt > 0])
+            return todyna([dict(b + (('$val', val),)) for (val, b), cnt in self.iteritems() if cnt > 0])
 
 
 class majority_equals(BAggregator):
