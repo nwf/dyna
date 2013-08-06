@@ -1,6 +1,5 @@
-import readline, sys
+import sys
 from IPython.core.ultratb import VerboseTB
-from utils import parse_attrs
 from config import dotdynadir
 
 

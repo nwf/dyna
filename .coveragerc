@@ -2,6 +2,12 @@
 [run]
 branch = True
 
+omit =
+    src/Dyna/Backend/Python/external/*
+#    src/Dyna/Backend/Python/post/*
+#    src/Dyna/Backend/Python/load/*
+#    src/Dyna/Backend/Python/debug.py
+
 [report]
 # Regexes for lines to exclude from consideration
 exclude_lines =
@@ -19,6 +25,7 @@ exclude_lines =
     # Don't complain if non-runnable code isn't run:
     if 0:
     if __name__ == .__main__.:
+
 
 ignore_errors = True
 

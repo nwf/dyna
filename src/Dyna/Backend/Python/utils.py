@@ -252,22 +252,13 @@ def read_anf(e):
         yield ANF.read(span, int(ruleix), x)
 
 
-def parse_attrs(fn):
-    attrs = dict(re.findall('\s*(\S+):\s*(.*)\s*\n', fn.__doc__.strip()))
-    if 'Span' in attrs:
-        attrs['rule'] = span_to_src(attrs['Span']).strip()
-    return attrs
-
-
 def span_to_src(span, src=None):
     """
     Utility for retrieving source code for Parsec error message (there is
     nothing specific about rules)
     """
-    try:
-        [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
-    except ValueError:
-        return span
+
+    [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
 
     (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
 

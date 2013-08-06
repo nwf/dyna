@@ -1,12 +1,14 @@
-import re as _re
+import re
 from utils import get_module
 
 available = 'trace', 'dump_solution', 'draw_circuit', 'graph', 'save', 'draw'
 
 def run(interp, line):
 
+    line = line.strip()
+
     try:
-        [(module, args)] = _re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line.strip())
+        [(module, args)] = re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line)
     except ValueError:
         print 'Error: failed to parse post command.'
         print '    %s' % line
@@ -18,4 +20,9 @@ def run(interp, line):
         return
 
     m = get_module('post', module)(interp)
-    eval('m.main(%s)' % args)
+
+    try:
+        exec 'm.main(%s)' % args
+    except SyntaxError as e:
+        print 'Syntax error: %s' % e
+        return

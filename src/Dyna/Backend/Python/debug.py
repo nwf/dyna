@@ -234,16 +234,16 @@ def main(dynafile, browser=True):
 
     dynafile = path(dynafile)
 
-    if not os.path.exists(cssfile) or not os.path.exists(jsfile):
-        print 'Debug must be run from the root of the Dyna source tree.'
-        return
+#    if not os.path.exists(cssfile) or not os.path.exists(jsfile):
+#        print 'Debug must be run from the root of the Dyna source tree.'
+#       return
 
     d = dynafile + '.d'
     d.mkdir_p()
 
     # XXX: this is sort of silly
-    shutil.copyfile(cssfile, d + '/debug-pygments.css')
-    shutil.copyfile(jsfile, d + '/prototype.js')
+    #shutil.copyfile(cssfile, d + '/debug-pygments.css')
+    #shutil.copyfile(jsfile, d + '/prototype.js')
 
     with file(d / 'index.html', 'wb') as html:
 
@@ -300,14 +300,14 @@ def main(dynafile, browser=True):
         with file(d + '/dopupd') as f:
             code = f.read()
             print >> html, '<h2>Update plans</h2>'
-            for (f, bline, _bcol, _eline, _ecol, kv, block) in re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
-                # [fa] = re.findall('fa=([^ ]*)', kv)
-                print >> html, """<div class="dopamine-%s"><pre>Update %s\n%s</pre></div>""" % (bline, kv, block)
+            for (ruleix, x, block) in re.findall(';; .*? ruleix=(\d+) (.*)\n([\w\W]+?)(?=;;)', code):
+                print >> html, '<div class="dopamine-%s"><h3>Update %s</h3><pre>%s</pre></div>' % (ruleix, x, block.strip())
+
         with file(d + '/dopini') as f:
             code = f.read()
             print >> html, '<h2>Initialization plans</h2>'
-            for (f, bline, _bcol, _eline, _ecol, kv, block) in re.findall(';; (.*?):(\d+):(\d+)-.*?:(\d+):(\d+) (.*)\n((?: [^\n]*\n)*)', code):
-                print >> html, """<div class="dopamine-%s"><pre>Initializer:\n%s</pre></div>""" % (bline, block)
+            for (ruleix, block) in re.findall(';; .*? ruleix=(\d+) .*\n([\w\W]+?)(?=;;)', code):
+                print >> html, '<div class="dopamine-%s"><h3>Initializer</h3><pre>%s</pre></div>' % (ruleix, block.strip())
 
         # ----------------
         # Python code
@@ -350,20 +350,16 @@ html, body {margin:0; padding:0; width: 5000px;}
 #dopamine-pane { width: 500px; }
 #update-handler-pane { width: 500px; }
 
-#dyna-source, #circuit-pane, #dopamine-pane {
-  border-right: 1px solid #666
-}
-
 h2 { margin-top: 40px; }
 a { cursor: pointer; }
-svg { width: 95%; height: 97%; }
+svg { width: 700px; }
 body { background: black; color: white; }
 
 </style>
 
-<link rel="stylesheet" href="debug-pygments.css">
+<link rel="stylesheet" href="%s">
 
-<script type="text/javascript" language="javascript" src="prototype.js"></script>
+<script type="text/javascript" language="javascript" src="%s"></script>
 
 <script type="text/javascript" language="javascript">
 function selectline(lineno) {
@@ -378,7 +374,9 @@ function selectline(lineno) {
 </script>
 
 </head>
-"""
+""" % ((dynahome / 'src/Dyna/Backend/Python/external/debug-pygments.css').abspath(),
+       (dynahome / 'src/Dyna/Backend/Python/external/prototype-1.6.0.3.js').abspath())
+
 
 if __name__ == '__main__':
 
