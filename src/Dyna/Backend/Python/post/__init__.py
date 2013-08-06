@@ -1,5 +1,5 @@
 import re
-from utils import get_module
+from utils import get_module, true, false, null
 
 available = 'trace', 'dump_solution', 'draw_circuit', 'graph', 'save', 'draw'
 

@@ -1,0 +1,20 @@
+> a :- b.
+| b :- c.
+| b :- d.
+| c.
+
+Changes
+=======
+a = true.
+b = true.
+c = true.
+
+> post draw_circuit("circuit.html", open=false)
+
+> post dump_solution()
+
+Solution
+========
+a.
+b.
+c.

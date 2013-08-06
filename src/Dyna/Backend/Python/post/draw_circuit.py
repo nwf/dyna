@@ -116,14 +116,14 @@ class draw_circuit(object):
                 if cls == 'edge':
                     # split on arrow ->
                     u, v = x.split('&#45;&gt;')
-                    print 'edge:', i, u, v
+#                    print 'edge:', i, u, v
                 else:
                     if x in E:
-                        print 'crux', i, x,
+#                        print 'crux', i, x,
                         rule = interp.rules[int(E[x].label)]
                         x = '%s   %% rule %s' % (rule.src, rule.index)
-                    else:
-                        print 'node:', i, x
+#                    else:
+#                        print 'node:', i, x
 
                 return '<g id="%s" class="%s"><title>%s</title>%s</g>' % (i, cls, x, q)
 

@@ -4,7 +4,7 @@ Generates a visual representation of a Dyna program's rules after the
 normalization process.
 """
 
-import re, os, shutil, webbrowser
+import re, os, webbrowser
 from collections import defaultdict
 from utils import read_anf, path
 from config import dynahome
@@ -35,9 +35,6 @@ else:
         pretty = re.sub('--', '%', pretty)
         return pretty, offset
 
-
-cssfile = dynahome / 'src' / 'Dyna' / 'Backend' / 'Python' / 'debug-pygments.css'
-jsfile = dynahome / 'external' / 'prototype-1.6.0.3.js'
 
 class Edge(object):
     def __init__(self, head, label, body):
@@ -234,16 +231,8 @@ def main(dynafile, browser=True):
 
     dynafile = path(dynafile)
 
-#    if not os.path.exists(cssfile) or not os.path.exists(jsfile):
-#        print 'Debug must be run from the root of the Dyna source tree.'
-#       return
-
     d = dynafile + '.d'
     d.mkdir_p()
-
-    # XXX: this is sort of silly
-    #shutil.copyfile(cssfile, d + '/debug-pygments.css')
-    #shutil.copyfile(jsfile, d + '/prototype.js')
 
     with file(d / 'index.html', 'wb') as html:
 
