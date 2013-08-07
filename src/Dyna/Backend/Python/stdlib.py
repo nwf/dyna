@@ -1,7 +1,7 @@
 import re, os
 from term import Term, Cons, Nil, MapsTo
 from collections import Counter
-from utils import pretty, pretty_print, true, false, null, isbool
+from utils import true, false, null, isbool
 from math import log, exp, sqrt
 from random import random as _random
 from glob import glob

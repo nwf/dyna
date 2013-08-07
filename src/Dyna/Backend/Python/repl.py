@@ -347,15 +347,12 @@ class REPL(cmd.Cmd, object):
             if len(mod) == 2:
                 [cmd, sub] = mod
                 if cmd in ('load', 'post'):
-                    try:
-                        m = get_module(cmd, sub)
+                    m = get_module(cmd, sub)
+                    if m:
                         print m.__doc__
-                    except (ImportError, KeyError, AttributeError):
-                        print 'No help available for "%s %s"' % (cmd, sub)
-                        return
                     else:
-                        return
-        print 'Error: Did not understand help command.'
+                        print 'No help available for "%s %s"' % (cmd, sub)
+                    return
 
     def do_load(self, line):
         """

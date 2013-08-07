@@ -1,5 +1,6 @@
 import pylab as pl
 from collections import defaultdict
+from stdlib import topython
 
 class draw(object):
     """
@@ -46,24 +47,26 @@ class draw(object):
             for item in frame[t]:
                 fn = item. fn
 
+                args = map(topython, item.args)
+
                 if fn == 'title/1':
-                    [title] = item.args
+                    [title] = args
                     ax.set_title(title)
 
                 elif fn == 'xlim/2':
-                    [a,b] = item.args
+                    [a,b] = args
                     ax.set_xlim(a,b)
 
                 elif fn == 'ylim/2':
-                    [a,b] = item.args
+                    [a,b] = args
                     ax.set_ylim(a,b)
 
                 elif fn == 'line/2':
-                    [(a,b), (c,d)] = item.args
+                    [(a,b), (c,d)] = args
                     ax.plot([a,c], [b,d], color='b', alpha=0.5)
 
                 elif fn == 'text/2':
-                    (s,(x,y)) = item.args
+                    (s,(x,y)) = args
                     ax.text(x,y,s)
 
                 else:

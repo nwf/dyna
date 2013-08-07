@@ -12,7 +12,7 @@ class tsv(object):
     """
     Load tab-delimited files.
 
-    > load row = tsv("test/repl/english.gr")
+    > load row = tsv("test/repl/data/english.gr")
     > sol
     row/4
     =====
@@ -55,10 +55,5 @@ class tsv(object):
         with file(filename) as f:
             for i, line in enumerate(f):
                 line = line.rstrip()
-                if not line:
-                    continue
-                if delim is not None:
-                    line = re.split(delim, line)
-                else:
-                    line = [line]
+                line = re.split(delim, line)
                 term([i] + line)

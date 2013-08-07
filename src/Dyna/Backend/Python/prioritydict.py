@@ -1,5 +1,6 @@
 from heapq import heapify, heappush, heappop
 
+
 class prioritydict(dict):
     """Dictionary that can be used as a priority queue.
 

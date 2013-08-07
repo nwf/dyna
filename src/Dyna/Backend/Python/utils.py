@@ -149,17 +149,17 @@ def subst(term, v):
 #        raise KeyboardInterrupt
 
 
-class ddict(dict):
-    """
-    Default Dict where the default function gets the key as an argument, unlike
-    collections.defaultdict.
-    """
-    def __init__(self, f):
-        self.f = f
-        super(ddict, self).__init__()
-    def __missing__(self, x):
-        self[x] = y = self.f(x)
-        return y
+#class ddict(dict):
+#    """
+#    Default Dict where the default function gets the key as an argument, unlike
+#    collections.defaultdict.
+#    """
+#    def __init__(self, f):
+#        self.f = f
+#        super(ddict, self).__init__()
+#    def __missing__(self, x):
+#        self[x] = y = self.f(x)
+#        return y
 
 
 def parse_sexpr(e):
@@ -192,35 +192,35 @@ def parse_sexpr(e):
     return es
 
 
-def pretty_print(t):
-    print pretty(t)
-
-def pretty(t, initialindent=0):
-    "Pretty print tree as a tabbified s-expression."
-    f = StringIO()
-    out = f.write
-    def pp(t, indent=initialindent, indentme=True):
-        if indentme:
-            out(' '*indent)
-        if isinstance(t, basestring):                    # base case
-            return out('%s' % t)
-        if len(t) == 1:
-            if t[0]:
-                pp('%s' % t[0], indent, indentme)
-            return
-        label, children = t[0], t[1:]
-        label = '%s' % label
-        assert isinstance(label, basestring)
-        out('(%s ' % label)
-        n = len(children)
-        for i, child in enumerate(children):
-            pp(child, indent + len(label) + 2, i != 0)   # first child already indented
-            if i != n-1:                                 # no newline after last child
-                out('\n')
-        out(')')
-    pp(t)
-    out('\n')
-    return f.getvalue()
+#def pretty_print(t):
+#    print pretty(t)
+#
+#def pretty(t, initialindent=0):
+#    "Pretty print tree as a tabbified s-expression."
+#    f = StringIO()
+#    out = f.write
+#    def pp(t, indent=initialindent, indentme=True):
+#        if indentme:
+#            out(' '*indent)
+#        if isinstance(t, basestring):                    # base case
+#            return out('%s' % t)
+#        if len(t) == 1:
+#            if t[0]:
+#                pp('%s' % t[0], indent, indentme)
+#            return
+#        label, children = t[0], t[1:]
+#        label = '%s' % label
+#        assert isinstance(label, basestring)
+#        out('(%s ' % label)
+#        n = len(children)
+#        for i, child in enumerate(children):
+#            pp(child, indent + len(label) + 2, i != 0)   # first child already indented
+#            if i != n-1:                                 # no newline after last child
+#                out('\n')
+#        out(')')
+#    pp(t)
+#    out('\n')
+#    return f.getvalue()
 
 
 class ANF(namedtuple('ANF', 'span ruleix agg head evals unifs result')):

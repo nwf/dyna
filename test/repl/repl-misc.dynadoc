@@ -119,3 +119,78 @@ no items matching `xxxx`.
 > help vquery
 
 See query.
+
+
+> help load tsv
+
+Load tab-delimited files.
+    > load row = tsv("test/repl/data/english.gr")
+    > sol
+    row/4
+    =====
+    row(0,"0","S","NP VP")      = true.
+    row(1,"1.58","ROOT","S .")  = true.
+    row(2,"1.58","ROOT","S !")  = true.
+    row(3,"1.58","ROOT","VP !") = true.
+    row(4,"3.81","VP","V")      = true.
+    row(5,"3.81","VP","V NP")   = true.
+    row(6,"1.49","VP","V VP")   = true.
+       ...
+
+> load row = tsv("test/repl/data/english.gr")
+
+  *ignore*
+
+
+> help load doesnotexist
+
+No help available for "load doesnotexist"
+
+
+
+
+
+
+
+% Let's demonstrate what happens with bad filename.
+> load xxx = tsv("path/does/not/exist")
+file `path/does/not/exist` does not exist.
+> load xxx = matrix("path/does/not/exist", astype=str)
+file `path/does/not/exist` does not exist.
+> load xxx = sexpr("path/does/not/exist")
+file `path/does/not/exist` does not exist.
+
+% what if we pass in nonsense
+> load xxx = qweopr/;""
+
+Error: failed to parse load command.
+
+> load xxx = yyy()
+
+did not recognize loader 'yyy'
+
+
+> load xxx = tsv(")
+
+Syntax error: EOL while scanning string literal (<string>, line 1)
+
+
+%"
+
+
+
+% Let's demonstrate what happens with bad filename.
+> post doesnotexist
+
+Error: failed to parse post command.
+
+> post doesnotexist()
+
+did not recognize post-processor 'doesnotexist'
+
+> post draw_circuit(")
+
+Syntax error: EOL while scanning string literal (<string>, line 1)
+
+
+%"

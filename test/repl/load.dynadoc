@@ -18,31 +18,6 @@
 | goal(S) += phrase(S, "ROOT", 0, sentence_length(S)).
 
 
-% Let's demonstrate what happens with bad filename.
-> load xxx = tsv("path/does/not/exist")
-file `path/does/not/exist` does not exist.
-> load xxx = matrix("path/does/not/exist", astype=str)
-file `path/does/not/exist` does not exist.
-> load xxx = sexpr("path/does/not/exist")
-file `path/does/not/exist` does not exist.
-
-% what if we pass in nonsense
-> load xxx = qweopr/;""
-
-Error: failed to parse load command.
-    xxx = qweopr/;""
-
-> load xxx = yyy()
-
-did not recognize loader 'yyy'
-
-
-> load xxx = tsv(")
-
-Syntax error: EOL while scanning string literal (<string>, line 1)
-
-
-
 > load rules_tsv = tsv("test/repl/data/english.gr")
   *ignore*
 > load token = matrix("test/repl/data/english.sen", astype=str)

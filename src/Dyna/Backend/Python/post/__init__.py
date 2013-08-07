@@ -11,7 +11,6 @@ def run(interp, line):
         [(module, args)] = re.findall('([a-z][a-zA-Z_0-9]*)\((.*)\)$', line)
     except ValueError:
         print 'Error: failed to parse post command.'
-        print '    %s' % line
         print
         return
 

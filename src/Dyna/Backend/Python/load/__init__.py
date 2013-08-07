@@ -11,7 +11,6 @@ def run(interp, line):
         [(name, module, args)] = re.findall('^([a-z][a-zA-Z_0-9]*) = ([a-z][a-zA-Z_0-9]*)\((.*)\)', line)
     except ValueError:
         print 'Error: failed to parse load command.'
-        print '    %s' % line
         print
         return
 

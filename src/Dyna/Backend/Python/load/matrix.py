@@ -78,11 +78,6 @@ class matrix(object):
         with file(filename) as f:
             for i, line in enumerate(f):
                 line = line.rstrip()
-                if not line:
-                    continue
-                if delim is not None:
-                    line = re.split(delim, line)
-                else:
-                    line = [line]
+                line = re.split(delim, line)
                 for j, v in enumerate(line):
                     term((i, j), astype(v))

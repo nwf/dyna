@@ -18,3 +18,5 @@ Solution
 a.
 b.
 c.
+
+> post dump_solution("solution.txt")
