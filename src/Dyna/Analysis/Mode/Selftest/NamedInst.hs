@@ -23,6 +23,8 @@ import qualified Data.Map                  as M
 import qualified Data.Maybe                as MA
 import qualified Data.Set                  as S
 import qualified Data.Traversable          as T
+import           Dyna.Analysis.Automata.Class
+import           Dyna.Analysis.Automata.Utilities
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Selftest.Term
@@ -50,10 +52,11 @@ nWFN' n = nWFU n && nAllNotEmpty n
 prop_arbNIX_is_WFU :: QCP.Property
 prop_arbNIX_is_WFU = QCP.forAll (arbNIX UUnique) nWFU
 
--- | Check 'nPrune' using the separate 'arbNIX' generator, rather than
--- the 'Arbitrary' instance, which calls 'nPrune' internally.
+-- | Check 'nMinimize' using the separate 'arbNIX' generator, rather than
+-- the 'Arbitrary' instance, which calls 'nMinimize' internally.
 prop_nPrune_Eq :: QCP.Property
-prop_nPrune_Eq = QCP.forAll (arbNIX UUnique) (\i -> nWFU i QCP.==> i `nEq` (nPrune i))
+prop_nPrune_Eq = QCP.forAll (arbNIX UUnique)
+                            (\i -> nWFU i QCP.==> i `nEq` (nMinimize i))
 
 -- | Check 'nMinimize'
 -- prop_nMinimize_Eq :: Bool -> QCP.Property
@@ -168,3 +171,5 @@ prop_call_test_sufficient i1 i2 = nWFN' i1 && nWFN' i2 && nSub i1 i2
 
 selftest :: TF.Test
 selftest = moreTries 5000 $(testGroupGenerator)
+
+main = TF.defaultMain [selftest]

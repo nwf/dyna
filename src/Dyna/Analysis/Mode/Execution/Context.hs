@@ -104,10 +104,11 @@ data KR f n k =
   | KRKey  k
  deriving (Eq,Ord,Show)
 
-instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
+instance (Show f, PP.Pretty n, PP.Pretty k)
       => PP.Pretty (KR f n k) where
   pretty (KRName n)   = PP.pretty n
-  pretty (KRStruct e) = IP.compactly PP.pretty (either PP.pretty PP.pretty) e
+  pretty (KRStruct e) = IP.compactly (PP.text . show)
+                                     (either PP.pretty PP.pretty) e
   pretty (KRKey k)    = PP.pretty k
 
 type KRI f n k = InstF f (Either n k)
@@ -131,10 +132,10 @@ data VR f n k =
   | VRKey    k
  deriving (Eq,Ord,Show)
 
-instance (PP.Pretty f, PP.Pretty n, PP.Pretty k)
+instance (Show f, PP.Pretty n, PP.Pretty k)
       => PP.Pretty (VR f n k) where
   pretty (VRName n)   = PP.pretty n
-  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+  pretty (VRStruct y) = IP.compactly (PP.text . show) PP.pretty y
   pretty (VRKey k)    = PP.pretty k
 
 -- | Widen from a more restrictive to less restrictive recursion type.
@@ -169,7 +170,7 @@ instance (Monad m) => MonadError UnifFail (SIMCT m f) where
 instance MonadIO m => MonadIO (SIMCT m f) where
   liftIO m = SIMCT $ lift (liftIO m)
 
-instance (PP.Pretty f) => PP.Pretty (SIMCtx f) where
+instance (Show f, Ord f) => PP.Pretty (SIMCtx f) where
   pretty (SIMCtx _ km vm) =
     PP.vcat
     [ PP.text "Unaliased variables:"

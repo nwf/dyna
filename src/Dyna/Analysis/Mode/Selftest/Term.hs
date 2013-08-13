@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Dyna.Analysis.Mode.Selftest.Term where
@@ -17,12 +18,15 @@ import qualified Data.List                 as L
 import qualified Data.Map                  as M
 import qualified Data.Maybe                as MA
 import qualified Data.Set                  as S
+import           Dyna.Analysis.Automata.Class
+import           Dyna.Analysis.Automata.Utilities
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Test.QuickCheck
 import           Test.SmallCheck           as SC
 import           Test.SmallCheck.Series    as SCS
+import qualified Text.PrettyPrint.Free     as PP
 
 ------------------------------------------------------------------------}}}
 -- Misc                                                                 {{{
@@ -69,6 +73,8 @@ arbUniq u = oneof $ map return [u..]
 data TestFunct = F | G | H
  deriving (Bounded,Enum,Eq,Ord,Show)
 
+instance PP.Pretty TestFunct where pretty = PP.text . show
+
 genArgs :: (Monad m) => m i -> TestFunct -> m [i]
 genArgs _ F = return []
 genArgs g G = g >>= return . (\x -> [x])
@@ -91,6 +97,7 @@ instance Arbitrary TestFunct where arbitrary = arbitraryBoundedEnum
 instance Arbitrary (S.Set TestFunct) where arbitrary = arbitrarySetBEO
 
 -- | Generate an arbitrary, well-formed NIX at some uniqueness.
+arbNIX :: Uniq -> Gen (NIX TestFunct)
 arbNIX rootU = do
     n <- sized (\s -> choose (1::Int,max 1 s)) -- How many plies?
 
@@ -106,12 +113,12 @@ arbNIX rootU = do
     let igen u = oneof $ map (return.snd) $ filter ((== u) . fst)
                        $ (zip uniqs nl ++ spares)
 
-    plies <- mapM (flip arbNIXME igen) uniqs   -- Generate plies or recurse
+    plies <- mapM (flip arbInstPly igen) uniqs   -- Generate plies or recurse
 
     let m = M.fromList (zip nl plies            -- Make the map
-                        ++ map (\(_,i) -> (i,Right IFree)) spares)
-    root <- arbInstPly rootU igen               -- The root
-    return $ NIX root m
+                        ++ map (\(_,i) -> (i,IFree)) spares)
+    root <- choose (1,n)
+    return $ nFromMap m root
  where
   arbInstPly :: forall i . Uniq -> (Uniq -> Gen i) -> Gen (InstF TestFunct i)
   arbInstPly u n = frequency
@@ -126,21 +133,16 @@ arbNIX rootU = do
                  <*> arbitrary)
     ]
   
-  arbNIXME :: forall f i . (f ~ TestFunct)
-           => Uniq -> (Uniq -> Gen i) -> Gen (Either (NIX f) (InstF f i))
-  arbNIXME u igen = oneof [Left  <$> sized (\s -> resize (s`div`2) (arbNIX u))
-                          ,Right <$> arbInstPly u igen]
-
-
 -- | The not-necessarily-well-formed variant
+arbNIXNWF :: Gen (NIX TestFunct)
 arbNIXNWF = do
     n <- sized (\s -> choose (1::Int,max 1 s)) -- How many plies?
     let nl   = [1..n]
     let igen = choose (1::Int,n)               -- Pick a ply
-    plies <- vectorOf n (arbNIXMENWF igen)     -- Generate plies or recurse
+    plies <- vectorOf n (arbInstPlyNWF igen)   -- Generate plies or recurse
     let m = M.fromList $ zip nl plies          -- Make the map
-    root <- arbInstPlyNWF igen                 -- The root
-    return $ NIX root m
+    root <- choose (1,n)
+    return $ nFromMap m root
  where
   arbInstPlyNWF :: forall i . Gen i -> Gen (InstF TestFunct i)
   arbInstPlyNWF n = frequency
@@ -152,16 +154,11 @@ arbNIXNWF = do
                                  $ genFuncMap arbitrary n)
                 <*> arbitrary)
     ]
-  
-  arbNIXMENWF :: forall f i . (f ~ TestFunct)
-              => Gen i -> Gen (Either (NIX f) (InstF f i))
-  arbNIXMENWF igen = oneof [Left  <$> sized (\s -> resize (s`div`2) arbitrary)
-                        ,Right <$> arbInstPlyNWF igen]
-
 
 instance Arbitrary (NIX TestFunct) where
-  arbitrary = nPrune <$> arbNIX UUnique
+  arbitrary = liftM nMinimize $ arbNIX UUnique
 
+{-
   shrink n@(NIX r m) = (MA.maybeToList noRecN) ++ subautomata
    where
     -- Replace all calls out to other automata with references to the root
@@ -170,7 +167,7 @@ instance Arbitrary (NIX TestFunct) where
 
     -- Pull out all the subautomata
     subautomata = E.lefts (M.elems m)
-
+-}
 
 ------------------------------------------------------------------------}}}
 -- Term: SmallCheck Generators                                          {{{

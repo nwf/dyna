@@ -72,9 +72,9 @@ data VR f n =
   | VRStruct (InstF f (VR f n))
  deriving (Eq,Ord,Show)
 
-instance (PP.Pretty f, PP.Pretty n) => PP.Pretty (VR f n) where
+instance (Show f, PP.Pretty n) => PP.Pretty (VR f n) where
   pretty (VRName n)   = PP.pretty n
-  pretty (VRStruct y) = IP.compactly PP.pretty PP.pretty y
+  pretty (VRStruct y) = IP.compactly (PP.text . show) PP.pretty y
 
 {-
 -- This is used during rule analysis to capture the state of the binding
@@ -108,7 +108,7 @@ instance (Monad m) => MonadError UnifFail (SIMCT m f) where
 instance MonadIO m => MonadIO (SIMCT m f) where
   liftIO m = SIMCT $ lift (liftIO m)
 
-instance (PP.Pretty f) => PP.Pretty (SIMCtx f) where
+instance (Show f, Ord f) => PP.Pretty (SIMCtx f) where
   pretty (SIMCtx vm) = PP.vcat
                      $ flip map (M.toAscList vm)
                      $ \(v,vr) ->        PP.pretty v

@@ -72,17 +72,22 @@ expandV :: (ExpC m f n k, MCVT m DVar ~ VR f n k, MCR m DVar)
 expandV v = clookup v >>= \x ->
             case x of
               VRName n -> return n
-              VRStruct y -> expandY y
+              VRStruct _ -> expandX x
               VRKey k -> clookup k
-                         >>= either return (expandY . q2y)
+                         >>= either return (expandX . VRStruct . q2y)
  where
-  expandY y = nDeep rec y
+  expandX x = nDeep rec x
    where
-    rec (VRName n)    = return (Left n)
-    rec (VRStruct y') = return (Right y')
-    rec (VRKey k)     = do
-      e <- clookup k
-      either (return . Left) (return . Right . q2y) e
+    rec :: (MCR m k, MCVT m k ~ ENKRI f n k, MonadTrans t, Monad (t m))
+        => VR f n k
+        -> Int
+        -> t m (Either n (InstF f (Either a1 (VR f n k))))
+    rec (VRName n)    _ = return (Left n)
+    rec (VRStruct y') _ = return (Right $ fmap Right y')
+    rec (VRKey k)     _ = do
+      e <- lift (clookup k)
+      return $ either Left (Right . fmap Right . q2y) e
+
 
 ------------------------------------------------------------------------}}}
 -- Leq                                                                  {{{

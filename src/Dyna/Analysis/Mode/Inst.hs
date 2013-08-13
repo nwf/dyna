@@ -22,6 +22,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -35,16 +36,15 @@ module Dyna.Analysis.Mode.Inst(
 
 import           Control.Applicative (Applicative)
 import           Control.Lens
--- import           Control.Monad
+import           Control.Monad
 import qualified Data.Foldable            as F
 import qualified Data.Traversable         as T
 import qualified Data.Map                 as M
 import qualified Data.Maybe               as MA
 -- import qualified Data.Set                 as S
+import           Dyna.Analysis.Mode.Uniq
 import           Dyna.XXX.DataUtils       as XDU
 import           Dyna.XXX.MonadUtils
-
-import           Dyna.Analysis.Mode.Uniq
 
 -- import qualified Debug.Trace                       as XT
 
@@ -189,14 +189,11 @@ inIGamma (RA r t) (IBound u ts)  = r == uniqGamma u
 -- | Extract the uniqueness from an inst.
 --
 -- Based on definition 3.2.13, p51 but see prose, p51, \"Note that there is
--- no uniqueness annotation on the free inst\".
+-- no uniqueness annotation on the free inst\".  This is because we assume,
+-- during mode work, that we know where all the free variables are -- that
+-- is, they're either uniquely referenced in some automata or they are
+-- explicitly aliased.
 iUniq :: InstF f i -> Maybe Uniq
-{-
-iUniq IFree          = Nothing
-iUniq (IAny u)       = Just u
-iUniq (IBound u _ _) = Just u
-iUniq (IUniv u)      = Just u
--}
 iUniq = (^? inst_uniq)
 {-# INLINABLE iUniq #-}
 
@@ -366,8 +363,10 @@ type TyILeqGLB_ f m i i' i'' r =
 -- variables).
 
 iLeqGLB_ :: (Monad m, Ord f) => TyILeqGLB_ f m i i' i'' (m (InstF f i''))
-iLeqGLB_ _ r _ _ _ u IFree      x            = T.mapM (r u) x
-iLeqGLB_ l _ _ _ _ u x          IFree        = T.mapM (l u) x
+iLeqGLB_ _ r _ _ _ u IFree      x            = liftM (over inst_uniq (max u))
+                                             $ T.mapM (r u) x
+iLeqGLB_ l _ _ _ _ u x          IFree        = liftM (over inst_uniq (max u))
+                                             $ T.mapM (l u) x
 
 iLeqGLB_ _ _ _ _ _ _ (IAny u)   (IAny u')    = return $ IAny (max u u')
 

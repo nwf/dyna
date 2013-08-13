@@ -265,7 +265,7 @@ pdope_ _ (OPIter v vs _ Det (Just (PDBS c))) = return $ pretty (v^.mv_var)
                                      <+> c v vs
 
 pdope_ _ (OPIter v vs _ DetNon (Just (PDBS c))) = do
-      i <- incState
+      i <- incState id
       return $ "for" <+> "d" <> pretty i
                       <> comma
                       <> piterate vs
@@ -283,7 +283,7 @@ pdope_ _ (OPIter v vs f d   (Just (PDBS c))) = dynacPanic $
 
 -- XXX This works only for the special case at hand (thus the asserts)
 pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc = do
-  dookie <- incState
+  dookie <- incState id
   return $
    assert (iIsFree $ nExpose $ o^.mv_mi) $
    assert (all (not . iIsFree . nExpose . _mv_mi) m) $
@@ -304,7 +304,7 @@ pdope_ bc (OPIter o m f DetSemi Nothing) | (f,length m) `S.member` bc = do
 
 pdope_ bc (OPIter o m f _ Nothing) =
   assert (not $ (f,length m) `S.member` bc) $ do
-      i <- incState
+      i <- incState id
       return $ let mo = m ++ [o] in
           "for" <+> "d" <> pretty i <> "," <> piterate m <> comma <> (ground2underscore o)
                 <+> "in" <+> functorIndirect "chart" f m <> pslice mo <> colon

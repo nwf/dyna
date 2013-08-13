@@ -75,10 +75,14 @@ expandV :: (ExpC m f n, MCVT m DVar ~ VR f n, MCR m DVar)
         => DVar -> m n
 expandV v = clookup v >>= \x -> case x of
                                   VRName n -> return n
-                                  VRStruct y -> nDeep rec y
+                                  VRStruct _ -> nDeep rec x
  where
-  rec (VRName n)   = return (Left n)
-  rec (VRStruct y) = return (Right y)
+  rec :: (MonadTrans t, Monad (t m))
+      => VR f n
+      -> Int
+      -> t m (Either n (InstF f (Either a1 (VR f n))))
+  rec (VRName n)    _ = return (Left n)
+  rec (VRStruct y') _ = return (Right $ fmap Right y')
 
 ------------------------------------------------------------------------}}}
 -- Leq                                                                  {{{
