@@ -175,7 +175,7 @@ Possible future extensions
 Guarded types?  Nonlinear types?  Parametric types?
 
 Type coercion
-============
+=============
 
 
 Unification
