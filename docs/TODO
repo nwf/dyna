@@ -1,0 +1,29 @@
+For nwf
+=======
+
+    Finish new automata work
+    Automata w/ equality constraints (aliasing)
+    Resurrect plan-nonground branch changes
+    Multi-root automata (replace Context logic)
+    SSA* ANF
+    Review XSB cyclic memoization paper
+
+Runtime and codegen
+===================
+
+    UNK/NULL/ERR/Value 
+    Runtime representation for nonground terms
+    Cyclic BC support
+
+Lower priority
+==============
+
+    Gensyms
+    Indirect evaluation
+    Error propagation
+    Backend transactionality
+
+More fun
+========
+
+    Dyna-generated callbacks for $priority (and $prioritized and $memo/$memoized).

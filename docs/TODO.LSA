@@ -28,11 +28,6 @@ impacts speed of compilation)
 
 ----- Backend
 
-",/2" runtime error if first argument is not true or false
-    Probably OK for this one to crash the program!
-
-Check that we have = aggregation working correctly.
-
 Could we maybe get a better chart representation?
 	And better queries into the chart?  We should be able to extract
 	adorned queries from the planner's output without too much effort...
@@ -43,15 +38,9 @@ Maybe something better for initializers or update API? (Low priority)
 
 ----- Documentation
 
-Be sure to mention, repeatedly, that this is experimental software and is
-likely to break both early and often.  Explain the difference between panic
-messages and errors.
-
 ----- REPL
 
 ----- Whole pipeline
-
-Can we extract backpointers from the chart or generate code to do so?
 
 Can we run anything on e.g. WSJ with L0 grammar?
   sentence(N) = ["The",...]
@@ -79,3 +68,6 @@ DOpAMine improvements for logging of hyper-edges
 
 Graphical view of the hypergraph
     Tim has something pretty neat working
+
+",/2" runtime error if first argument is not true or false
+    Probably OK for this one to crash the program!
