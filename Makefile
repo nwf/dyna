@@ -1,11 +1,14 @@
 # -*-  indent-tabs-mode:t;  -*-
 
-all: deps build sphinxbuild version
+VERFILE=dist/VERSION	# XREF:VERSION
 
-version:
-	echo "Version: Dyna 0.4 pre-release" `git describe --all` > VERSION
-	echo "Build date:" `date` >> VERSION
-	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> VERSION
+all: deps build sphinxbuild
+
+.PHONY: $(VERFILE)
+$(VERFILE):
+	echo "Version: Dyna 0.4 pre-release" `git describe --all` > $@
+	echo "Build date:" `date` >> $@
+	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> $@
 
 upstream:
 	git submodule init
@@ -19,12 +22,13 @@ deps:
 	happy --version 2>/dev/null >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
-build: version
+build: $(VERFILE)
 	cabal configure --user --enable-tests
 	cabal build
 
 test tests: build
-	( dist/build/dyna-selftests/dyna-selftests ; ./run-doctests.py )
+	dist/build/dyna-selftests/dyna-selftests
+	./run-doctests.py
 	# cabal test
 
 # Compilation takes a while; for faster iteration while developing,
@@ -98,14 +102,18 @@ ghcbuild:
 .PHONY: profbuild
 profbuild:
 	mkdir -p dist/pb
-	ghc --make -isrc \
-	     -o         dist/pb/a.out \
-		 -outputdir dist/pb \
-		 -main-is $(MAINMOD) $(MAINFILE)
-	ghc --make -isrc -osuf p.o -prof -fprof-auto \
-	     -o         dist/pb/a.out \
-		 -outputdir dist/pb \
-		 -main-is $(MAINMOD) $(MAINFILE)
+	ghc --make -O0 -rtsopts \
+	    -idist/build/autogen -isrc \
+	    -o         dist/pb/a-noprof.out \
+	    -outputdir dist/pb \
+	    -main-is $(MAINMOD) $(MAINFILE)
+	ghc --make -O0 -rtsopts \
+	    -idist/build/autogen -isrc \
+	    -osuf p.o -hisuf p.hi \
+	    -prof -fprof-auto -caf-all -auto-all \
+	    -o         dist/pb/a.out \
+	    -outputdir dist/pb \
+	    -main-is $(MAINMOD) $(MAINFILE)
 
 .PHONY: test-hpc
 test-hpc:

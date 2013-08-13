@@ -30,7 +30,7 @@ def main():
 
     if args.version:
         try:
-            print (dynahome / 'VERSION').text()
+            print (dynahome / 'dist/VERSION').text()    # XREF:VERSION
         except IOError:
             print 'failed to obtain version info.'
         exit(0)
