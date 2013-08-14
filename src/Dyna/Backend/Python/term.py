@@ -16,14 +16,19 @@ class Term(object):
 #        return self is other
 
     def __cmp__(self, other):
-        if self is other:
-            return 0
         try:
-            if self.fn == other.fn:
-                return cmp(self.args, other.args)
-            else:
-                return cmp(self.fn, other.fn)
-        except AttributeError:
+            if self is other:
+                return 0
+            try:
+                if self.fn == other.fn:
+                    return cmp(self.args, other.args)
+                else:
+                    return cmp(self.fn, other.fn)
+            except AttributeError:
+                return 1
+        except RuntimeError:
+            # HACK: sometimes we have a cyclic (or very deep) term and hit a
+            # recursion limit.
             return 1
 
     def __repr__(self):
@@ -34,13 +39,13 @@ class Term(object):
         return '%s(%s)' % (fn, ','.join(map(_repr, self.args)))
 
 
+# TODO: maybe the right way to do this is with a weak value dictionary
 class NoIntern(Term):
     "Mix-in which adds hash and equality method for terms which aren't interned."
+
     def __eq__(self, other):
-        try:
-            return (self.fn, self.args) == (other.fn, other.args)
-        except AttributeError:
-            return False
+        return Term.__cmp__(self, other) == 0
+
     def __hash__(self):
         return hash((self.fn, self.args))
 
