@@ -51,19 +51,11 @@ class Rule(object):
         c = Crux(head=None, rule=self, body=None, vs = ctx)
         return '\n'.join(indent + line for line in c.format())
 
-#    def debug(self):
-#        import debug
-#        with file(dotdynadir / 'tmp.dyna', 'wb') as f:
-#            f.write(self.src)
-#        debug.main(f.name)
 
-
-# TODO: yuck, hopefully temporary measure to support pickling the Interpreter's
-# state
-class foo(dict):
+class Charts(dict):
     def __init__(self, agg_name):
         self.agg_name = agg_name
-        super(foo, self).__init__()
+        super(Charts, self).__init__()
     def __missing__(self, fn):
         arity = int(fn.split('/')[-1])
         self[fn] = c = Chart(fn, arity, self.agg_name[fn])
@@ -89,7 +81,7 @@ class Interpreter(object):
         self._gbc = defaultdict(list)
         # data structures
         self.agenda = prioritydict()
-        self.chart = foo(self.agg_name)
+        self.chart = Charts(self.agg_name)
         self.error = {}
         self.changed = {}
         # misc
@@ -106,16 +98,9 @@ class Interpreter(object):
     def new_fn(self, fn, agg):
         if self.agg_name[fn] is None:
             self.agg_name[fn] = agg
-            # if we have a new aggregator and an existing chart we need to shove
-            # a bunch of aggregators into the interned nodes.
-            #
-            # This happens when a new rule (e.g. from the repl) gives something
-            # a value, which didn't have a value before -- i.e. was only used as
-            # structure.
-            if fn in self.chart:
-                self.chart[fn].set_aggregator(agg)
+            self.chart[fn].set_aggregator(agg)
         # check for aggregator conflict.
-        assert self.agg_name[fn] == agg, (fn, self.agg_name[fn], agg)
+        assert self.agg_name[fn] == agg
 
     def build(self, fn, *args):
         # handle a few special cases where the item doesn't have a chart
@@ -127,10 +112,6 @@ class Interpreter(object):
             return MapsTo(*args)
         if fn == '$key/1':
             self.new_fn(fn, '=')
-        # if we haven't seen this functor before, it probably doesn't have a
-        # Chart, so lets go ahead and create one.
-        if fn not in self.agg_name:
-            self.new_fn(fn, None)
         return self.chart[fn].insert(args)
 
     def delete(self, item, val, ruleix, variables):
@@ -569,7 +550,8 @@ class Interpreter(object):
 
         visited.add(fn)
 
-        # YUCK: find some was to avoid this...
+        # YUCK: find some was to avoid this...  alternatively, we can run
+        # deletes first.
         self.was = {x: x.value for x in self.chart[fn].intern.values()}
 
         for x in self.chart[fn].intern.values():

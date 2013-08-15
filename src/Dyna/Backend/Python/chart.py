@@ -17,6 +17,12 @@ class Chart(object):
         return aggregator(self.agg_name, term)
 
     def set_aggregator(self, agg):
+        """
+        if we have a new aggregator and an existing chart, we need to shove a
+        bunch of aggregators into the interned nodes. This happens when a new
+        rule (e.g. from the repl) gives something a value, which didn't have a
+        value before.
+        """
         self.agg_name = agg
         for item in self.intern.values():
             assert item.value is None, [item, item.value, item.aggregator]   # shouldn't change aggregator when non-null.
