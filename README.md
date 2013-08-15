@@ -32,11 +32,11 @@ Quick Start
 
 First clone the git repository on your local machine, e.g.,
 
-   git clone http://github.com/nwf/dyna
+    git clone http://github.com/nwf/dyna
 
 or download a snapshot as a zip file:
 
-   wget https://github.com/nwf/dyna/archive/master.zip
+    wget https://github.com/nwf/dyna/archive/master.zip
 
 Ensure that you have the Haskell platform 2012.2 or later installed
 either through your favorite package manager (e.g., `apt-get install
