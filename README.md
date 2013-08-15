@@ -34,7 +34,7 @@ First clone the git repository on your local machine, e.g.,
 
     git clone http://github.com/nwf/dyna
 
-or download a snapshot as a zip file:
+or simply download a snapshot as a zip file:
 
     wget https://github.com/nwf/dyna/archive/master.zip
 
@@ -48,16 +48,16 @@ you'll need `Python 2.7+` and the following python modules
 
     $ easy_install ipython
 
-Optionally, installing the following will enable certain extension
+Optionally, installing the following will enable certain extensions:
 
     $ easy_install pygments matplotlib
     $ apt-get install graphviz
 
-Now you're ready to build.
+Now you're ready to build.  Enter the project directory and type
 
     make
 
-this will build dependencies and the Dyna compiler executable.  Run the test
+to build dependencies and the Dyna compiler executable.  Run the test
 harness, just to make sure things built and are working:
 
     make tests
