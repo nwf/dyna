@@ -1,14 +1,20 @@
 Dyna
 ----
 
-Dyna is a small, high-level declarative programming language. Dyna programs
-specify a collection of named data items. These item's can be queried, much like
-a database. Dyna's power comes from the ability to define an item's value by
-relating other items with an equation. These possibly recursive equations
-specify the logical structure of a computation. Thus, Dyna provides a unified
-way of specifying both data and algorithms. Dyna's algorithms are reactive---a
-change to an item's value efficiently propagates throughout the dynabase so that
-all equations are satisfied.
+Dyna is a small, high-level declarative programming language. A Dyna
+program specifies a collection of named data items.  These items can
+be queried, much like a database. Dyna's power comes from the ability
+to define an item's value by rule from the values of other items, much
+like a spreadsheet.  Thus, Dyna provides a unified way of specifying
+both data and algorithms. Dyna's algorithms are reactive: a change to
+an item's value efficiently propagates to related items, changing
+their values for future queries.
+
+The definitions in a Dyna program simply state the logical structure
+of a computation.  They do not have to specify implementation details
+such as data structures or execution order.  The definitions can be
+recursive.  They can involve pattern matching on the names of related
+items, as in Prolog, and they can aggregate values from many matches.
 
 Background and Tutorials
 ------------------------
