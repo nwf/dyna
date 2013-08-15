@@ -28,7 +28,7 @@ build: $(VERFILE)
 
 test tests: build
 	dist/build/dyna-selftests/dyna-selftests
-	./run-doctests.py
+	misc/dyna-doctest.py
 	# cabal test
 
 # Compilation takes a while; for faster iteration while developing,
@@ -141,6 +141,6 @@ tags TAGS:
 	hasktags -b src
 
 coverage:
-	(coverage run run-doctests.py \
-	 ; coverage html --include 'src/*' -d coverage-report \
+	(coverage run --rcfile misc/coveragerc misc/dyna-doctest.py \
+	 ; coverage html --rcfile misc/coveragerc --include 'src/*' -d coverage-report \
 	 ; gnome-open coverage-report/index.html)
