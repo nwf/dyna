@@ -1,5 +1,4 @@
-Dyna
-----
+![Dyna programming language](https://raw.github.com/nwf/dyna/master/docs/sphinx/_static/simple_dyna_logo_horiz.png)
 
 Dyna is a small, high-level declarative programming language. A Dyna
 program specifies a collection of named data items.  These items can
