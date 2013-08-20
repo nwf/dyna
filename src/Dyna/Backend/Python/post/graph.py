@@ -2,6 +2,7 @@ import pylab as pl
 from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 from stdlib import topython
+import numpy as np
 
 class graph(object):
     """
@@ -25,7 +26,7 @@ class graph(object):
         self.interp = interp
 
     def main(self, outfile, fps=30):
-
+    
         frame = defaultdict(list)
         for _, [t, item], val in self.interp.chart['frame/2'][:,:,:]:
             if val:
@@ -34,6 +35,12 @@ class graph(object):
         nframes = max(frame)
 
         def draw_frame(t):
+            
+            # Makes a call to pl.draw() in order to obtain a renderer from matplotlib
+            pl.draw()
+            renderer = ax.get_renderer_cache()
+
+
             ax.cla()
             ax.set_title(t)
             ax.set_xlim(-2,2)   # TODO: this isn't right...
@@ -41,16 +48,47 @@ class graph(object):
             if t not in frame:
                 print 'frame', t, 'missing.'
             for item in frame[t]:
+
+                print "DEBUG: ", item.args
+
+
                 if item.fn == 'line/2':
                     [(a,b), (c,d)] = map(topython, item.args)
-                    ax.plot([a,c], [b,d], color='b', alpha=0.5)
+                    outputPlot = ax.plot([a,c], [b,d], color='b', alpha=0.5)
+                    
+                    
+
                 elif item.fn == 'text/2':
+
+                    # s is the text to print. x,y position
                     (s,(x,y)) = map(topython, item.args)
-                    ax.text(x,y,s)
+                    
+                    outputText = ax.text(x,y,s)
+                    textBbox = outputText.get_window_extent(renderer)
+                    
+                    # Examples of ways you can access the bbox data.
+                    #print "textBbox: ", textBbox
+                    #print "textBbox coordinates: ",[(textBbox.x0, textBbox.y0),(textBbox.x1, textBbox.y1)]
+                    #print "textBbox.corners(): ", textBbox.corners()
+                    
+                    # Neat thing I found. You can drop right into the iPython shell to play around or debug.
+                    #from IPython import embed
+                    #embed()
+                    
                 else:
                     print 'dont know how to render', item
 
+
+
         fig = pl.figure()
         ax = pl.axes()
-        anim = FuncAnimation(fig, draw_frame, frames=nframes)
-        anim.save(outfile, fps=fps, extra_args=['-vcodec', 'libx264'])
+
+
+        
+        #anim = FuncAnimation(fig, draw_frame, frames=nframes)
+        anim = FuncAnimation(fig, draw_frame)
+        
+
+        #anim.save(outfile, fps=15)
+        pl.show()
+        
