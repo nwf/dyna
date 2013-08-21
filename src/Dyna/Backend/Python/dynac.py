@@ -89,7 +89,7 @@ class Compiler(object):
         for fn, agg in agg.items():
             [(fn, arity)] = re.findall('(.*)/(\d+)', fn)
             if agg is not None:
-                lines.append(":-iaggr '%s'/%s %s." % (fn, arity, agg))
+                lines.append(":-iaggr '%s'/%s %s ." % (fn, arity, agg))
         lines.extend(':-%s %s.' % (k,v) for k,v in other)
         lines.append('\n')
         return '\n'.join(lines)

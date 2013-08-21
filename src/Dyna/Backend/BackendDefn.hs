@@ -40,10 +40,10 @@ data Backend = forall bs . Backend
                -- XXX This is not really right, as the set of aggregators is
                -- a property of Dyna, not of the backend, but for the
                -- moment...
-               be_aggregators :: Maybe (S.Set String)
+               -- be_aggregators :: Maybe (S.Set String)
 
                -- | Hook for planner to get builtin information
-             , be_builtin :: BackendPossible bs
+               be_builtin :: BackendPossible bs
 
                -- | Any constants made available by this backend.
                -- 

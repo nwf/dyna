@@ -342,7 +342,7 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
-    P.PDP rs iaggmap gbcs pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
+    P.PDP rs iaggmap gbcs pp <- parse
 
     dump DumpParsed $
          (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
@@ -362,7 +362,7 @@ processFile fileName = bracket openOut hClose go
 
 
     case dcfg_backend ?dcfg of
-      Backend _ be_b be_c be_ddi be_d ->
+      Backend {-_-} be_b be_c be_ddi be_d ->
         let
             (bcrules,fcrules) = partitionEithers
                                 $ map
@@ -447,8 +447,8 @@ processFile fileName = bracket openOut hClose go
             -- Invoke the backend code generator
             be_d aggm uPlans' cInitializers' gbcs cqPlans pp out
 
-  parse aggs = do
-    pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
+  parse = do
+    pr <- T.parseFromFileEx (P.oneshotDynaParser <* T.eof) fileName
     case pr of
       TR.Failure td -> dynacParseErr $ PPA.align td
       TR.Success rs -> return rs

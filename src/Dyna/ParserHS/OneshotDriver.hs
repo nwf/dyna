@@ -4,7 +4,8 @@
 --
 -- XXX We'd like to have a much more incremental version as well, but the
 -- easiest thing to do was to extricate the old parser's state handling code
--- to its own module first.
+-- to its own module first.  This is really quite bad, under just about any
+-- metric you care to name.
 
 --   Header material                                                      {{{
 
@@ -29,10 +30,11 @@ import           Data.Monoid (mempty)
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
 import           Dyna.ParserHS.Parser
+import           Dyna.ParserHS.Printer
+import           Dyna.ParserHS.SyntaxTheory
+import           Dyna.ParserHS.Syntax
 import           Dyna.ParserHS.Types
-import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
-import           Dyna.XXX.DataUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
 import           Text.Parser.LookAhead
 import           Text.Trifecta
@@ -42,7 +44,7 @@ import qualified Text.PrettyPrint.Free            as PP
 -- Output                                                               {{{
 
 data ParsedDynaProgram = PDP
-  { pdp_rules         :: [(RuleIx, DisposTab, Spanned Rule)]
+  { pdp_rules         :: [(RuleIx, DisposTab DFunctAr, Spanned Rule)]
 
   , pdp_aggrs         :: M.Map DFunctAr DAgg
 
@@ -58,10 +60,8 @@ data ParsedDynaProgram = PDP
 
 -- | Parser Configuration State
 data PCS = PCS
-  { _pcs_dt_mk     :: String
-  , _pcs_dt_over   :: DisposTabOver
-  , _pcs_dt_cache  :: DisposTab
-    -- ^ Cache the disposition table
+  { _pcs_dt_mk     :: NamedDefDispos
+  , _pcs_dt_over   :: DisposTabOver DFunctAr
 
   , _pcs_gbc_set   :: S.Set DFunctAr
 
@@ -80,32 +80,24 @@ data PCS = PCS
     --
     -- XXX add arity to key?
   , _pcs_operspec  :: OperSpec
-  , _pcs_ot_cache  :: EOT
-    -- ^ Cache the operator table so we are not rebuilding it
-    -- before every parse operation
   , _pcs_ruleix    :: RuleIx
+
+  , _pcs_cache_dt  :: DisposTab DFunctAr
+    -- ^ Cache the disposition table
+  , _pcs_cache_dlc  :: DLCfg
+    -- ^ Cache the parser configuration
   }
 $(makeLenses ''PCS)
 
-mkdlc :: Maybe (S.Set String) -> PCS -> DLCfg
-mkdlc aggs pcs = DLC (_pcs_ot_cache pcs)
-                     (maybe genericAggregators ct aggs)
+update_pcs_dt, update_pcs_dlc :: (Applicative m, MonadState PCS m) => m ()
+update_pcs_dt = pcs_cache_dt <~ liftA2 dtmk (use pcs_dt_mk) (use pcs_dt_over)
+update_pcs_dlc = pcs_cache_dlc <~ uses pcs_operspec mkDLC
+
+dtmk :: NamedDefDispos -> DisposTabOver DFunctAr -> DisposTab DFunctAr
+dtmk n = mkDisposTab (go n)
  where
-  ct = fmap BU.fromString . choice . map (try . string) . S.toList
-
-update_pcs_dt,
- update_pcs_ot :: (Applicative m, MonadState PCS m) => m ()
-update_pcs_dt = pcs_dt_cache <~
-                liftA2 ($) (uses pcs_dt_mk dtmk) (use pcs_dt_over)
-
-update_pcs_ot = pcs_ot_cache <~ (flip mkEOT False <$> (use pcs_operspec))
-
-dtmk :: String -> DisposTabOver -> DisposTab
-dtmk "dyna"      = disposTab_dyna
-dtmk "prologish" = disposTab_dyna
-dtmk n           = dynacPanic $ "Unknown default disposition table:"
-                                 PP.<//> PP.pretty n
-
+  go NDDDyna = defDispos_dyna
+  -- XXX disposTab_prologish
 
 newtype PCM im a = PCM { unPCM :: StateT PCS im a }
  deriving (Alternative,Applicative,CharParsing,DeltaParsing,
@@ -117,10 +109,8 @@ instance (Monad im) => MonadState PCS (PCM im) where
   state = PCM . state
 
 defPCS :: PCS
-defPCS = PCS { _pcs_dt_mk     = "dyna"
+defPCS = PCS { _pcs_dt_mk     = NDDDyna
              , _pcs_dt_over   = mempty
-             , _pcs_dt_cache  = dtmk (defPCS ^. pcs_dt_mk)
-                                     (defPCS ^. pcs_dt_over)
 
              , _pcs_gbc_set   = S.empty
 
@@ -129,10 +119,13 @@ defPCS = PCS { _pcs_dt_mk     = "dyna"
              , _pcs_instmap   = mempty -- XXX
              , _pcs_modemap   = mempty -- XXX
 
-             , _pcs_operspec  = defOperSpec
-             , _pcs_ot_cache  = mkEOT (defPCS ^. pcs_operspec) False
+             , _pcs_operspec  = dynaOperSpec
 
              , _pcs_ruleix    = 0
+
+             , _pcs_cache_dt  = dtmk (defPCS ^. pcs_dt_mk)
+                                     (defPCS ^. pcs_dt_over)
+             , _pcs_cache_dlc = mkDLC (defPCS ^. pcs_operspec)
              }
 
 -- | Update the PCS to reflect a new pragma
@@ -141,8 +134,8 @@ pcsProcPragma :: (Parsing m, MonadState PCS m) => Spanned Pragma -> m ()
 pcsProcPragma (PBackchain fa :~ _) = do
   pcs_gbc_set %= S.insert fa
 
-pcsProcPragma (PDispos s f as :~ _) = do
-  pcs_dt_over %= dtoMerge (f,length as) (s,as)
+pcsProcPragma (PDispos p s f as :~ _) = do
+  pcs_dt_over %= disposOverMerge ((f,length as),p) (s,as)
   update_pcs_dt
   return ()
 pcsProcPragma (PDisposDefl n :~ _) = do
@@ -175,12 +168,12 @@ pcsProcPragma (PMode (PNWA n as) pmf pmt :~ s) = do
 pcsProcPragma (PRuleIx r :~ _) = pcs_ruleix .= r
 
 pcsProcPragma (POperAdd fx prec sym :~ _) = do
-  pcs_operspec %= mapInOrCons (BU.toString sym) (prec,fx)
-  update_pcs_ot
+  pcs_operspec %= operSpecMut (BU.toString sym) fx (Just prec)
+  update_pcs_dlc
 
-pcsProcPragma (POperDel sym :~ _) = do
-  pcs_operspec %= M.filterWithKey (\k _ -> k /= (BU.toString sym))
-  update_pcs_ot
+pcsProcPragma (POperDel fx sym :~ _) = do
+  pcs_operspec %= operSpecMut (BU.toString sym) fx Nothing
+  update_pcs_dlc
 
 sorryPragma :: Pragma -> Span -> a
 sorryPragma p s = dynacSorry $ "Cannot handle pragma"
@@ -189,15 +182,20 @@ sorryPragma p s = dynacSorry $ "Cannot handle pragma"
                              PP.<//> prettySpanLoc s
 
 pragmasFromPCS :: PCS -> PP.Doc e
-pragmasFromPCS (PCS dt_mk dt_over _
+pragmasFromPCS (PCS dt_mk
+                    dt_over
                     gbcs
                     _
-                    im mm
-                    _ _
-                    rix) =
+                    im
+                    mm
+                    _
+                    rix
+                    _
+                    _
+               ) =
   PP.vcat $ map renderPragma $
        (map PBackchain $ S.toList gbcs)
-    ++ (map (\((k,_),(s,as)) -> PDispos s k as)
+    ++ (map (\(((k,_),p),(s,as)) -> PDispos p s k as)
           $ M.toList dt_over)
     ++ [PDisposDefl dt_mk]
     -- XXX leaving out the item agg map, because that gets refined during
@@ -208,29 +206,27 @@ pragmasFromPCS (PCS dt_mk dt_over _
     ++ [PRuleIx rix]
 
 nextRule :: (DeltaParsing m, LookAheadParsing m, MonadState PCS m)
-         => Maybe (S.Set String)
-         -> m (Maybe (Spanned Rule))
-nextRule aggs = go
+         => m (Maybe (Spanned Rule))
+nextRule = go
  where
   go = do
-    (l :~ s) <- gets (mkdlc aggs) >>= parse
+    (l :~ s) <- use pcs_cache_dlc >>= parse
     case l of
       PLPragma  p -> pcsProcPragma (p :~ s) >> return Nothing
       PLRule r -> return (Just r)
 
 oneshotDynaParser :: (DeltaParsing m, LookAheadParsing m)
-                  => Maybe (S.Set String)
-                  -> m ParsedDynaProgram
-oneshotDynaParser aggs = (postProcess =<<)
+                  => m ParsedDynaProgram
+oneshotDynaParser = (postProcess =<<)
    $ flip runStateT defPCS
    $  optional (dynaWhiteSpace (someSpace))
    *> many (do
-             mr <- nextRule aggs
+             mr <- nextRule
              case mr of
                Nothing -> return Nothing
                (Just r) -> do
                  rix <- pcs_ruleix <<%= (+1)
-                 dt  <- use pcs_dt_cache
+                 dt  <- use pcs_cache_dt
                  return $ Just (rix, dt, r))
  where
   postProcess (rs,pcs) = return $

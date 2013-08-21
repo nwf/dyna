@@ -40,6 +40,9 @@
 --
 -- XXX The handling of underscores is not quite right and frequently leads
 -- to dead assignments.
+--
+-- XXX This rewrite flattens the distinction the parser is careful to keep
+-- for DTPosn.  This is bad.
 
 -- FIXME: "str" is the same a constant str.
 
@@ -80,10 +83,11 @@ import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
+import           Dyna.ParserHS.SyntaxTheory
+import           Dyna.ParserHS.Syntax
 import qualified Dyna.ParserHS.Types        as P
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
-import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils (mapInOrCons, zipWithTails)
 import           Dyna.XXX.MonadUtils (timesM)
 -- import           Dyna.Test.Trifecta         -- XXX
@@ -97,7 +101,7 @@ type EvalMarks = (Int,Bool)
 type ANFAnnots = M.Map DVar [Annotation (T.Spanned P.Term)]
 type ANFWarns  = [(BU.ByteString, [T.Span])]
 
-newtype ANFDict = AD { ad_dt :: DisposTab }
+newtype ANFDict = AD { ad_dt :: DisposTab DFunctAr }
 
 mergeDispositions :: EvalMarks -> SelfDispos -> ArgDispos -> Int
 mergeDispositions = md
@@ -244,13 +248,13 @@ normTerm_ :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
 -- names.
 --
 -- XXX is this the right place for that?
-normTerm_ a m _ d (P.TVar v) = do
+normTerm_ a m _ d (P.Term (P.TVar v)) = do
   v' <- mkFromUVar v
   v'' <- timesM (newEval "_v" . Left) (mergeDispositions m SDQuote a) v'
   maybe (return ()) (doUnif v'') d
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
-normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
+normTerm_ _ m ss d (P.Term (P.TPrim x@(TNumeric _))) = do
   case m of
     (_,True)  -> newWarn "Suppressing numeric evaluation is unnecessary" ss
     (0,False) -> return ()
@@ -260,7 +264,7 @@ normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
         d
 
 -- Strings too
-normTerm_ _ m ss d (P.TBase x@(TString _))  = do
+normTerm_ _ m ss d (P.Term (P.TPrim x@(TString _)))  = do
   case m of
     (_,True)  -> newWarn "Suppressing string evaluation is unnecessary" ss
     (0,False) -> return ()
@@ -270,7 +274,7 @@ normTerm_ _ m ss d (P.TBase x@(TString _))  = do
         d
 
 -- Booleans too
-normTerm_ _ m ss d (P.TBase x@(TBool _)) = do
+normTerm_ _ m ss d (P.Term (P.TPrim x@(TBool _))) = do
   case m of
     (_,True)  -> newWarn "Suppressing boolean evaluation is unnecessary" ss
     (0,False) -> return ()
@@ -284,7 +288,7 @@ normTerm_ _ m ss d (P.TBase x@(TBool _)) = do
 -- result is quoted, we simply build up some structure.  If it's evaluated,
 -- on the other hand, we reduce it to a unification of these two pieces and
 -- return (XXX what ought to be) a unit.
-normTerm_ a m ss d (P.TFunctor f [x T.:~ sx, v T.:~ sv])
+normTerm_ a m ss d (P.Term (P.TInfix f (x T.:~ sx) (v T.:~ sv)))
     | f == dynaEvalAssignOper = do
   nx <- nextVar "_i"
   normTerm_ ADQuote (0,False) (sx:ss) (Just nx) x
@@ -310,38 +314,59 @@ normTerm_ a m ss d (P.TFunctor f [x T.:~ sx, v T.:~ sv])
 -- reason to make the backend know about them since that's also wrong!
 --
 -- XXX XREF:ANFRESERVED
-normTerm_ a m ss d (P.TFunctor f [i T.:~ si, r T.:~ sr])
+normTerm_ a m ss d (P.Term (P.TInfix f (i T.:~ si) (r T.:~ sr)))
     | f == dynaConjOper =
   normConjunct ss f i si r sr (mergeDispositions m SDInherit a) d False
 
-normTerm_ a m ss d (P.TFunctor f [r T.:~ sr, i T.:~ si])
+normTerm_ a m ss d (P.Term (P.TInfix f (r T.:~ sr) (i T.:~ si)))
     | f `elem` dynaRevConjOpers =
   normConjunct ss f i si r sr (mergeDispositions m SDInherit a) d True
 
 -- Annotations
 --
 -- XXX this is probably the wrong thing to do
-normTerm_ a m ss d (P.TAnnot an (t T.:~ st)) = do
+normTerm_ a m ss d (P.Term (P.TAnnot an (t T.:~ st))) = do
     normTerm_ a m (st:ss) d t
     maybe (newWarn "Annotation discarded" ss)
           (doAnnot an)
           d
 
 -- Quote makes the context explicitly a quoting one
-normTerm_ a (n,q) ss d (P.TFunctor f [t T.:~ st]) | f == dynaQuoteOper = do
-    when q $ newWarn "Superfluous quotation marker" ss
-    normTerm_ a (n,True) (st:ss) d t
+normTerm_ a (n,q) ss d (P.Term (P.TPrefix f (t T.:~ st)))
+    | f == dynaQuoteOper = do
+  when q $ newWarn "Superfluous quotation marker" ss
+  normTerm_ a (n,True) (st:ss) d t
 
 -- Evaluation just bumps the number of evaluations and resets the quoted
 -- flag to False
-normTerm_ a (n,_) ss d (P.TFunctor f [t T.:~ st]) | f == dynaEvalOper =
-    normTerm_ a (n+1,False) (st:ss) d t
+normTerm_ a (n,_) ss d (P.Term (P.TPrefix f (t T.:~ st)))
+    | f == dynaEvalOper =
+  normTerm_ a (n+1,False) (st:ss) d t
+
+normTerm_ ctx m ss d (P.Term (P.TPrefix f (a T.:~ st))) = do
+  (sd, [ad]) <- asks $ ($ ((f,1),DTPPrefix)) . ad_dt
+  v <- nextVar "_r"
+  normTerm_ ad (0,False) (st:ss) (Just v) a
+  normFunctResolve ss d m sd ctx f [v]
+
+normTerm_ ctx m ss d (P.Term (P.TPostfix f (a T.:~ st))) = do
+  (sd, [ad]) <- asks $ ($ ((f,1),DTPPostfix)) . ad_dt
+  v <- nextVar "_o"
+  normTerm_ ad (0,False) (st:ss) (Just v) a
+  normFunctResolve ss d m sd ctx f [v]
+
+normTerm_ ctx m ss d (P.Term (P.TInfix f (a T.:~ sa) (b T.:~ sb))) = do
+  (sd, [ada,adb]) <- asks $ ($ ((f,2),DTPInfix)) . ad_dt
+  va <- nextVar "_i"
+  normTerm_ ada (0,False) (sa:ss) (Just va) a
+  vb <- nextVar "_i"
+  normTerm_ adb (0,False) (sb:ss) (Just vb) b
+  normFunctResolve ss d m sd ctx f [va,vb]
 
 -- Ah, the "boring" case of functors!
-normTerm_ ctx m ss d (P.TFunctor f as) = do
-
-  -- Look up argument disposition
-  argdispos <- asks $ flip dt_argEvalDispos (f,length as) . ad_dt
+normTerm_ ctx m ss d (P.Term (P.TFunctor f as)) = do
+  -- Look up disposition information
+  (sd, ads) <- asks $ ($ ((f,length as),DTPFunctor)) . ad_dt
 
   -- Conjure up destinations for all arguments, trying to preserve the
   -- original variables here if we can, but doing a linearization
@@ -349,7 +374,7 @@ normTerm_ ctx m ss d (P.TFunctor f as) = do
   argvars <- flip evalStateT S.empty $ forM as $ \a -> do
                already <- get
                case a of
-                 P.TVar avv T.:~ _
+                 P.Term (P.TVar avv) T.:~ _
                    | not (avv `S.member` already)
                    -> modify (S.insert avv) >> lift (mkFromUVar avv)
                  _ -> lift (nextVar "_a")
@@ -357,24 +382,23 @@ normTerm_ ctx m ss d (P.TFunctor f as) = do
   -- Normalize all arguments appropriately
   mapM_ (\(a T.:~ s,(v,c)) -> normTerm_ c (0,False) (s:ss) (Just v) a)
         ( zipWithTails (,) panic panic as
-          $ zipWithTails (,) panic panic argvars argdispos)
- 
-  -- Look up self disposition
-  selfdispos <- asks $ flip dt_selfEvalDispos (f,length as) . ad_dt
+          $ zipWithTails (,) panic panic argvars ads)
  
   -- And bring everything together
-  case (mergeDispositions m selfdispos ctx, d) of
-    (0,Nothing) -> newWarn "Quoted functor discarded" ss
-    (0,Just d') -> doStruct (f,argvars) d'
-    (1,Just d') -> doEval (Right (f,argvars)) d'
-    (n,_      ) -> do
-                    t  <- newEval "_e" (Right (f,argvars))
-                    ct <- timesM (newEval "_x" . Left) (n-1) t
-                    maybe (return ()) (doUnif ct) d
+  normFunctResolve ss d m sd ctx f argvars
  
  where
   panic = dynacPanic "Length mismatch in disposition table while normalizing"
 
+normFunctResolve ss d m sd ctx f avs =
+   case (mergeDispositions m sd ctx, d) of
+    (0,Nothing) -> newWarn "Quoted functor discarded" ss
+    (0,Just d') -> doStruct (f,avs) d'
+    (1,Just d') -> doEval (Right (f,avs)) d'
+    (n,_      ) -> do
+                    t  <- newEval "_e" (Right (f,avs))
+                    ct <- timesM (newEval "_x" . Left) (n-1) t
+                    maybe (return ()) (doUnif ct) d
 
 
 normConjunct :: (Functor m, MonadReader ANFDict m, MonadState ANFState m)
@@ -440,7 +464,7 @@ data Rule = Rule { r_index      :: RuleIx
  deriving (Show)
 
 
-normRule :: (RuleIx, DisposTab, T.Spanned P.Rule)   -- ^ Rule to digest
+normRule :: (RuleIx, DisposTab DFunctAr, T.Spanned P.Rule)   -- ^ Rule to digest
          -> (Rule, ANFWarns)
 normRule (i, dt, P.Rule h a r T.:~ sp) =
   let (ru,s) = runNormalize dt $ do
@@ -455,7 +479,7 @@ normRule (i, dt, P.Rule h a r T.:~ sp) =
 -- | Run the normalization routine.
 --
 -- Use as @runNormalize nRule@
-runNormalize :: DisposTab
+runNormalize :: DisposTab DFunctAr
              -> ReaderT ANFDict (State ANFState) a -> (a, ANFState)
 runNormalize dt =
   flip runState   (AS 0 0 S.empty IM.empty M.empty []) .

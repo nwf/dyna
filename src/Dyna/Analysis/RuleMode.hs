@@ -54,9 +54,9 @@ import           Dyna.Analysis.DOpAMine
 import           Dyna.Analysis.Mode
 import           Dyna.Analysis.Mode.Execution.Context
 import           Dyna.Analysis.Mode.Execution.Functions
+import           Dyna.ParserHS.Syntax
 import           Dyna.Term.TTerm
 import           Dyna.Term.Normalized
-import           Dyna.Term.SurfaceSyntax
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
 import           Dyna.XXX.MonadContext

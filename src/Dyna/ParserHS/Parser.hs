@@ -25,6 +25,9 @@
 --      this depends on an upstream fix in Text.Parser.Expression.
 --      But: I am not worried about it since we don't handle gensyms
 --      anywhere else in the pipeline yet)
+--
+--   * The decoupling of DTPosn and DFunctAr is wrong (it accepts nonsense);
+--     we should probably use DTPosn as a functor.
 
 -- Header material                                                      {{{
 {-# LANGUAGE FlexibleContexts #-}
@@ -39,14 +42,14 @@
 
 module Dyna.ParserHS.Parser (
     -- * Parser configuration inputs
-    EOT, mkEOT, DLCfg(..),
+    DLCfg(..), mkDLC,
     dynaWhiteSpace, genericAggregators,
-    -- ** Pragmas
-    renderPragma,
-    -- * Action
+
+    -- * Action!
     parse,
+
     -- * Test harness hooks
-    testTerm, testGenericAggr, testRule, testPragma,
+    testTerm, testRule, testPragma,
 ) where
 
 import           Control.Applicative
@@ -60,75 +63,40 @@ import qualified Data.ByteString                  as B
 import qualified Data.CharSet                     as CS
 import qualified Data.HashSet                     as H
 import qualified Data.Map                         as M
+import           Data.Monoid (Endo(..), mempty)
 import           Data.Semigroup ((<>))
-import           Data.Monoid (mempty)
 import           Dyna.Analysis.Mode.Inst
-import qualified Dyna.Analysis.Mode.InstPretty    as IP
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.ParserHS.SyntaxTheory
+import           Dyna.ParserHS.Syntax
 import           Dyna.ParserHS.Types
-import           Dyna.Term.TTerm (Annotation(..), TBase(..),
-                                  DFunct)
-import           Dyna.Term.SurfaceSyntax
-import           Dyna.XXX.DataUtils
-import           Dyna.XXX.Trifecta (identNL,
-                                    stringLiteralSQ)
+import           Dyna.Term.TTerm (Annotation(..), TBase(..))
+import           Dyna.XXX.Trifecta (identNL)
 import           Text.Parser.Expression
 import           Text.Parser.LookAhead
 import           Text.Parser.Token.Highlight
 import           Text.Parser.Token.Style
-import qualified Text.PrettyPrint.Free            as PP
 import           Text.Trifecta
-
-------------------------------------------------------------------------}}}
--- Parser input definitions                                             {{{
-
--- | Existentialized operator table; this is a bit of a hack, but it will
--- do just fine for now, I hope.
---
--- XXX
-newtype EOT = EOT { unEOT :: forall m .
-                             (DeltaParsing m, LookAheadParsing m)
-                          => OperatorTable m (Spanned Term)
-                  }
-
-
--- XXX Add support for Haskell-style `foo`.  This requires augmenting
--- the PFIn branch of interpret below to check for the ` framing and
--- change the symbol returned (but not the symbol matched!)
---
--- XXX On parser failure, we get a huge mass of cruft for "expected: ...",
--- since it blats out the entire operator table.  Can we fix that?
-mkEOT :: OperSpec
-      -> Bool   -- ^ add some measure of fail-safety using generic
-                -- parsers
-      -> {- Either (PP.Doc e) -} EOT
-mkEOT s0 f0 = EOT $ addFailSafe $ interpSpec M.empty $ M.toList s0
- where
-  interpSpec m [] = map snd $ M.toDescList m
-  interpSpec m ((o,lfs):os) = interpSpec (foldr go m lfs) os
-   where
-    go (p,f) = mapInOrCons p (interpret f o)
-
-  interpret (PFIn a) = flip Infix a . bf . interpCore
-  interpret PFPre    = Prefix       . uf . interpCore
-  interpret PFPost   = Postfix      . uf . interpCore
-
-  -- Make operators use the longest match
-  interpCore s = try $ spanned $ token
-                 (bsf (string s) <* notFollowedBy (oneOfSet usualpunct))
-
-  addFailSafe = if f0 then (++ failSafe) else id
-
-  failSafe = [ [ Prefix $ uf (spanned $ prefixOper )         ]
-             , [ Infix  (bf (spanned $ normOper )) AssocNone ]
-             , [ Infix  (bf (spanned $ dotOper  )) AssocNone ]
-             ]
 
 ------------------------------------------------------------------------}}}
 -- Utilities                                                            {{{
 
 bsf :: Functor f => f String -> f B.ByteString
 bsf = fmap BU.fromString
+
+-- csa :: Spanned (a -> b) -> a -> Spanned b
+-- csa (f :~ s) a = (f a) :~ s
+
+expr :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
+     => (DLCfg -> Endo (m (Spanned Term))) -> m (Spanned Term)
+expr ep = join (asks ((`appEndo` term) . ep))
+
+expr_full, expr_arg, expr_list
+  :: (MonadReader DLCfg m, DeltaParsing m, LookAheadParsing m)
+  => m (Spanned Term)
+expr_full = (try (expr dlc_expr_full) <|> term) <?> "Expression"
+expr_arg  = (try (expr dlc_expr_arg ) <|> term) <?> "Argument"
+expr_list = (try (expr dlc_expr_list) <|> term) <?> "List element"
 
 parseNameWithArgs :: (Monad m, TokenParsing m)
                   => m B.ByteString -> m NameWithArgs
@@ -137,15 +105,28 @@ parseNameWithArgs n = PNWA <$> n
                                       , pure []
                                       ]
 
+tn :: B.ByteString -> Term
+tn f = Term $ TFunctor f []
+
+tb :: B.ByteString -> Spanned Term -> Spanned Term -> Term
+tb f a b = Term $ TFunctor f [a,b]
+
+------------------------------------------------------------------------}}}
+-- Building Dyna Language Configurations                                {{{
+
+mkDLC :: OperSpec -> DLCfg
+mkDLC os = DLC
+  { dlc_expr_full = mkDLCExprParser os
+  , dlc_expr_arg  = mkDLCExprParser os_arg
+  , dlc_expr_list = mkDLCExprParser os_list
+  , dlc_aggrs     = genericAggregators          -- XXX
+  }
+ where
+  os_arg = mkArgOS os
+  os_list = mkListOS os
+
 ------------------------------------------------------------------------}}}
 -- Parser Monad                                                         {{{
-
-data DLCfg = DLC { dlc_opertab :: EOT
-                 , dlc_aggrs   :: forall m .
-                                  (CharParsing m, DeltaParsing m,
-                                   LookAheadParsing m)
-                               => m B.ByteString
-                 }
 
 newtype DynaLanguage m a = DL { unDL :: ReaderT DLCfg m a }
   deriving (Functor,Applicative,Alternative,Monad,MonadPlus,
@@ -194,69 +175,6 @@ dynaWhiteSpace m = buildSomeSpaceParser m dynaCommentStyle
 ------------------------------------------------------------------------}}}
 -- Identifier Syles                                                     {{{
 
--- | The full laundry list of punctuation symbols we "usually" mean.
-usualpunct :: CS.CharSet
-usualpunct = CS.fromList "!#$%&*+/<=>?@\\^|-~:.,"
-
--- | Dot or comma operators
---
--- Note that these are only safe to use in combination with 'thenAny'.
-dynaDotOperStyle :: TokenParsing m => IdentifierStyle m
-dynaDotOperStyle = IdentifierStyle
-  { _styleName = "Dot-Operator"
-  , _styleStart   = char '.'
-  , _styleLetter  = oneOfSet $ usualpunct
-  , _styleReserved = mempty
-  , _styleHighlight = Operator
-  , _styleReservedHighlight = ReservedOperator
-  }
-
-{-
--- | Comma operators
-dynaCommaOperStyle :: TokenParsing m => IdentifierStyle m
-dynaCommaOperStyle = IdentifierStyle
-  { _styleName = "Comma-Operator"
-  , _styleStart   = char ','
-  , _styleLetter  = oneOfSet $ usualpunct
-  , _styleReserved = mempty
-  , _styleHighlight = Operator
-  , _styleReservedHighlight = ReservedOperator
-  }
--}
-
--- | Prefix operators
---
--- Dot is handled specially elsewhere due to its
--- dual purpose as an operator and rule separator.
---
--- Colon is not a permitted beginning to a prefix
--- operator, as it is a sigil for type annotations.
-dynaPfxOperStyle :: TokenParsing m => IdentifierStyle m
-dynaPfxOperStyle = IdentifierStyle
-  { _styleName = "Prefix Operator"
-  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".:,"
-  , _styleLetter  = oneOfSet $ usualpunct
-  , _styleReserved = mempty
-  , _styleHighlight = Operator
-  , _styleReservedHighlight = ReservedOperator
-  }
-
--- | Infix operators
---
--- Dot is handled specially elsewhere due to its
--- dual purpose as an operator and rule separator.
--- Comma similarly has special handling due to its
--- nature as term and subgoal separator.
-dynaOperStyle :: (TokenParsing m, Monad m) => IdentifierStyle m
-dynaOperStyle = IdentifierStyle
-  { _styleName = "Infix Operator"
-  , _styleStart   = oneOfSet $ usualpunct CS.\\ CS.fromList ".,"
-  , _styleLetter  = oneOfSet (usualpunct CS.\\ CS.fromList ".")
-  , _styleReserved = mempty
-  , _styleHighlight = Operator
-  , _styleReservedHighlight = ReservedOperator
-  }
-
 dynaAggNameStyle :: TokenParsing m => IdentifierStyle m
 dynaAggNameStyle = IdentifierStyle
   { _styleName = "Aggregator Name"
@@ -301,154 +219,67 @@ var = bsf $ ident dynaVarStyle
 ------------------------------------------------------------------------}}}
 -- Atoms                                                                {{{
 
-parseAtom :: (Monad m, TokenParsing m) => m DFunct
-parseAtom = (liftA BU.fromString stringLiteralSQ <|> name) <?> "Atom"
+parseAtom :: (Monad m, TokenParsing m) => m B.ByteString
+parseAtom = (stringLiteral' <|> name) <?> "Atom"
 
-parseFunctor :: (Monad m, TokenParsing m) => m DFunct
+parseFunctor :: (Monad m, TokenParsing m) => m B.ByteString
 parseFunctor = highlight Identifier parseAtom <?> "Functor"
 
 ------------------------------------------------------------------------}}}
 -- Terms and term expressions                                           {{{
 
 nullaryStar :: DeltaParsing m => m (Spanned Term)
-nullaryStar = spanned $ flip TFunctor [] <$> (bsf $ string "*")
-                      <* (notFollowedBy $ char '(')
+nullaryStar = spanned $ (string "*" *> pure (Term $ TFunctor "*" []))
 
 term :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
      => m (Spanned Term)
 term = token $ choice
-        [       parens tfexpr
-        ,       spanned $ TVar <$> var
+        [       parens expr_full
+        ,       st TVar var
 
-        ,       spanned $ mkta <$> (colon *> term) <*> term
+        -- XXX ,       spanned $ mkta <$> (colon *> term) <*> term
 
-        , try $ spanned $ TBase . TString  <$> bsf stringLiteral
+        , try $ st (TPrim . TString) (bsf stringLiteral)
 
-        , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
+        , try $ st (TPrim . TNumeric) naturalOrDouble
 
-        , try $ spanned $ TBase . TBool <$> boolean
-
-        , try $ spanned $ flip TFunctor [] <$> parseAtom
-                        <* (notFollowedBy $ char '(')
+        , try $ st (TPrim . TBool) boolean
 
         , try $ nullaryStar
+
         ,       nakedbrak
-        ,       spanned $ parenfunc
+        ,       parenfunc
         ]
         <?> "Term"
  where
+  st a p = spanned $ Term . a <$> p
+
   mkta ty te = TAnnot (AnnType ty) te
 
   boolean = choice [ symbol "true" *> return True
                    , symbol "false" *> return False
                    ]
 
-  parenfunc = TFunctor <$> parseFunctor
-                       <*> parens (tlexpr `sepBy` symbolic ',')
+  parenfunc = do
+    f :~ sf <- spanned parseFunctor
+    mas <- optional $ spanned (parens (expr_arg `sepBy` symbolic ','))
+    let as :~ sas = maybe ([] :~ sf) id mas
+        sp = sf <> sas
+    return $ Term (TFunctor f as) :~ sp
 
   nakedbrak = listify <$> tlist
    where
-    tlist = spanned (brackets ((,) <$> (tlistexpr `sepEndBy` symbolic ',')
-                                       <*> (optional (symbolic '|' *> tlexpr))
-                                  ))
-
+    tlist = spanned $
+      brackets ((,) <$> (expr_list `sepEndBy` symbolic ',')
+                    <*> (optional (symbolic '|' *> expr_arg))
+               )
     listify ((xs,ml) :~ s) =
       let (xs' :~ s') = foldr (\a@(_ :~ sa) b@(_ :~ sb) ->
-                                TFunctor "cons" [a,b] :~ (sa <> sb))
-                              (maybe (TFunctor "nil" [] :~ r s) id ml)
+                                 (tb dynaConsOper a b) :~ (sa <> sb))
+                              (maybe (tn dynaNilOper :~ r s) id ml)
                               xs
       in (xs' :~ (s <> s'))
     r (Span _ e b) = Span e e b
-
-
-  -- XXX Ick ick ick ick... there must be a more general answer, even if
-  -- involves patching ekmett-parsers to understand something more like
-  -- DOPP.
-  --
-  -- XREF:TLEXPR
-  tlistexpr = do
-    ot <- asks dlc_opertab
-    (buildExpressionParser (maskPipe (unEOT ot)) term) <?> "List Expression"
-   where
-    maskPipe ot = fmap (fmap mkpf) ot
-
-    mkpf (Infix m a) = Infix (nfp >> m) a
-    mkpf (Prefix m)  = Prefix (nfp >> m)
-    mkpf (Postfix m)  = Postfix (nfp >> m)
-
-    nfp = notFollowedBy (symbolic '|' *> notFollowedBy (oneOfSet usualpunct))
-
--- | Sometimes we require that a character not be followed by whitespace
--- and satisfy some additional predicate before we pass it off to some other parser.
-thenAny :: (Monad m, TokenParsing m, LookAheadParsing m)
-        => m a -> m Char
-thenAny p =    anyChar                             -- some character
-            <* lookAhead (notFollowedBy someSpace) -- not followed by space
-            <* lookAhead p                         -- and not follwed by the request
-
--- | A "dot operator" is a dot followed immediately by something that looks
--- like a typical operator.  We 'lookAhead' here to avoid the case of a dot
--- by itself as being counted as an operator; the dot operator is required
--- to have not-a-space following (to avoid confusion with the end-of-rule
--- marker, which is taken to be "dot space" or "dot eof").
-dotOper :: (Monad m, TokenParsing m, LookAheadParsing m)
-        => m B.ByteString
-dotOper = bsf $ try (lookAhead (thenAny anyChar) *> identNL dynaDotOperStyle)
-
--- XXX Temporarily eliminated because of confusion with "foo(a,&b)" -- we
--- need to punt this out of the general expression table and down into the
--- "full" table (or perhaps something in-between?) -- it should be OK to
--- write "f(a, (b ,, c))" if ",," is an infix operator, for example, but
--- maybe "f(a, b  ,, c )" is a syntax error.
-{-
--- | A "comma operator" is a comma necessarily followed by something that
--- would continue to be an operator (i.e. punctuation).
-commaOper :: (Monad m, TokenParsing m, LookAheadParsing m)
-          => m B.ByteString
-commaOper = bsf $ try (   lookAhead (thenAny $ _styleLetter dynaCommaOperStyle)
-                       *> identNL dynaCommaOperStyle)
-                       -}
-
--- | A normal operator is handled by trifecta's built-in handling
-normOper :: (Monad m, TokenParsing m) => m B.ByteString
-normOper = bsf $ ident dynaOperStyle
-
--- | Prefix operators also handled by trifecta's built-in handling
-prefixOper :: (Monad m, TokenParsing m) => m B.ByteString
-prefixOper = bsf $ ident dynaPfxOperStyle
-
-uf :: (Monad m, Applicative m)
-   => m (Spanned B.ByteString)
-   -> m (Spanned Term -> Spanned Term)
-uf f = do
-  (x:~spx)  <- f
-  pure (\a@(_:~sp)   -> (TFunctor x [a]):~(spx <> sp))
-
-bf :: (Monad m, Applicative m)
-   => m (Spanned B.ByteString)
-   -> m (Spanned Term -> Spanned Term -> Spanned Term)
-bf f = do
-  (x:~spx)  <- f
-  pure (\a@(_:~spa) b@(_:~spb) -> (TFunctor x [a,b]):~(spa <> spx <> spb))
-
--- XREF:TLEXPR
-tlexpr :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
-       => m (Spanned Term)
-tlexpr = (asks dlc_opertab >>= flip buildExpressionParser term . unEOT)
-         <?> "Core Expression"
-
-moreETable :: (LookAheadParsing m, DeltaParsing m) => [[Operator m (Spanned Term)]]
-moreETable = [ [ Infix  (bf (spanned $ bsf $ symbol dynaEvalAssignOper)) AssocNone  ]
-             , [ Infix  (bf (spanned $ bsf $ symbol dynaConjOper      )) AssocRight ]
-             -- , [ Infix  (bf (spanned $       commaOper        )) AssocRight ]
-             , map (\x -> Infix  (bf (spanned $ bsf $ symbol x)) AssocNone)
-                   dynaRevConjOpers
-             ]
-
--- | Full Expression
-tfexpr :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
-       => m (Spanned Term)
-tfexpr = buildExpressionParser moreETable tlexpr <?> "Expression"
 
 ------------------------------------------------------------------------}}}
 -- Rules                                                                {{{
@@ -471,10 +302,11 @@ rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
             (_ :~ ds) <- try (spanned (char '.') <* lookAhead whiteSpace)
-            return (Rule h ":-" (TBase dynaUnitTerm :~ ds) :~ (hs <> ds))
+            return (Rule h ":-" (Term (TPrim (TBool True)) :~ ds)
+                     :~ (hs <> ds))
          , do
             aggr    <- token $ join $ asks dlc_aggrs
-            body    <- tfexpr
+            body    <- expr_full
             _ :~ ds <- spanned (char '.')
             return (Rule h aggr body :~ (hs <> ds))
          ]
@@ -565,11 +397,19 @@ pragmaBody = token $ choice
                                    <*  char '/'
                                    <*> parseArity)
 
-  parseDisposition = PDispos <$> selfdis
+  parseDisposition = PDispos <$> posn
+                             <*> selfdis
                              <*> parseFunctor
                              <*> (parens (argdis `sepBy` comma)
                                   <|> pure [])
    where
+    posn    = choice [ symbol "pre"   *> pure DTPPrefix
+                     , symbol "post"  *> pure DTPPostfix
+                     , symbol "in"    *> pure DTPInfix
+                     , symbol "funct" *> pure DTPFunctor
+                     , pure DTPFunctor
+                     ]
+
     argdis  = choice [ symbol "&" *> pure ADQuote
                      , symbol "*" *> pure ADEval
                      ]
@@ -579,9 +419,9 @@ pragmaBody = token $ choice
                      ]
 
   parseDisposDefl = PDisposDefl <$>
-    choice [ symbol "prologish"
-           , symbol "dyna"
-           , pure "dyna"
+    choice [ symbol "dyna" *> pure NDDDyna
+           -- , symbol "prologish"
+           , pure NDDDyna
            ]
 
   parseIAggr = do
@@ -612,16 +452,18 @@ pragmaBody = token $ choice
                sym    <- n
                return $ POperAdd fx (fromIntegral prec) sym
 
-      parseOperDel = POperDel <$> afx
+      parseOperDel = do
+                      (fx,n) <- fixity
+                      sym <- n
+                      return $ POperDel fx sym
 
       fixity = choice [ symbol "pre"  *> pure (PFPre, pfx)
                       , symbol "post" *> pure (PFPost, pfx)
                       , symbol "in" *> ((,) <$> (PFIn <$> assoc) <*> pure ifx)
                       ]
 
-      pfx = choice [ prefixOper, dotOper, {- commaOper, -} name ]
-      ifx = choice [ normOper  , dotOper, {- commaOper, -} name ]
-      afx = choice [ prefixOper, normOper, dotOper, {- commaOper, -} name]
+      pfx = choice [ bsf $ prefixOper, bsf $ dotOper, {- commaOper, -} name ]
+      ifx = choice [ bsf $ infixOper , bsf $ dotOper, {- commaOper, -} name ]
 
       assoc = choice [ symbol "none"  *> pure AssocNone
                      , symbol "left"  *> pure AssocLeft
@@ -638,91 +480,10 @@ pragmaBody = token $ choice
                     <*> (Right <$> parseInst <|> Left <$> parseNameWithArgs instName)
 
 ------------------------------------------------------------------------}}}
--- Printing pragma bodies                                               {{{
-
-renderFunctor :: B.ByteString -> PP.Doc e
-renderFunctor f = PP.squotes (PP.pretty f)
-
-renderInst :: ParsedInst -> PP.Doc e
-renderInst (PIVar v)               = PP.pretty v
-renderInst (PIInst IFree)          = "free"
-renderInst (PIInst (IAny u))       = "any" PP.<> PP.parens (IP.fullUniq u)
-renderInst (PIInst (IUniv u))      = "ground" PP.<> PP.parens (IP.fullUniq u)
-renderInst (PIInst (IBound u m b)) =
-  "bound" PP.<> PP.brackets (IP.fullUniq u)
-          PP.<> (if b then "$base" PP.<> PP.semi else PP.empty)
-          PP.<> (PP.encloseSep PP.lparen PP.rparen PP.semi
-                 $ map (\(k,v) -> PP.pretty k PP.<> PP.tupled (map renderInst v))
-                 $ M.toList m)
-
-renderMode :: ParsedModeInst -> PP.Doc e
-renderMode = either renderPNWA renderInst
-
-renderPNWA :: NameWithArgs -> PP.Doc e
-renderPNWA (PNWA n as) = PP.pretty n PP.<> PP.tupled (map PP.pretty as)
-
-renderPragma_ :: Pragma -> PP.Doc e
-renderPragma_ (PBackchain (f,a)) = "backchain" PP.<+> renderFunctor f
-                                               PP.<> PP.char '/'
-                                               PP.<> PP.pretty a
-
-renderPragma_ (PDisposDefl s) = "dispos_def" PP.<+> PP.text s
-
-renderPragma_ (PDispos s f as) = "dispos" PP.<+> rs s
-                                          PP.<> renderFunctor f
-                                          PP.<> PP.tupled (map ra as)
- where
-  rs SDInherit = PP.empty
-  rs SDQuote   = "&"
-  rs SDEval    = "*"
-
-  ra ADQuote   = "&"
-  ra ADEval    = "*"
-
-renderPragma_ (PIAggr f a ag)  = "iaggr" PP.<+> renderFunctor f
-                                         PP.<> PP.char '/'
-                                         PP.<> PP.pretty a
-                                         PP.<+> PP.pretty ag
-                                         PP.<+> PP.empty
-
-renderPragma_ (PInst n i) = "inst" PP.<+> renderPNWA n
-                                   PP.<+> renderInst i
-
-renderPragma_ (POperAdd f i n) = "oper" PP.<+> "add"
-                                        PP.<+> rf f
-                                        PP.<+> PP.pretty i
-                                        PP.<+> PP.pretty n
- where
-  rf PFPre  = "pre"
-  rf PFPost = "post"
-  rf (PFIn a) = "in" PP.<+> ra a
-
-  ra AssocLeft  = "left"
-  ra AssocNone  = "none"
-  ra AssocRight = "right"
-
-renderPragma_ (POperDel n) = "oper" PP.<+> "del" PP.<+> PP.pretty n
-
-renderPragma_ (PMode n i o) = "mode" PP.<+> renderPNWA n
-                                     PP.<+> renderMode i
-                                     PP.<+> renderMode o
-
-renderPragma_ (PRuleIx r) = "ruleix" PP.<+> PP.pretty r
-
-renderPragma :: Pragma -> PP.Doc e
-renderPragma = PP.enclose ":-" PP.dot . renderPragma_
-
-------------------------------------------------------------------------}}}
 
 pragma :: (DeltaParsing m, LookAheadParsing m, MonadReader DLCfg m)
        => m Pragma
-pragma = token $
-     symbol ":-"
-  *> (pragmaBody
-      -- <|> fmap PMisc (unSpan <$> tfexpr <?> "Other pragma")
-     )
-  <* {- optional -} (char '.')
-
+pragma = token (symbol ":-" *> pragmaBody <* {- optional -} (char '.'))
 
 ------------------------------------------------------------------------}}}
 -- Lines                                                                {{{
@@ -749,10 +510,6 @@ parse = configureParser dline
 testTerm   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m (Spanned Term)
 testTerm   = configureParser term
-
-testGenericAggr :: (DeltaParsing m, LookAheadParsing m)
-                => m B.ByteString
-testGenericAggr = genericAggregators
 
 testRule   :: (DeltaParsing m, LookAheadParsing m)
            => DLCfg -> m (Spanned Rule)

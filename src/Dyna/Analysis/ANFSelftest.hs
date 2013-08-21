@@ -21,19 +21,24 @@ import qualified Text.Trifecta                as T
 import           Text.PrettyPrint.Free
 
 import           Dyna.Analysis.ANF
+import           Dyna.Analysis.ANFPretty
 import qualified Dyna.ParserHS.OneshotDriver  as PD
+import qualified Dyna.ParserHS.Syntax         as P
+import qualified Dyna.ParserHS.SyntaxTheory   as P
 import qualified Dyna.ParserHS.Parser         as P
 import           Dyna.ParserHS.Selftest
 import           Dyna.Term.Normalized
-import           Dyna.Term.SurfaceSyntax
 import           Dyna.Term.TTerm
 import           Dyna.XXX.TrifectaTest
 
 
 testNormRule :: B.ByteString -> (Rule, ANFWarns)
 testNormRule s = normRule ( 0
-                          , disposTab_dyna mempty
-                          , unsafeParse (T.spanned (P.testRule defDLC)) s)
+                          , dt
+                          , unsafeParse (P.testRule dlc) s)
+ where
+  dt = P.mkDisposTab P.defDispos_dyna mempty
+  dlc = P.mkDLC P.dynaOperSpec
 
 {-
 e1 = testNormRule "f(X)."
