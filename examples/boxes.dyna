@@ -1,0 +1,96 @@
+% boxes.dyna takes a few boxes and moves them around in order to prevent collisions. The post processor helps render the results.
+% call using:
+% time ./dyna examples/boxes.dyna --post-process 'graph("outfile.gif")'
+
+% It is recommended to go and change the 430th line in src/Dyna/Analysis/Rulemode.hs from "runAgenda = goMF [] . (..." to "runAgenda = Right . go . (..."
+% This change will help preventing dyna from consuming a massive amount of memory.
+
+
+
+% box(Width, Height, Name).
+box(0.7,0.7,"a") += 1.
+box(1,1,"b") += 1.
+box(0.5,0.5,"c") += 1.
+box(0.3, 0.3,"d") += 1.
+
+% Positions
+pos(U,T) := [x(U,T), y(U,T)].
+
+% Box corner positions
+x1(Name,T) := x(Name,T) - (W/2) for _ is box(W,H,Name).
+x2(Name,T) := x(Name,T) + (W/2) for _ is box(W,H,Name).
+y1(Name,T) := y(Name,T) - (H/2) for _ is box(W,H,Name).
+y2(Name,T) := y(Name,T) + (H/2) for _ is box(W,H,Name).
+c1(Name,T) := [x1(Name,T), y1(Name,T)].
+c2(Name,T) := [x1(Name,T), y2(Name,T)].
+c3(Name,T) := [x2(Name,T), y1(Name,T)].
+c4(Name,T) := [x2(Name,T), y2(Name,T)].
+
+% Frame draw for the text name of each box.
+frame(T, &text(Name, pos(Name, T))) := true for _ is box(A,B,Name).
+frame(T, &line(c1(Name,T), c2(Name,T))) := true for _ is box(W,H,Name).
+frame(T, &line(c2(Name,T), c4(Name,T))) := true for _ is box(W,H,Name).
+frame(T, &line(c4(Name,T), c3(Name,T))) := true for _ is box(W,H,Name).
+frame(T, &line(c3(Name,T), c1(Name,T))) := true for _ is box(W,H,Name).
+
+% Bounding box intersection tests
+:-backchain boundsCheck/4.
+boundsCheck(X1_1, X2_1, X1_2, X2_2) += 0. 
+boundsCheck(X1_1, X2_1, X1_2, X2_2) += 1 for (((X1_2 < X2_1) & (X2_2 > X2_1)) | ((X2_2 > X1_1) & (X2_2 < X2_1))).
+
+% This intersection check is pretty slow to do. Especially for both x and y components.
+intersection(Name1,Name2, T) += 0 for (X1_1 is x1(Name1,T)), (X1_2 is x1(Name2,T)).
+intersection(Name1,Name2, T) += 1 for 
+			  (boundsCheck(x1(Name1,T), x2(Name1,T), x1(Name2,T), x2(Name2,T)) >= 1),
+			  (boundsCheck(y1(Name1,T), y2(Name1,T), y1(Name2,T), y2(Name2,T)) >= 1).
+
+% Direction to move
+% I split collisionVector into x and y seperate components because the += operator does not support aggregating arrayed valuess [X, Y].
+collisionVector_x(U,T) += 0 for (P is pos(U,T)), (P is [X, _]).
+collisionVector_x(U,T) += X-X2 for (intersection(U,U2,T) >= 1), (P1 is pos(U,T)), (P1 is [X,_]), (P2 is pos(U2,T)), (P2 is [X2, _]).
+collisionVector_y(U,T) += 0 for (P is pos(U,T)), (P is [_, Y]).
+collisionVector_y(U,T) += Y-Y2 for (intersection(U,U2,T) >= 1), (P1 is pos(U,T)), (P1 is [_,Y]), (P2 is pos(U2,T)), (P2 is [_, Y2]).
+collisionVector_magnitude(U,T) += sqrt((collisionVector_x(U,T) * collisionVector_x(U,T)) + (collisionVector_y(U,T) * collisionVector_y(U,T))).
+
+
+%TODO: try to figure out how to get a gravity component going.
+
+:-backchain gravityVector/2.
+gravityVector(pos(U,T)) := [-X,-Y] for (P is pos(U,T)), (P is [X,Y]).
+:-backchain gravityVector_magnitude/2.
+gravityVector_magnitude(pos(U,T)) := sqrt(Gx*Gx + Gy*Gy) for (G is gravityVector(pos(U,T))), (G is [Gx, Gy]).
+
+
+movementVector_collision(U,T) := [0,0] for (C_mag is collisionVector_magnitude(U,T)), (C_mag == 0).
+movementVector_collision(U,T) := [collisionVector_x(U,T)/C_mag* delta, collisionVector_y(U,T)/C_mag * delta] for (C_mag is collisionVector_magnitude(U,T)), (C_mag > 0).
+
+%:-backchain movementVector_gravity/2.
+movementVector_gravity(pos(U,T)) := [Gx/Gmag*delta/(T* 0.1), Gy/Gmag*delta/(T * 0.1)] for (G is gravityVector(pos(U,T))), (Gmag is gravityVector_magnitude(pos(U,T))), (G is [Gx, Gy]).
+
+% Collision updates
+x(U,T) += x(U,T-1) + (Xdelta) for (M is movementVector_collision(U,T-1)), (M is [Xdelta,_]) ,(T < numberOfIterations).
+y(U,T) += y(U,T-1) + (Ydelta) for (M is movementVector_collision(U,T-1)), (M is [_,Ydelta]) ,(T < numberOfIterations).
+
+% Gravity updates. Comment these two lines out if you want this to run in a somewhat reasonable amount of time.
+%x(U,T) += Gx for (G is movementVector_gravity(pos(U,T-1))), (G is [Gx, _]).
+%y(U,T) += Gy for (G is movementVector_gravity(pos(U,T-1))), (G is [_, Gy]).
+
+
+
+numberOfIterations := 300.
+delta := 0.01.
+
+
+ 
+
+
+% Initialized positions.
+x("a",0) += uniform(-1,0). y("a",0) += uniform(-1,1).
+x("b",0) += uniform(-1,0). y("b",0) += uniform(-1,1).
+x("c",0) += uniform(-1,0). y("c",0) += uniform(-1,1).
+x("d",0) += uniform(-1,0). y("d",0) += uniform(-1,1).
+
+%x("a",0) += 0. y("a",0) += 0.
+%x("b",0) += 0.9. y("b",0) += 0.
+%x("c",0) += 1.9. y("c",0) += 0.
+%x("d",0) += 2.9. y("d",0) += 0.
