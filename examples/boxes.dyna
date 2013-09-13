@@ -46,42 +46,33 @@ intersection(Name1,Name2, T) += 1 for
 
 % Direction to move
 % I split collisionVector into x and y seperate components because the += operator does not support aggregating arrayed valuess [X, Y].
-collisionVector_x(U,T) += 0 for (P is pos(U,T)), (P is [X, _]).
-collisionVector_x(U,T) += X-X2 for (intersection(U,U2,T) >= 1), (P1 is pos(U,T)), (P1 is [X,_]), (P2 is pos(U2,T)), (P2 is [X2, _]).
-collisionVector_y(U,T) += 0 for (P is pos(U,T)), (P is [_, Y]).
-collisionVector_y(U,T) += Y-Y2 for (intersection(U,U2,T) >= 1), (P1 is pos(U,T)), (P1 is [_,Y]), (P2 is pos(U2,T)), (P2 is [_, Y2]).
+collisionVector_x(U,T) += 0 for (pos(U,T) == [X, _]).
+collisionVector_x(U,T) += X-X2 for (intersection(U,U2,T) >= 1), (pos(U,T) == [X,_]), (pos(U2,T) == [X2, _]).
+collisionVector_y(U,T) += 0 for (pos(U,T) == [_, Y]).
+collisionVector_y(U,T) += Y-Y2 for (intersection(U,U2,T) >= 1), (pos(U,T) == [_,Y]), (pos(U2,T) == [_, Y2]).
 collisionVector_magnitude(U,T) += sqrt((collisionVector_x(U,T) * collisionVector_x(U,T)) + (collisionVector_y(U,T) * collisionVector_y(U,T))).
 
 
 %TODO: try to figure out how to get a gravity component going.
+gravityVector(pos(U,T)) := [-X,-Y] for (pos(U,T) == [X,Y]).
+gravityVector_magnitude(pos(U,T)) := sqrt(Gx*Gx + Gy*Gy) for (gravityVector(pos(U,T)) == [Gx, Gy]).
 
-:-backchain gravityVector/2.
-gravityVector(pos(U,T)) := [-X,-Y] for (P is pos(U,T)), (P is [X,Y]).
-:-backchain gravityVector_magnitude/2.
-gravityVector_magnitude(pos(U,T)) := sqrt(Gx*Gx + Gy*Gy) for (G is gravityVector(pos(U,T))), (G is [Gx, Gy]).
-
-
-movementVector_collision(U,T) := [0,0] for (C_mag is collisionVector_magnitude(U,T)), (C_mag == 0).
+movementVector_collision(U,T) := [0,0] for (collisionVector_magnitude(U,T) == 0).
 movementVector_collision(U,T) := [collisionVector_x(U,T)/C_mag* delta, collisionVector_y(U,T)/C_mag * delta] for (C_mag is collisionVector_magnitude(U,T)), (C_mag > 0).
 
-%:-backchain movementVector_gravity/2.
-movementVector_gravity(pos(U,T)) := [Gx/Gmag*delta/(T* 0.1), Gy/Gmag*delta/(T * 0.1)] for (G is gravityVector(pos(U,T))), (Gmag is gravityVector_magnitude(pos(U,T))), (G is [Gx, Gy]).
+movementVector_gravity(pos(U,T)) := [0,0] for (gravityVector_magnitude(pos(U,T)) == 0).
+movementVector_gravity(pos(U,T)) := [Gx/Gmag*delta/(T* 0.1), Gy/Gmag*delta/(T * 0.1)] for (gravityVector(pos(U,T)) == [Gx, Gy]), (Gmag is gravityVector_magnitude(pos(U,T))), (Gmag != 0).
 
 % Collision updates
-x(U,T) += x(U,T-1) + (Xdelta) for (M is movementVector_collision(U,T-1)), (M is [Xdelta,_]) ,(T < numberOfIterations).
-y(U,T) += y(U,T-1) + (Ydelta) for (M is movementVector_collision(U,T-1)), (M is [_,Ydelta]) ,(T < numberOfIterations).
+x(U,T) += x(U,T-1) + (Xdelta) for (movementVector_collision(U,T-1) == [Xdelta,_]) ,(T < numberOfIterations).
+y(U,T) += y(U,T-1) + (Ydelta) for (movementVector_collision(U,T-1) == [_,Ydelta]) ,(T < numberOfIterations).
 
 % Gravity updates. Comment these two lines out if you want this to run in a somewhat reasonable amount of time.
-%x(U,T) += Gx for (G is movementVector_gravity(pos(U,T-1))), (G is [Gx, _]).
-%y(U,T) += Gy for (G is movementVector_gravity(pos(U,T-1))), (G is [_, Gy]).
-
-
+%x(U,T) += Gx for (movementVector_gravity(pos(U,T-1)) == [Gx, _]).
+%y(U,T) += Gy for (movementVector_gravity(pos(U,T-1)) == [_, Gy]).
 
 numberOfIterations := 300.
 delta := 0.01.
-
-
- 
 
 
 % Initialized positions.
