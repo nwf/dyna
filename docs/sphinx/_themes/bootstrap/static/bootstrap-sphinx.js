@@ -117,8 +117,8 @@
     patchTables();
 
     // Add Note, Warning styles.
-    $('div.note').addClass('alert').addClass('alert-info');
-    $('div.warning').addClass('alert');
+    $('div.note, .admonition').addClass('alert').addClass('alert-info');
+    $('div.warning').addClass('alert').removeClass('alert-info');
 
     // Inline code styles to Bootstrap style.
     $('tt.docutils.literal').not(".xref").each(function (i, e) {
