@@ -63,7 +63,7 @@ except:
 
 # The full version, including alpha/beta/rc tags.
 try:
-  release = version + ' git=' + subprocess.check_output(["git", "describe", "--always"])
+  release = version + ' git=' + subprocess.check_output(["git", "describe", "--always"]).strip()
 except subprocess.CalledProcessError:
   release = version + ' gitless'
 
