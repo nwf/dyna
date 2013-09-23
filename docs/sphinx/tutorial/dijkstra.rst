@@ -77,16 +77,16 @@ from Chicago (ORD).
 This is encoded into Dyna, using strings to identify vertices of the graph,
 thus::
 
-  edge("BOS","JFK") := 187.
+  edge("BOS","JFK") :=  187.
   edge("BOS","MIA") := 1258.
   edge("JFK","DFW") := 1391.
   edge("JFK","SFO") := 2582.
   edge("JFK","MIA") := 1090.
   edge("MIA","DFW") := 1121.
   edge("MIA","LAX") := 2342.
-  edge("DFW","ORD") := 802.
+  edge("DFW","ORD") :=  802.
   edge("DFW","LAX") := 1235.
-  edge("ORD","DFW") := 802.
+  edge("ORD","DFW") :=  802.
   edge("LAX","ORD") := 1749.
   
   edge("FriendHouse","BOS") := 10.

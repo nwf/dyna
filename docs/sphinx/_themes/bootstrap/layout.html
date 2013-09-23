@@ -1,75 +1,92 @@
+{% if theme_bootstrap_version == "3" %}
+  {% set bootstrap_version, bootstrap_additional_css, navbar_version = "3.0.0", "theme", "" %}
+  {% set bs_span_prefix = "col-md-" %}
+ {% if theme_bootswatch_theme %}
+  {% set css_files = css_files + [
+      '//netdna.bootstrapcdn.com/bootswatch/' + bootstrap_version + '/' + theme_bootswatch_theme + '/bootstrap.min.css',
+      '_static/bootstrap-sphinx.css'
+    ]
+  %}
+ {% else %}
+  {% set css_files = [
+      '_static/bootstrap-' + bootstrap_version + '/css/bootstrap.min.css'
+    ] + css_files
+  %}
+  {% set css_files = css_files + [
+      '_static/bootstrap-' + bootstrap_version + '/css/bootstrap-' + bootstrap_additional_css + '.min.css',
+      '_static/bootstrap-sphinx.css'
+    ]
+  %}
+ {% endif %}
+{% else %}
+  {% set bootstrap_version, bootstrap_additional_css, navbar_version = "2.3.2", "responsive", "-2" %}
+  {% set bs_span_prefix = "span" %}
+  {% set css_files = [
+      '_static/bootstrap-' + bootstrap_version + '/css/bootstrap.min.css'
+    ] + css_files
+  %}
+  {% if theme_bootswatch_theme %}
+  {% set css_files = css_files + [
+      '//netdna.bootstrapcdn.com/bootswatch/' + bootstrap_version + '/' + theme_bootswatch_theme + '/bootstrap.min.css'
+    ]
+  %}
+  {% endif %}
+  {% set css_files = css_files + [
+      '_static/bootstrap-' + bootstrap_version + '/css/bootstrap-' + bootstrap_additional_css + '.min.css',
+      '_static/bootstrap-sphinx.css'
+    ]
+  %}
+{% endif %}
+
 {% extends "basic/layout.html" %}
 
   {% set script_files = script_files + [
     '_static/js/jquery-1.9.1.min.js',
     '_static/js/jquery-fix.js',
-    '_static/bootstrap-2.3.2/js/bootstrap.min.js',
+    '_static/bootstrap-' + bootstrap_version + '/js/bootstrap.min.js',
     '_static/bootstrap-sphinx.js'
   ]
 %}
-{% set css_files = [
-    '_static/bootstrap-2.3.2/css/bootstrap.min.css'
-  ] + css_files
-%}
-{% if theme_bootswatch_theme %}
-{% set css_files = css_files + [
-    '//netdna.bootstrapcdn.com/bootswatch/2.3.2/' + theme_bootswatch_theme + '/bootstrap.min.css'
-  ]
-%}
-{% endif %}
-{% set css_files = css_files + [
-    '_static/bootstrap-sphinx.css',
-    '_static/bootstrap-2.3.2/css/bootstrap-responsive.min.css'
-  ]
-%}
+{%- set render_sidebar = (not embedded) and (not theme_nosidebar|tobool) and sidebars %}
+
+{%- set bs_content_width = render_sidebar and "9" or "12"%}
+
 
 {%- block doctype -%}
 <!DOCTYPE html>
 {%- endblock %}
 
-{# Sidebar: Rework into our Boostrap nav section. #}
+{# Sidebar: Rework into our Bootstrap nav section. #}
 {% macro navBar() %}
-  <div id="navbar" class="{{ theme_navbar_class }} {% if theme_navbar_fixed_top == 'true' -%} navbar-fixed-top{%- endif -%}">
-    <div class="navbar-inner">
-      <div class="container">
-        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
-        <button class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
-        </button>
+{% include "navbar" + navbar_version + ".html" %}
+{% endmacro %}
 
-        <a class="brand" href="{{ pathto(master_doc) }}">{% if theme_navbar_title -%}{{ theme_navbar_title|e }}{%- else -%}{{ project|e }}{%- endif -%}</a>
-        <span class="navbar-text pull-left"><b>{{ version|e }}</b></span>
-
-        <div class="nav-collapse">
-          <ul class="nav">
-            <li class="divider-vertical"></li>
-            {% if theme_navbar_links %}
-              {%- for title, doc in theme_navbar_links %}
-                <li><a href="{{ pathto(doc) }}">{{ title }}</a></li>
-              {%- endfor %}
-            {% endif %}
-            {% block sidebartoc %}
-              {% include "globaltoc.html" %}
-              {% include "localtoc.html" %}
-            {% endblock %}
-            {% block sidebarrel %}
-              {% include "relations.html" %}
-            {% endblock %}
-            {% if theme_source_link_position == "nav" %}
-              <li>{% include "sourcelink.html" %}</li>
-            {% endif %}
-          </ul>
-
-          {% block sidebarsearch %}
-            {% include "searchbox.html" %}
-          {% endblock %}
+{% if theme_bootstrap_version == "3" %}
+  {%- macro bsidebar() %}
+      {%- if render_sidebar %}
+      <div class="{{ bs_span_prefix }}3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+          {%- for sidebartemplate in sidebars %}
+            {%- include sidebartemplate %}
+          {%- endfor %}
         </div>
       </div>
-    </div>
-  </div>
-{% endmacro %}
+      {%- endif %}
+  {%- endmacro %}
+{% else %}
+  {%- macro bsidebar() %}
+      {%- if render_sidebar %}
+      <div class="{{ bs_span_prefix }}3">
+        <div id="sidebar" class="bs-sidenav well" data-spy="affix">
+          {%- for sidebartemplate in sidebars %}
+            {%- include sidebartemplate %}
+          {%- endfor %}
+        </div>
+      </div>
+      {%- endif %}
+  {%- endmacro %}
+{% endif %}
+
 
 {%- block extrahead %}
 <meta charset='utf-8'>
@@ -80,8 +97,6 @@
 
 {# Silence the sidebar's, relbar's #}
 {% block header %}{% endblock %}
-{% block sidebar1 %}{% endblock %}
-{% block sidebar2 %}{% endblock %}
 {% block relbar1 %}{% endblock %}
 {% block relbar2 %}{% endblock %}
 {% block sidebarsourcelink %}{% endblock %}
@@ -89,7 +104,13 @@
 {%- block content %}
 {{ navBar() }}
 <div class="container">
-  {% block body %}{% endblock %}
+  <div class="row">
+    {%- block sidebar1 %}{{ bsidebar() }}{% endblock %}
+    <div class="{{ bs_span_prefix }}{{ bs_content_width }}">
+      {% block body %}{% endblock %}
+    </div>
+    {% block sidebar2 %} {# possible location for sidebar #} {% endblock %}
+  </div>
 </div>
 {%- endblock %}
 
