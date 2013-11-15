@@ -6,6 +6,10 @@
 	  nowadays there is explicit support for themes (I like
 	  "agogo" or "sphinxdoc"), as explained in the sphinx manual.
 
+.. todo:: how to obtain / install Dyna.  Also, licensing (see
+	  http://bugs.dyna.org/rt/Ticket/Display.html?id=52, also
+	  http://bugs.dyna.org/rt/Ticket/Display.html?id=569).
+
 Welcome to Dyna!
 =================================
 
@@ -44,6 +48,7 @@ Contents:
 Indices and tables
 ==================
 
+* :doc:`spec/errors`
 * :doc:`spec/glossary`
 * :ref:`genindex`
 * :ref:`search`
