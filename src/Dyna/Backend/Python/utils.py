@@ -257,9 +257,21 @@ def span_to_src(span, src=None):
     Utility for retrieving source code for Parsec error message (there is
     nothing specific about rules)
     """
-
-    [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
-
+    
+    # look for intervals like `filename:3:1-filename:3:6`
+    lines = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
+    if lines:
+        [(filename, bl, bc, el, ec)] = lines
+    else:
+        # look for point-like errors as in `filename:3:1`
+        lines = re.findall(r'(.*):(\d+):(\d+)', span)
+        if not lines:
+            return []
+        
+        [(filename, bl, bc)] = lines
+        el = bl
+        ec = bc
+    
     (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
 
     if not src:
