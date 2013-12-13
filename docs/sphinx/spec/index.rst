@@ -1,4 +1,3 @@
-
 .. -*- compile-command: "make -C .. html" -*-
 .. Specification index
    This file is enumerated in the toctree directive of index.rst
@@ -365,6 +364,9 @@ Aggregating queries
 	    (+= foo(I,2)) = 5.
 	    (+= foo(I,3)) = 7.
           And ``query (*= (+= foo(I,^J)))`` will return 35 in this case.
+.. todo:: getting a prefix aggregator to capture extra variables.
+          See discussion in frozen3.txt, and at randomness below.
+          
 
 Accessors
 ---------
@@ -415,6 +417,8 @@ Update modes
 Stability
 =========
 .. todo:: guarantees on queries (what can change as a result of updates; is a := update a definite override?)
+
+.. todo:: The following things might be unstable: ?=, builtins that have free-choice like ?=, latching results, randomness, gensym and dynabase identity.  We should always guarantee that they are stable within a query.  When do we want to guarantee that they are stable across multiple queries of the same snapshot, or queries to (snapshots of) dynabases that are related by "irrelevant" update or extension?  (and how do we define "irrelevant"?)  They might also change across multiple runs, e.g., if the same dynabase is loaded twice.
 
 Dynabase types
 ==============
@@ -527,7 +531,13 @@ See discussion of current implementation in :doc:`/tutorial/errors`.
 Gensyms
 -------
 
-.. todo: how gensyms capture variables
+.. todo:: how gensyms capture variables.  This is actually the case for the "new" operator in general.
+
+.. todo:: Variables whose names start with _ (including _ itself) are not captured.
+
+.. todo:: Note that ^* is well-defined and affects capturing.
+
+.. todo:: Interaction of capturing with prefix aggregators: Consider the expression `(+= f(A,B)*weight(*) for A in set) + g(B) + h(C)`.  In the subexpression `(+= f(A,B)*weight(*))`, both A and B are captured by the gensym, just as if we had lifted out the rule `temp(B) += f(A,B)*weight(*)`.    
 
 Head destructuring
 ------------------
@@ -595,8 +605,32 @@ Declaration inference
 .. todo:: and compile-time errors.  See
 	  http://www.dyna.org/wiki/index.php?title=Declaration_inference
 
-Type inference
---------------
+Type inference on variables
+---------------------------
+
+.. todo:: If types have been declared (or inferred) on functors, then
+	  this imposes implicit restrictions on variables that are
+	  used as arguments to those functors.  Specifically, in each
+	  subgoal of a rule, we consider variables that are being used
+	  for the first time anywhere in that subgoal (including
+	  inside nested terms and nested evaluations!).  We jointly
+	  infer types for all these variables given the declarations
+	  of functors at their parents and the types of other
+	  variables.  For example, consider
+	  f(g(p(X,r(Y)),h(q(s(X),Y,t(A))))) where X,Y are first used
+	  here.  We already know the type of A, therefore the return
+	  type T of t(A) (which must be not only constructable but
+	  also evaluable for all A in its type, or we get an error).
+	  We now jointly infer maximal types for X, Y, R, S.  These
+	  are the intended types of 
+
+	  We don't yet know the return types R of r(X) or S of s(Y),
+	  but we have upper bounds on them.
+
+.. todo:: 
+
+Type inference on functors
+--------------------------
 
 .. todo:: if the user defines f(0) and f(1), should we guess
 	  that f only takes integers, so that it's a type error
@@ -623,6 +657,8 @@ Aggregator inference
 
 Scripting commands
 ==================
+
+.. todo:: Maybe this should be in another section.  Somewhere, we need to describe the repl and notebook interfaces.  (These are very closely related: a .dyna file is like only the input to a notebook, and a session with the repl is logged to a .dyna file.  Editing the .dyna file is like changing the notebook in place (it's just that the old input and output can't be seen).)
 
 Include
 =======
@@ -708,6 +744,47 @@ Numeric operators and aggregators
 
 Randomness
 ==========
+
+.. todo:: Import rand, and create a new seeded source of randomness
+          via r = rand(seed) where seed may be either a constant term
+          (for replicability) or * (which suggests new randomness on
+          each run, although I'm not sure whether that's guaranteed).
+	  Note that seed can be explcitily overridden in an extension if desired,
+	  and we could use seed1 and seed2 for different distributions,
+	  so that the extension can override one and not the other.
+          Now for each term T, `g = r.gaussian(T)` is a different
+          Gaussian-distributed random variable.  Usually T is * so
+          that we have a new random variable on each run; maybe we can
+          have * as a default argument?  Perhaps better, we should
+          just do `g = new r.gaussian` to get a new random variable.  If
+          we want to ensure replicability, then we must arrange for
+          the `new` operator to actually put the captured context into
+          the new dynabase (as private fields that can only be
+          accessed by the new dynabase, and do not need to be stored
+          if the new dynbase doesn't need them, as with `*`); the
+          rules that define a Gaussian can then combine these fields
+          with the seed to get a deterministic key.  Now, we can 
+	  take multiple samples from `g` via `g.sample(I)` for 
+	  indices `I`.  We can also combine `g` with other random
+	  variables using overloaded operators, and observe the results.
+	  The results are now 
+
+.. todo:: The syntax `rand(*).gaussian(*).sample(*)` is rather clunky
+          for just getting a Gaussian variate in the usual way.
+	  Even if we start with `r = rand(*)` at the top of the file,
+	  and then `strength(:person X) = r.gaussian(X)` to say that
+	  strengths are Gaussian RVs, we still have to write
+	  `strength("Atlas").sample(*)`.  So let's have syntactic
+	  sugar for sampling from a distribution: `a ~ strength("Atlas")`
+	  or more directly `a ~ r.gaussian(*)`.  Presumably,
+	  the aggregation operator puts the `.sample(*)` part into the
+	  injector.  Note that `~` can be used as a prefix operator if 
+	  we don't want to name our samples, e.g., 
+	  `mean= (~ strength(X)) for myfriend(X).`
+	  For multiple samples from the same variable, we might
+	  want explicitly `mean= strength("Atlas").sample(I) for 1 <= I <= 100`.
+	  Maybe there should be a nicer way to generate a vector of samples.
+
 
 String operators and aggregators
 ================================
