@@ -142,8 +142,147 @@ Booleans
 Numbers
 -------
 
+.. todo:: One option is to have disjoint numeric types that vary by
+	  precision.  There seem to be the following classes: 
+	  * exact expressions as in Mathematica (bignums, rationals
+	    infinity, algebraic expressions like 1+sqrt(3) or at least
+	    the ones without variables, complex numbers with exact
+	    coefficients, perhaps unlimited-precision FP)
+	  * machine integers of various widths, with modular
+	    arithmetic (wraparound); these are not really subtypes
+	    of one another because upcasting changes what addition
+	    means
+	  * machine floating-point of various precisions
+
+          We also have union types like `number` and (to exclude
+	  complex numbers from comparisons) `real`.
+	  The numeric library is able to add or compare ints and
+	  floats with each other: it probably covers numbers via a
+	  union of several type signatures.  However, not all modes
+	  are supported.  So even though `*` has (int,float)->float,
+	  we can only run that in mode +,+,- or +,-,+ but not -,+,+
+	  where we need to use (float,float)->float.  And even though
+	  `between` has (real,real,real)->bool, the mode +,-,+ 
+	  requires the second arg to already be restricted to int.
+	  So the user can write `between(1,3.5,10)` but must do
+	  `between(1,:int X,10)` rather than `between(1,X,10) (unless
+	  the :int restriction shows up elsewhere in the rule).
+	  Perhaps we should offer the user a convenience predicate
+	  `ibetween`.
+
+	  Problems with this approach:
+	  * distinguishing the literals (3 versus 3. versus 3L)
+	  * names for explicit casts
+	  * operator overloading and/or coercion (borrow from other
+	    languages)
+	  * queries for f(3) and f(3.0) could give different results
+	  * f(3.0) := ... can't override f(3) := ... 
+	  * f(3.0) +=  doesn't combine with f(3) += ...; could be
+	    awkward if argument to f comes from a subexpression or
+	    another query
+	  * inverse floating-point modes may have to be nondet if they
+	    are supported at all: there are many values of Epsilon
+	    such that 3+Epsilon==3 (similarly, inf+Epsilon==inf)
+	  * double-counting in aggregation, e.g., += f(X) for X > 3.
+	  * Options:
+	    * Reject aggregation where the type contains multiple
+	      numeric branches.  But this is a pain because now people
+	      can't aggregate innocuously over terms when they are not
+	      planning to store both 3 and 3.0.
+	    * At runtime, give an aggregation error if some of the
+	      binding sets that we aggregate over appear to be equal,
+	      i.e., X=3,Y="foo" and X=3.0,Y="foo".  (We can
+	      eliminate this check if at compile-time we know from X's
+	      type that it can't take on different "versions" of the
+	      same value, e.g., its int range and float range are
+	      disjoint.  We can also speed up this check if at runtime
+	      we track information about the numeric types that are
+	      actually used and do more type inference based on those
+	      restricted types.)
+	    * Don't permit the user to define explicit values at
+	      compile-time or runtime for both f(3) and f(3.0)
+	      (perhaps f needs to keep track of which numeric subclass
+	      it is actually using for its args and values even if it
+	      is defined over terms), unless user declares that they
+	      really want this for f/1.  We probably shouldn't
+	      allow the queries f(3) and f(3.0) to find each other's
+	      values because then we'll get double-counting.
+	 
+	  Alternative approach: We only have one big `number` type
+	  with subtypes that are implemented by various efficient
+	  classes, which may overlap.  This ensures that f(3.0) and
+	  f(3) always mean the same thing and are not double-counted.
+	  But what happens when a class runs into its bounds or
+	  precision limits?  The classy procedures that implement `+`
+	  may give different results from one another, depending on
+	  the particular classes of their arguments.  
+
+	  (A good rule of thumb is that the most precise argument
+	  class dictates the amount of precision in the operation and
+	  the result class, and literals have a sufficient and indeed
+	  generous level of precision, so 12345678901234567890 will
+	  get a class that is big enough to represent it and so that
+	  adding 255+1 is adding integers rather than bytes.  However,
+	  we need to decide whether bigint+float returns bigint or
+	  float or something even bigger, and certain operations may
+	  map finite to possibly-infinite or int to float.)
+
+	  Since the class of the input item makes a difference, we
+	  think of this nondeterministic behavior as akin to the
+	  "don't care" aggregator, where there are several definitions
+	  of `+` and which one to use is up to the system.  If the
+	  user wants to control which `+` it is (e.g., unsigned char,
+	  or strict math that is careful to never lose precision),
+	  then they can give a more specifically named operator, or
+	  rebind the `+` symbol to that operator for convenience, or
+	  give a pragma, or something.
+
+	  A problem with this don't-care approach is that a single
+	  item can be computed in different ways (plan order, forward
+	  vs. backward chaining, query mode, aggregation order, the
+	  subtraction trick, etc.)  that get different answers owing
+	  to different class choices or aggregated numerical errors.
+	  So we may have to pin a particular answer: remember that
+	  don't-cares are as bad for efficiency as cycles or
+	  randomness.  So maybe we'd like to ensure at least that the
+	  precision of a token of `+` is resolved in a consistent way
+	  across all plans (which might require restricting the number
+	  of plans).
+
+	  Also, it should be easy for the user to figure out what the
+	  semantics of the program is and to control it.  That is, can
+	  the user figure out which classes are being used other than
+	  by annotating the operator?  Note that `f(X) = X+1` might
+	  give different numerical answers for `f(3000000000000)`
+	  depending on the class used to represent the argument.
+	  Consider also `f(X) = X+1 for a(X), b(X)`, where the choice
+	  of `+` procedure might be affected by the classes of ground
+	  answers returned by subgoals `a` and `b` as well as the
+	  class of ground argument passed in by `f` (if any).  If
+	  these classes are not all the same, then what is the class
+	  passed into `+`?  Can it be determined somehow at compile
+	  time, in a consistent way?  Isn't it a problem if forward
+	  and backward chaining give different results?  (Perhaps we
+	  can at least say that if the query `f(X)` comes back with
+	  the result `f(3)=4` then `f(3)` would have come back with
+	  the same answer `4`, and that if it comes back with
+	  `f(3.0)=4.0` then `f(3.0)` would have come back with the
+	  same answer `4.0`.)
+
 Strings
 -------
+
+.. todo:: (related to numbers) when are two Unicode strings considered
+	  equal?  Is a string a sequence of code points, or is it a
+	  normalized version?  Do we have different types for string,
+	  string_NFD, string_NFC, string_NFKD, string_NFKC?  Can they
+	  be equal to one another?  Is there any coercion?  What are
+	  the canonicalization operators called?  Do we have
+	  canonicalizing equality operators?  How do we protect the
+	  user?  Should we regard a normalized string in any of these
+	  schemes as a *set* of unnormalized strings (probably the
+	  enumeration mode is not supported), so that we can ask about
+	  meet as well as equality?
 
 Escape codes
 ^^^^^^^^^^^^
@@ -401,6 +540,8 @@ Some discussion of current approach is in :doc:`/manual/pragmas`.
 
 Lambdas
 =======
+
+.. todo:: with keyword args.  should be sufficient for teaching NLP.
 
 Terms as dynabases
 ==================
