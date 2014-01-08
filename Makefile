@@ -75,8 +75,7 @@ sphinxbuild:
 	(cd docs/sphinx; make html)
 
 sphinxdoc: sphinxbuild
-	python -c 'import webbrowser; \
-	  webbrowser.open("./docs/sphinx/_build/html/index.html")'
+	python -m webbrowser "./docs/sphinx/_build/html/index.html"
 
 doc: sphinxbuild haddock
 
