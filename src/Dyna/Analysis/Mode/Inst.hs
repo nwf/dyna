@@ -165,7 +165,7 @@ inst_recps = inst_rec . each . each
 -- disjunct and the argument position being traversed right now.
 inst_irecps :: (Applicative a) => ((f, Int) -> i -> a i')
                                -> InstF f i -> a (InstF f i')
-inst_irecps = itraverseOf (inst_rec .> each <.> each)
+inst_irecps = itraverseOf (inst_rec .> itraversed <.> itraversed)
 {-# INLINABLE inst_irecps #-}
 
 ------------------------------------------------------------------------}}}
