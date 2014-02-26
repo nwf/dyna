@@ -50,7 +50,7 @@ clean:
 	rm -rf *.tix
 	rm -f tags TAGS
 veryclean: clean
-	rm -rf dist
+	rm -rf dist/*
 
 run-parser:
 	ghci -isrc Dyna.ParserHS.Parser

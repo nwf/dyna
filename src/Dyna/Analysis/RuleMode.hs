@@ -22,8 +22,8 @@ module Dyna.Analysis.RuleMode {- (
     Crux, EvalCrux(..), UnifCrux(..),
 
     Action, Cost, Det(..),
-    BackendPossible, 
- 
+    BackendPossible,
+
     planInitializer, planEachEval, planGroundBackchain,
 
     UpdateEvalMap, combineUpdatePlans,
@@ -245,10 +245,10 @@ possible fp bcs co lf cr =
 
     -- Evaluation
     Left (_, CCall vo vis funct) -> do
-      is <- mapM mkMV vis 
+      is <- mapM mkMV vis
       o  <- mkMV vo
       case fp (funct,is,o) of
-        Left False      -> 
+        Left False      ->
           if (funct,length is) `S.member` bcs
             -- If this is a back-chained definition, check that it is all
             -- ground and then go.
@@ -366,7 +366,7 @@ stepPartialPlan :: (Crux DVar TBase -> SIMCT Identity DFunct (Actions fbs))
                 -> PartialPlan fbs
                 -> Either (Cost, Actions fbs) [PartialPlan fbs]
 stepPartialPlan poss score p =
-  {- XT.trace ("SPP:\n"
+  {- XT.trace ("SPP: cost=" ++ show (pp_score p) ++ " lencrx=" ++ show (S.size $ pp_cruxes p) ++ "\n"
              ++ "  " ++ show (pp_cruxes p) ++ "\n"
              ++ show (indent 2 $ pretty $ pp_binds p) ++ "\n"
            ) $ -}
@@ -377,7 +377,7 @@ stepPartialPlan poss score p =
     -- XXX I am not sure this is right
     --
     --     force consideration of non-evaluation cruxes if
-    --     any nonevaluation crux has a possible move.
+    --     any non-evaluation crux has a possible move.
     --     If a non-evaluation plan exists, commit to its
     --     cheapest choice as the only option here.
     --
@@ -392,7 +392,7 @@ stepPartialPlan poss score p =
                   let pl = pp_plan p
                       plan = runIdentity $ flip runSIMCT (pp_binds p)
                                          $ poss crux
-                                        
+
                       rc' = S.delete crux (pp_cruxes p)
                   in either (const ps)
                             (\(act,bc') -> PP rc' bc' (score p act) (pl ++ act)
@@ -432,19 +432,31 @@ planner_ st sc lf cr mic ictx = runAgenda
     mioaPlan :: PartialPlan fbs
              -> M.Map Cost [PartialPlan fbs]
              -> M.Map Cost [PartialPlan fbs]
-    mioaPlan p@(PP{pp_score=psc}) = mapInOrCons psc p
+    -- XXX hack to make us more readily prefer more-completed plans.
+    --
+    -- This isn't done in the scoring computation to avoid having it
+    -- be stored back into pp_score, which is used as part of the
+    -- inside cost estimate.
+    mioaPlan p@(PP{pp_score=psc,pp_cruxes=pcx}) = mapInOrCons (psc + 10 ** fromIntegral (S.size pcx)) p
 
+	-- Accumulate failures @fs@ until some success happens, at which point
+	-- we switch to recursing as
     goMF fs pq = maybe (Left fs) (go' goMFkf (\df pq' -> Right (df:go pq')))
                $ mapMinRepView pq
      where
       goMFkf Nothing  = goMF fs
       goMFkf (Just p) = goMF (p:fs)
 
+	-- Cycle the priority queue as normal, discarding any failures.
     go :: M.Map Cost [PartialPlan fbs]
        -> [(Cost, Actions fbs)]
     go pq = maybe [] (go' (\_ -> go) (\df -> (df :) . go))
           $ mapMinRepView pq
 
+    -- The core agenda cycler; takes failure (@kf@) and success (@ks@)
+    -- callbacks as well as a view of the priority queue that has picked
+    -- a particular partial plan to consider and the remainder of the
+    -- priority queue.
     go' :: (Maybe (PartialPlan fbs) -> M.Map Cost [PartialPlan fbs] -> x)
         -> ((Cost,Actions fbs) -> M.Map Cost [PartialPlan fbs] -> x)
         -> (PartialPlan fbs, M.Map Cost [PartialPlan fbs])
@@ -514,7 +526,7 @@ planInitializer bp bc r = fmap (second (finalizePlan r)) $
   bestPlan $ planner_ (possible bp bc False) simpleCost (\cs v -> v `S.member` allCruxVars cs) cruxes Nothing
              (allFreeSIMCtx $ S.toList $ allCruxVars cruxes)
 
--- | Given a particular crux and the remaining evaluation cruxes in a rule, 
+-- | Given a particular crux and the remaining evaluation cruxes in a rule,
 -- find all the \"later\" evaluations which will need special handling and
 -- generate the cruxes necessary to prevent double-counting.
 --
@@ -545,7 +557,7 @@ planInitializer bp bc r = fmap (second (finalizePlan r)) $
 -- XXX What do we do in the CEval case??  We need to check every evaluation
 -- inside a CEval update?
 handleDoubles :: (Ord a, Ord b)
-              => (Int -> a -> a -> a) 
+              => (Int -> a -> a -> a)
               -> (Int,EvalCrux a)
               -> S.Set (Int, EvalCrux a)
               -> S.Set (UnifCrux a b)

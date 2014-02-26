@@ -58,36 +58,36 @@ data PrimOp = PO
 primOps :: DFunctAr -> Maybe [QMode (NIX DFunct)] -- XXX ,UMode
 primOps = go
  where
-  go ("-"    ,1) = Just $ [miaod 1 Det     ] ++ opinvd 1 Det
-  go ("^"    ,2) = Just   [miaod 2 Det     ]
-  go ("|"    ,2) = Just   [miaod 2 Det     ]
-  go ("-"    ,2) = Just $ [miaod 2 Det     ] ++ opinvd 2 Det
-  go ("/"    ,2) = Just   [miaod 2 Det     ]
-  go ("*"    ,2) = Just   [miaod 2 Det     ]
-  go ("**"   ,2) = Just   [miaod 2 Det     ]
-  go ("&"    ,2) = Just   [miaod 2 Det     ]
-  go ("%"    ,2) = Just   [miaod 2 Det     ]
-  go ("+"    ,2) = Just $ [miaod 2 Det     ] ++ opinvd 2 Det
+  go ("-"    ,1) = Just $ miaod 1 Det ++ opinvd 1 Det
+  go ("^"    ,2) = Just $ miaod 2 Det
+  go ("|"    ,2) = Just $ miaod 2 Det
+  go ("-"    ,2) = Just $ miaod 2 Det ++ opinvd 2 Det
+  go ("/"    ,2) = Just $ miaod 2 Det
+  go ("*"    ,2) = Just $ miaod 2 Det
+  go ("**"   ,2) = Just $ miaod 2 Det
+  go ("&"    ,2) = Just $ miaod 2 Det
+  go ("%"    ,2) = Just $ miaod 2 Det
+  go ("+"    ,2) = Just $ miaod 2 Det ++ opinvd 2 Det
 
-  go ("mod"  ,1) = Just   [miaod 1 Det     ]
-  go ("abs"  ,1) = Just   [miaod 1 Det     ]
-  go ("log"  ,1) = Just   [miaod 1 Det     ]
-  go ("exp"  ,1) = Just   [miaod 1 Det     ]
+  go ("mod"  ,1) = Just $ miaod 1 Det
+  go ("abs"  ,1) = Just $ miaod 1 Det
+  go ("log"  ,1) = Just $ miaod 1 Det
+  go ("exp"  ,1) = Just $ miaod 1 Det
 
-  go ("<="   ,2) = Just   [miaod 2 Det     ]
-  go ("<"    ,2) = Just   [miaod 2 Det     ]
-  go ("="    ,2) = Just   [miaod 2 Det     ]
-  go (">="   ,2) = Just   [miaod 2 Det     ]
-  go (">"    ,2) = Just   [miaod 2 Det     ]
-  go ("!="   ,2) = Just   [miaod 2 Det     ]
+  go ("<="   ,2) = Just $ miaod 2 Det
+  go ("<"    ,2) = Just $ miaod 2 Det
+  go ("="    ,2) = Just $ miaod 2 Det
+  go (">="   ,2) = Just $ miaod 2 Det
+  go (">"    ,2) = Just $ miaod 2 Det
+  go ("!="   ,2) = Just $ miaod 2 Det
 
-  go ("and"  ,2) = Just   [miaod 2 Det     ]
-  go ("or"   ,2) = Just   [miaod 2 Det     ]
+  go ("and"  ,2) = Just $ miaod 2 Det
+  go ("or"   ,2) = Just $ miaod 2 Det
 
-  -- go ("null" ,0) = Just   [miaod 0 Det     ]
+  -- go ("null" ,0) = Just   miaod 0 Det
 
-  go ("!"    ,1) = Just   [miaod 1 Det     ]
-  go ("not"  ,1) = Just   [miaod 1 Det     ]
+  go ("!"    ,1) = Just $ miaod 1 Det
+  go ("not"  ,1) = Just $ miaod 1 Det
 
   go ("nil"  ,0) = Just   []
   go ("cons" ,2) = Just   []
@@ -110,7 +110,7 @@ primPossible (f,mvis,mvo) = maybe (Left False) go $ primOps (f,length mvis)
      pim = fmap (^.mv_mi) mvs
      qim = fmap fst       mds
 
-     qom = zipWithTails (,) p p 
+     qom = zipWithTails (,) p p
                         (fmap (^.mv_var) mvs)
                         (fmap snd mds)
 
@@ -127,9 +127,11 @@ nnIn, nnOut :: (NIX DFunct, NIX DFunct)
 nnIn  = (nuniv, nuniv)
 nnOut = (nfree, nuniv)
 
--- | mode ins and out
-miaod ar = QMode (replicate ar nnIn) nnOut
-
+-- | mode ins and out or ins and in, equally acceptable.
+miaod ar d = map ($ d)
+           [ QMode (replicate ar nnIn) nnOut
+           , QMode (replicate ar nnIn) nnIn
+           ]
 -- | One-Place INVersion
 opinvd ar d = map (\x -> QMode x nnIn d)
             $ map (\n ->    (replicate (n-1) nnIn)
