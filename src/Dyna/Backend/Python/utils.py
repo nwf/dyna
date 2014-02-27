@@ -264,11 +264,7 @@ def span_to_src(span, src=None):
         [(filename, bl, bc, el, ec)] = lines
     else:
         # look for point-like errors as in `filename:3:1`
-        lines = re.findall(r'(.*):(\d+):(\d+)', span)
-        if not lines:
-            return []
-        
-        [(filename, bl, bc)] = lines
+        [(filename, bl, bc)] = re.findall(r'(.*):(\d+):(\d+)', span)
         el = bl
         ec = bc
     
