@@ -6,6 +6,7 @@ all: deps build sphinxbuild
 
 .PHONY: $(VERFILE)
 $(VERFILE):
+	mkdir -p `dirname $@`
 	echo "Version: Dyna 0.4 pre-release" `git describe --all` > $@
 	echo "Build date:" `date` >> $@
 	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> $@
@@ -23,10 +24,12 @@ deps:
 	cabal install --user --enable-tests --only-dependencies .
 
 build: $(VERFILE)
-	cabal configure --user --enable-tests
+	cabal configure --user
 	cabal build
 
-test tests: build
+test tests:
+	cabal configure --user --enable-tests
+	cabal build
 	dist/build/dyna-selftests/dyna-selftests
 	misc/dyna-doctest.py
 	# cabal test
@@ -52,9 +55,6 @@ clean:
 veryclean: clean
 	rm -rf dist/*
 
-run-parser:
-	ghci -isrc Dyna.ParserHS.Parser
-
 # Cabal's haddock integration is sort of sad; since I want to have
 # everything we use in one place, run haddock by hand.  This still isn't
 # perfect, but it does OK.
@@ -72,7 +72,7 @@ haddock:
 # Build our sphinx documentation
 .PHONY: sphinxbuild sphinxdoc
 sphinxbuild:
-	(cd docs/sphinx; make html)
+	which sphinx-build >/dev/null && (cd docs/sphinx; make html)
 
 sphinxdoc: sphinxbuild
 	python -c 'import webbrowser; \
