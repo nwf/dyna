@@ -12,7 +12,7 @@ $(VERFILE):
 	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> $@
 
 upstream:
-	git submodule init
+	git submodule update --init
 	# git submodule update external/ekmett-parsers external/ekmett-trifecta
 	# cabal install --user --enable-tests --only-dependencies \
 	#  external/ekmett-parsers external/ekmett-trifecta .
