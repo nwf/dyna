@@ -65,6 +65,7 @@ version = showVersion (CPD.version)
 
 data DumpType = DumpAgg
               | DumpANF
+              | DumpDopBCQ
               | DumpDopIni
               | DumpDopUpd
               | DumpFailedPlans
@@ -97,6 +98,7 @@ dumpOpts :: Bool -> [OptDescr Opt]
 dumpOpts nos =
      mkDumpOpt "agg"    DumpAgg     "Aggregator summary"
   ++ mkDumpOpt "anf"    DumpANF     "Administrative Normal Form"
+  ++ mkDumpOpt "dopbcq" DumpDopBCQ  "DOpAMine planning results: back-chain queries"
   ++ mkDumpOpt "dopini" DumpDopIni  "DOpAMine planning results: initializers"
   ++ mkDumpOpt "dopupd" DumpDopUpd  "DOpAMine planning results: updates"
   ++ mkDumpOpt "failed-plans" DumpFailedPlans "Planner failures"
@@ -300,6 +302,20 @@ renderDopInis ddi im = vsep $ flip map im $ \(r,c,ps) ->
     <+> text "head=" <> pretty (r_head r)
     <+> text "res=" <> pretty (r_result r)
 
+renderDopBCQs :: BackendRenderDopIter bs e
+              -> [((DFunct, Int), Rule, ([DVar], (Cost, Actions bs)))]
+              -> Doc e
+renderDopBCQs ddi im = vsep $ flip map im $ \(fa,r,(vs,(c,ps))) ->
+  iniHeader fa r vs c `above` indent 2 (renderDop ddi ps)
+ where
+  iniHeader (f,a) r vs c =
+        text ";;"
+    <+> (prettySpanLoc $ r_span r)
+    <+> text "ruleix=" <> pretty (r_index r)
+    <+> text "cost=" <> pretty c
+    <+> text "fa=" <> pretty f <> text "/" <> pretty a
+    <+> text "Vs=" <> pretty vs
+
 renderFailedInit rd (r,ps) =
        text ";; failed initialization attempts for"
   <//> (prettySpanLoc $ r_span r)
@@ -393,7 +409,7 @@ processFile fileName = bracket openOut hClose go
 
             qpt_bcs = foldr (\e t -> snd $ addQueryProc t e)
                             qpt_init
-                      $ map (\(f,a) -> QPE f mdout (replicate a mdin) (gbccg f a))
+                      $ map (\(f,a) -> QPE f mdout (replicate a mdin) (gbccg f))
                       $ S.toList gbcs
             upt_bcs = foldr (\e t -> addUpdateProc t e)
                             upt_init
@@ -458,7 +474,7 @@ processFile fileName = bracket openOut hClose go
                                 $ concat
                                 $ map shuffle uPlans
                       , let
-                          shuffle (_,r,Right _) = Nothing
+                          shuffle (_,_,Right _) = Nothing
                           shuffle (_,r,Left  e) = Just (r,e)
                         in vcat $ map (renderFailedQuery rend)
                                 $ MA.catMaybes $ map shuffle qPlans
@@ -482,6 +498,7 @@ processFile fileName = bracket openOut hClose go
 
             dump DumpDopIni (renderDopInis be_ddi cInitializers')
             dump DumpDopUpd (renderDopUpds be_ddi uPlans')
+            dump DumpDopBCQ (renderDopBCQs be_ddi cqPlans)
 
             -- Invoke the backend code generator
             be_d aggm uPlans' cInitializers' gbcs cqPlans pp out
@@ -523,11 +540,11 @@ processFile fileName = bracket openOut hClose go
   nshared = nHide (IUniv UShared)
   mdout = (nfree, nshared)
   mdin  = (nshared, nshared)
-  gbccg f a rv avs = OPIter (MV rv nfree nshared)
-                            (map (\v -> MV v nshared nshared) avs)
-                            f
-                            DetSemi
-                            Nothing
+  gbccg f rv avs = OPIter (MV rv nfree nshared)
+                          (map (\v -> MV v nshared nshared) avs)
+                          f
+                          DetSemi
+                          Nothing
 
 ------------------------------------------------------------------------}}}
 -- Main                                                                 {{{
