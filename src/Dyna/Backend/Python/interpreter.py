@@ -112,6 +112,10 @@ class Interpreter(object):
             return MapsTo(*args)
         if fn == '$key/1':
             self.new_fn(fn, '=')
+        if fn == 'true/0':
+            return true
+        if fn == 'false/0':
+            return false
         return self.chart[fn].insert(args)
 
     def delete(self, item, val, ruleix, variables):
