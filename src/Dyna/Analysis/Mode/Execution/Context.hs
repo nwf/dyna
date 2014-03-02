@@ -35,6 +35,8 @@ module Dyna.Analysis.Mode.Execution.Context (
     SIMCT(..), runSIMCT,
     -- *** And its context
     SIMCtx(..), emptySIMCtx, allFreeSIMCtx, ctxFromBindings,
+    -- *** A read-only view
+    SIMCR(..), runSIMCR,
 
     -- ** Internal helper functions
     e2x, q2y, aliasN, aliasV, aliasX, aliasY, kUpUniq,
@@ -196,6 +198,9 @@ instance (Monad m) => MonadState (SIMCtx f) (SIMCT m f) where
   state = SIMCT . state
 -}
 
+type instance MCVT (SIMCT m f) KI = ENKRI f (NIX f) KI
+type instance MCVT (SIMCT m f) DVar = VR f (NIX f) KI
+
 emptySIMCtx :: SIMCtx f
 emptySIMCtx = SIMCtx 0 IM.empty {- IM.empty -} M.empty
 
@@ -209,6 +214,18 @@ ctxFromBindings = SIMCtx 0 IM.empty . M.fromList . map (second VRName)
 
 runSIMCT :: SIMCT m f a -> SIMCtx f -> m (Either UnifFail (a, SIMCtx f))
 runSIMCT q x = runEitherT (runStateT (unSIMCT q) x)
+
+------------------------------------------------------------------------}}}
+-- Context : Reader                                                     {{{
+
+newtype SIMCR m f a = SIMCR { unSIMCR :: CMTR.ReaderT (SIMCtx f) m a }
+ deriving (Monad,MonadFix,Functor,Applicative)
+
+runSIMCR :: SIMCR m f a -> SIMCtx f -> m a
+runSIMCR (SIMCR x) = CMTR.runReaderT x
+
+type instance MCVT (SIMCR m f) KI = ENKRI f (NIX f) KI
+type instance MCVT (SIMCR m f) DVar = VR f (NIX f) KI
 
 ------------------------------------------------------------------------}}}
 -- Context : Aliased Keys                                               {{{
@@ -244,10 +261,20 @@ key_lookup k = do
   krenkri (KRName n) = Left n
   krenkri (KRStruct i) = Right i
 
-type instance MCVT (SIMCT m f) KI = ENKRI f (NIX f) KI
 
 instance (Show f, Monad m) => MCR (SIMCT m f) KI where
   clookup = SIMCT . key_lookup
+
+instance (Show f, Monad m) => MCR (SIMCR m f) KI where
+  -- Can't canonicalize map inside a reader context, so here we go
+  clookup v = SIMCR $ view simctx_map_k >>= return . flip look v
+   where
+    look m k = case IM.lookup (unKI k) m of
+                 Nothing -> (dynacPanic $ PP.text "Key context read miss:"
+                                PP.<+> PP.text (show (k,v)))
+                 Just (KRKey k') -> look m k'
+                 Just (KRName n) -> Left n
+                 Just (KRStruct i) -> Right i
 
 instance (Show f, Monad m) => MCD (SIMCT m f) KI where
   cdelete k = {- XT.traceShow ("KD",k) $ -} SIMCT $ do
@@ -287,7 +314,6 @@ instance (Show f, Ord f, Monad m) => MCM (SIMCT m f) KI where
     krenkri (KRName n) = Left n
     krenkri (KRStruct i) = Right i
 
--- type instance MCNC KI m = ()
 instance (Show f, Monad m) => MCN (SIMCT m f) KI where
   cnew f = do
     k <- SIMCT $ simctx_next_ki_id <+= 1
@@ -389,21 +415,23 @@ unalias s k0 = do
 ------------------------------------------------------------------------}}}
 -- Context : User Variables                                             {{{
 
-user_lookup :: (MonadState (SIMCtx f) m, Show f)
-            => DVar
+user_lookup :: (Show f, Monad m)
+            => m (M.Map DVar (VR f (NIX f) KI))
+            -> DVar
             -> m (VR f (NIX f) KI)
-user_lookup v = do
-    m <- use simctx_map_v
+user_lookup f v = do
+    m <- f
     let r = maybe (dynacPanicStr $ "User variable context miss: " ++ (show v))
                   id
                 $ M.lookup v m
     -- XT.traceShow ("VL",v,r) $ return ()
     return r
 
-type instance MCVT (SIMCT m f) DVar = VR f (NIX f) KI
-
 instance (Show f, Monad m) => MCR (SIMCT m f) DVar where
-  clookup = SIMCT . user_lookup
+  clookup = SIMCT . user_lookup (use simctx_map_v)
+
+instance (Show f, Monad m) => MCR (SIMCR m f) DVar where
+  clookup = SIMCR . user_lookup (view simctx_map_v)
 
 instance (Show f, Monad m) => MCW (SIMCT m f) DVar where
   cassign v w = SIMCT $ simctx_map_v %= M.insert v w
@@ -412,8 +440,8 @@ instance (Show f, Monad m) => MCA (SIMCT m f) DVar where
   ccanon x = return x
 
   calias f l r = SIMCT $ do
-    vl <- user_lookup l
-    vr <- user_lookup r
+    vl <- user_lookup (use simctx_map_v) l
+    vr <- user_lookup (use simctx_map_v) r
     x  <- unSIMCT $ f vl vr >>= aliasX
     let x' = VRKey x
     simctx_map_v %= M.insert l x'
