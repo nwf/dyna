@@ -7,6 +7,7 @@ module Dyna.Analysis.ANFPretty (renderANF, renderCruxes) where
 import           Data.Either
 import qualified Data.IntMap                as IM
 import qualified Data.Set                   as S
+import           Dyna.Backend.Primitives (DPrimData)
 import           Dyna.Analysis.ANF
 import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
@@ -32,7 +33,7 @@ renderANF (Rule rix h a result sp _ unifs evals) =
                        ]
   ) <> line
 
-renderCruxes :: S.Set (Crux DVar TBase) -> Doc e
+renderCruxes :: S.Set (Crux DVar DPrimData) -> Doc e
 renderCruxes cs =
  let (es, us) = partitionEithers (S.toList cs)
  in valign

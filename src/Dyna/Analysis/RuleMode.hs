@@ -55,8 +55,8 @@ import           Dyna.Analysis.Mode
 import           Dyna.Analysis.Mode.Execution.Context
 import           Dyna.Analysis.Mode.Execution.Functions
 import           Dyna.Analysis.QueryProcTable
+import           Dyna.Backend.Primitives (DPrimData(..))
 import           Dyna.Term.TTerm
-import           Dyna.Term.Normalized
 -- import           Dyna.Term.SurfaceSyntax
 import           Dyna.Main.Exception
 import           Dyna.XXX.DataUtils(argmin,mapInOrCons,mapMinRepView)
@@ -80,25 +80,12 @@ modedVar :: BindChart -> DVar -> ModedVar
 modedVar b x = case varMode b x of
                  MBound -> MB x
                  MFree  -> MF x
-
-modedNT :: BindChart -> NTV -> ModedNT
-modedNT b (NTVar  v)     = NTVar $ modedVar b v
-modedNT _ (NTBase b)     = NTBase b
 -}
 
 ------------------------------------------------------------------------}}}
 -- Actions                                                              {{{
 
 type Actions fbs = [DOpAMine fbs]
-
-{-
-mapMaybeModeCompat mis mo =
-  MA.mapMaybe (\(is',o',d,f) -> do
-                guard $    modeOf mo <= o'
-                        && length mis == length is'
-                        && and (zipWith (\x y -> modeOf x <= y) mis is')
-                return (d,f))
--}
 
 -- | Free, Ground, or Neither.  A rather simplistic take on unification.
 --
@@ -118,7 +105,7 @@ fgn v cf cg cn = do
     (False,False) -> cn
 
 type CruxSteps fbs =  SIMCtx DFunct
-                   -> Crux DVar TBase
+                   -> Crux DVar DPrimData
                    -> [Either UnifFail (Actions fbs, SIMCtx DFunct)]
 
 type Possible fbs = (DVar -> Bool) -> CruxSteps fbs
@@ -142,18 +129,18 @@ possible qpt lf ic cr =
     -- Assign or check
     Right (CAssign o i) -> flip runSIMCT ic $
         fgn o (runReaderT (unifyVU o) (UnifParams (lf o) False)
-                >> return [ OPAsgn o (NTBase i) ])
-              (return [ OPScop $ \chk -> OPBloc [ OPAsgn chk (NTBase i), OPCheq chk o] ])
+                >> return [ OPAsnP o i ])
+              (return [ OPScop $ \chk -> OPBloc [ OPAsnP chk i, OPCheq chk o] ])
               (throwError UFExDomain)
 
     -- XXX Eliminate in favor of a direct call to unification
     Right (CEquals o i) -> flip runSIMCT ic $
        fgn o (fgn i (throwError UFExDomain)
                     (runReaderT (unifyVV i o) (UnifParams (lf o || lf i) False)
-                       >> return [ OPAsgn o (NTVar i) ])
+                       >> return [ OPAsnV o i ])
                     (throwError UFExDomain))
              (fgn i (runReaderT (unifyVV i o) (UnifParams (lf o || lf i) False)
-                       >> return [ OPAsgn i (NTVar o) ])
+                       >> return [ OPAsnV i o ])
                     (return [ OPCheq o i ])
                     (throwError UFExDomain))
              (throwError UFExDomain)
@@ -235,7 +222,6 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 
   stepCost :: DOpAMine fbs -> Double
   stepCost x = case x of
-    OPAsgn _ _          -> 1
     OPAsnV _ _          -> 1
     OPAsnP _ _          -> 1
     OPCheq _ _          -> -1 -- Checks are issued with Assigns, so
@@ -274,7 +260,7 @@ simpleCost (PP { pp_score = osc, pp_plan = pfx }) act =
 ------------------------------------------------------------------------}}}
 -- Planning                                                             {{{
 
-data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar TBase)
+data PartialPlan fbs = PP { pp_cruxes         :: S.Set (Crux DVar DPrimData)
                           , pp_binds          :: BindChart
                           , pp_score          :: Cost
                           , pp_plan           :: Actions fbs
@@ -341,9 +327,9 @@ planner_ :: forall fbs .
             Possible fbs
          -> (PartialPlan fbs -> Actions fbs -> Cost)
                   -- ^ Scoring function
-         -> (S.Set (Crux DVar TBase) -> DVar -> Bool)
+         -> (S.Set (Crux DVar DPrimData) -> DVar -> Bool)
                   -- ^ Hook for live variables
-         -> S.Set (Crux DVar TBase)
+         -> S.Set (Crux DVar DPrimData)
                   -- ^ Cruxes to be planned over
          -> Maybe (EvalCrux DVar, DVar, DVar)
                   -- ^ Maybe the updated evaluation crux, the interned
@@ -413,10 +399,9 @@ planner_ st sc lf cr mic ictx = runAgenda
   (ip,bis) = case mic of
               Nothing -> ([],[])
               Just (CCall o is f, hi, ho) -> ( [ OPPeel is hi f DetSemi
-                                                 , OPAsgn o (NTVar ho)]
+                                                 , OPAsnV o ho]
                                               , o:is)
-              Just (CEval o i, hi, ho) -> ( [ OPAsgn i (NTVar hi)
-                                              , OPAsgn o (NTVar ho)]
+              Just (CEval o i, hi, ho) -> ( [ OPAsnV i hi, OPAsnV o ho]
                                             , [o,i] )
 
 -- | Pick the best plan, but stop the planner from going off the rails by
@@ -445,7 +430,7 @@ finalizePlan r d = d ++ [OPEmit (r_head r) (r_result r) (r_index r)
 planUpdate :: QueryProcTable fbs
            -> Rule
            -> (PartialPlan fbs -> Actions fbs -> Cost)
-           -> S.Set (Crux DVar TBase)                     -- ^ Normal form
+           -> S.Set (Crux DVar DPrimData)                     -- ^ Normal form
            -> (EvalCrux DVar, DVar, DVar)
            -> SIMCtx DVar
            -> Either [PartialPlan fbs] (Cost, Actions fbs)
@@ -629,19 +614,6 @@ adornedQueries = go S.empty
 
 ------------------------------------------------------------------------}}}
 -- Experimental Detritus                                                {{{
-
-{-
-filterNTs :: [NT v] -> [v]
-filterNTs = MA.mapMaybe isNTVar
- where
-  isNTVar (NTVar x) = Just x
-  isNTVar _         = Nothing
-
-ntMode :: BindChart -> NTV -> Mode
-ntMode c (NTVar v) = varMode c v
-ntMode _ (NTString _) = MBound
-ntMode _ (NTNumeric _) = MBound
--}
 
 {-
 planEachEval_ hi v (Rule { r_anf = anf })  =

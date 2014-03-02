@@ -78,6 +78,7 @@ import qualified Data.Maybe                 as MA
 import qualified Data.IntMap                as IM
 import qualified Data.Set                   as S
 -- import qualified Debug.Trace                as XT
+import           Dyna.Backend.Primitives (DPrimData(..))
 import           Dyna.Main.Defns
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Types        as P
@@ -135,7 +136,7 @@ cruxIsEval :: Crux v n -> Bool
 cruxIsEval (Left _) = True
 cruxIsEval (Right _) = False
 
-cruxVars :: Crux DVar TBase -> S.Set DVar
+cruxVars :: Crux DVar DPrimData -> S.Set DVar
 cruxVars = either evalVars unifVars
  where
   evalVars (_,cr) = case cr of
@@ -147,7 +148,7 @@ cruxVars = either evalVars unifVars
     CEquals o i    -> S.fromList [o,i]
     CNotEqu o i    -> S.fromList [o,i]
 
-allCruxVars :: S.Set (Crux DVar TBase) -> S.Set DVar
+allCruxVars :: S.Set (Crux DVar DPrimData) -> S.Set DVar
 allCruxVars = S.unions . map cruxVars . S.toList
 
 
@@ -157,7 +158,7 @@ allCruxVars = S.unions . map cruxVars . S.toList
 data ANFState = AS
               { _as_next_var  :: !Int
               , _as_next_eval :: !Int
-              , _as_ucruxes   :: S.Set (UnifCrux DVar TBase)
+              , _as_ucruxes   :: S.Set (UnifCrux DVar DPrimData)
               , _as_ecruxes   :: IM.IntMap (EvalCrux DVar)
               , _as_annot :: ANFAnnots
               , _as_warns :: ANFWarns
@@ -165,7 +166,7 @@ data ANFState = AS
  deriving (Show)
 $(makeLenses ''ANFState)
 
-addUCrux :: (MonadState ANFState m) => UnifCrux DVar TBase -> m ()
+addUCrux :: (MonadState ANFState m) => UnifCrux DVar DPrimData -> m ()
 addUCrux c = as_ucruxes %= (S.insert c)
 
 nextVar :: (MonadState ANFState m) => String -> m DVar
@@ -188,20 +189,8 @@ newEval pfx t = do
     doEval t n
     return n
 
-doLoadBase :: (MonadState ANFState m) => TBase -> DVar -> m ()
+doLoadBase :: (MonadState ANFState m) => DPrimData -> DVar -> m ()
 doLoadBase n v = addUCrux (CAssign v n)
-
-newLoad :: (MonadState ANFState m) => String -> ENF -> m DVar
-newLoad pfx t =
-  case t of
-    Left (NTVar  v) -> return v
-    Left (NTBase b) -> go (Left  b)
-    Right u         -> go (Right u)
- where
-  go u = do
-    n   <- nextVar pfx
-    addUCrux (either (CAssign n) (uncurry (flip (CStruct n))) u)
-    return n
 
 doStruct :: (MonadState ANFState m) => FDT -> DVar -> m ()
 doStruct (f,vs) v = addUCrux (CStruct v vs f)
@@ -255,7 +244,15 @@ normTerm_ a m _ d (P.TVar v) = do
   maybe (return ()) (doUnif v'') d
 
 -- Numerics get returned in-place and raise a warning if they are evaluated.
-normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
+normTerm_ _ m ss d (P.TBase x@(DPInt _)) = do
+  case m of
+    (_,True)  -> newWarn "Suppressing numeric evaluation is unnecessary" ss
+    (0,False) -> return ()
+    (_,False) -> newWarn "Ignoring request to evaluate numeric" ss
+  maybe (newWarn "Numeric literal is discarded" ss)
+        (doLoadBase x)
+        d
+normTerm_ _ m ss d (P.TBase x@(DPDouble _)) = do
   case m of
     (_,True)  -> newWarn "Suppressing numeric evaluation is unnecessary" ss
     (0,False) -> return ()
@@ -265,22 +262,12 @@ normTerm_ _ m ss d (P.TBase x@(TNumeric _)) = do
         d
 
 -- Strings too
-normTerm_ _ m ss d (P.TBase x@(TString _))  = do
+normTerm_ _ m ss d (P.TBase x@(DPDQString _))  = do
   case m of
     (_,True)  -> newWarn "Suppressing string evaluation is unnecessary" ss
     (0,False) -> return ()
     (_,False) -> newWarn "Ignoring request to evaluate string" ss
   maybe (newWarn "String literal is discarded" ss)
-        (doLoadBase x)
-        d
-
--- Booleans too
-normTerm_ _ m ss d (P.TBase x@(TBool _)) = do
-  case m of
-    (_,True)  -> newWarn "Suppressing boolean evaluation is unnecessary" ss
-    (0,False) -> return ()
-    (_,False) -> newWarn "Ignoring request to evaluate boolean" ss
-  maybe (newWarn "Boolean literal is discarded" ss)
         (doLoadBase x)
         d
 
@@ -303,8 +290,9 @@ normTerm_ a m ss d (P.TFunctor f [x T.:~ sx, v T.:~ sv])
     (Nothing, 1) -> doUnif nx nv
     (_      , n) -> do
                      _ <- doUnif nx nv
-                     t <- newLoad "_x" (Left $ NTBase dynaUnitTerm)
-                     r <- timesM (newEval "_x" . Left) (n-1) t
+                     v' <- nextVar "_x"
+                     doStruct ("true",[]) v'
+                     r <- timesM (newEval "_x" . Left) (n-1) v'
                      maybe (return ()) (doUnif r) d
 
 -- Annotations
@@ -364,47 +352,6 @@ normTerm_ ctx m ss d (P.TFunctor f as) = do
  where
   panic = dynacPanic "Length mismatch in disposition table while normalizing"
 
-
-
-normConjunct :: (Functor m, MonadReader ANFDict m, MonadState ANFState m)
-             => [T.Span]
-             -> DFunct
-             -> P.Term -> T.Span -> P.Term -> T.Span
-             -> Int
-             -> Maybe DVar
-             -> Bool
-             -> m ()
-normConjunct ss f i si r sr n d rev =
-  case (n,d) of
-    (0,Nothing) -> do
-                    di <- nextVar "_b"
-                    dr <- nextVar "_c"
-                    go di dr
-                    newWarn "Quoted functor discarded" ss
-    (0,Just d') -> do
-                    di <- nextVar "_b"
-                    dr <- nextVar "_c"
-                    go di dr
-                    doStruct (selfstruct di dr) d'
-    (1,Just d') -> do
-                    di <- newLoad "_b" (Left $ NTBase dynaUnitTerm)
-                    go di d'
-    (_,_      ) -> do
-                    di <- newLoad "_b" (Left $ NTBase dynaUnitTerm)
-                    dr <- nextVar "_c"
-                    go di dr
-                    ct <- timesM (newEval "_x" . Left) (n-1) dr
-                    maybe (return ()) (doUnif ct) d
-
-
- where
-  selfstruct ni nr = (f,if rev then [nr,ni] else [ni,nr]) 
-
-  go di dr = do
-    normTerm_ ADEval (0,False) (si:ss) (Just di) i
-    normTerm_ ADEval (0,False) (sr:ss) (Just dr) r
-
-
 normTerm :: (Functor m, MonadState ANFState m, MonadReader ANFDict m)
          => ArgDispos          -- ^ In an evaluation context?
          -> T.Spanned P.Term   -- ^ Term to digest
@@ -423,7 +370,7 @@ data Rule = Rule { r_index      :: RuleIx
                  , r_result     :: DVar
                  , r_span       :: T.Span
                  , r_annots     :: ANFAnnots
-                 , r_ucruxes    :: S.Set (UnifCrux DVar TBase)
+                 , r_ucruxes    :: S.Set (UnifCrux DVar DPrimData)
                  , r_ecruxes    :: IM.IntMap (EvalCrux DVar)
                  }
  deriving (Show)
@@ -453,7 +400,7 @@ runNormalize dt =
 ------------------------------------------------------------------------}}}
 -- Placeholders XXX                                                     {{{
 
-r_cruxes :: Rule -> S.Set (Crux DVar TBase)
+r_cruxes :: Rule -> S.Set (Crux DVar DPrimData)
 r_cruxes r = S.union (S.map Right $ r_ucruxes r)
                      (S.map Left $ S.fromList $ IM.assocs $ r_ecruxes r)
 
@@ -463,7 +410,7 @@ evalCruxFA (CCall _ is f) = Just $ (f, length is)
 
 -- XXX This is terrible and should be replaced with whatever type-checking
 -- work we do.
-findHeadFA :: DVar -> S.Set (UnifCrux DVar TBase) -> Maybe DFunctAr
+findHeadFA :: DVar -> S.Set (UnifCrux DVar DPrimData) -> Maybe DFunctAr
 findHeadFA h crs = MA.listToMaybe
                  $ MA.mapMaybe m
                  $ S.toList crs

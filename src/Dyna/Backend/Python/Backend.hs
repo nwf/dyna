@@ -48,9 +48,7 @@ import           Dyna.Backend.Primitives
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.Types        as P
 import qualified Dyna.ParserHS.Parser       as P
-import           Dyna.Term.Normalized (NT (NTBase))
 import           Dyna.Term.TTerm
-import           Dyna.Term.SurfaceSyntax (dynaUnitTerm)
 import           Dyna.XXX.PPrint
 import           Dyna.XXX.MonadUtils
 import           Dyna.XXX.Trifecta (prettySpanLoc)
@@ -141,11 +139,11 @@ addlUPEs = map (\(QPE f _ as _) -> UPE (f,length as) UPSForbidden) addlConstQPEs
 renderPrimDat :: DPrimData -> Doc e
 renderPrimDat x = case x of
   -- DPBool       x -> if x then "true" else "false"
-  DPDollarNull   -> "null"
+  -- DPDollarNull   -> "null"
   DPDouble     d -> pretty d
   DPDQString   s -> pretty (show s) -- Yes, "pretty . show", so we get escaping
   DPInt        i -> pretty i
-  DPNil          -> "build" <> parens (pfa ("nil" :: String) (0 :: Int))
+  -- DPNil          -> "build" <> parens (pfa ("nil" :: String) (0 :: Int))
 
 ra, rai :: Monad m => Doc e -> m (Doc e -> Doc e)
 ra      = return . above
@@ -338,7 +336,6 @@ pdope_ bc (OPScop f      ) = do
                            RWS.local (pdc_temp %~ (+1)) $ pdope_ bc (f vn)
 
 pdope_ _  (OPIndr _ _    ) = dynacSorry "indirect evaluation not implemented"
-pdope_ _  (OPAsgn v val  ) = ra (pretty v <+> equals <+> pretty val)
 
 pdope bc d = indent 4 $ "for _ in [None]:"
              `above` indent 4 ((RWS.runRWS (pdope_ bc d) (PDC 0) 0 ^. _1) empty)

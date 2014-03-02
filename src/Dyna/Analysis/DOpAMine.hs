@@ -16,7 +16,6 @@ import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Backend.Primitives
 import qualified Data.ByteString.Char8 as B8
 import           Dyna.Main.Defns
-import           Dyna.Term.Normalized
 import           Dyna.Term.TTerm
 import           Dyna.XXX.PPrint
 import           Text.PrettyPrint.Free
@@ -44,9 +43,7 @@ newtype NamedProcedureId = NPI Int
 
 --              Opcode     Out         In          Ancillary
 data DOpAMine bscg
-              = OPAsgn     DVar        NTV                       -- -+
-
-              | OPAsnV     DVar        DVar                      -- -+
+              = OPAsnV     DVar        DVar                      -- -+
               | OPAsnP     DVar        DPrimData                 -- -+
 
               -- | Check that two DVars are equal in order to continue the
@@ -116,8 +113,6 @@ data DOpAMine bscg
               -- XXX Maybe this should take an Int and [DVar] -> ... ?
               | OPScop                             (DVar -> DOpAMine bscg)
 
--- {-# DEPRECATED OPAsgn "use OPAsnP or OPAsnV as required" #-}
-
 mkOPScop :: Int -> ([DVar] -> DOpAMine b) -> DOpAMine b
 mkOPScop 0 f = f []
 mkOPScop n f = go [] n
@@ -160,7 +155,6 @@ mkOPScop n f = go [] n
 
 detOfDop :: DOpAMine fbs -> Det
 detOfDop x = case x of
-               OPAsgn _ _       -> Det
                OPAsnV _ _       -> Det
                OPAsnP _ _       -> Det
                OPCheq _ _       -> DetSemi
@@ -191,7 +185,6 @@ type BackendRenderDopIter bs e =
 renderDOpAMine :: BackendRenderDopIter bs e -> DOpAMine bs -> Doc e
 renderDOpAMine e = r (0 :: Integer)
  where
-  r _ (OPAsgn v n)        = text "OPAsgn" <+> pretty v  <+> pretty n
   r _ (OPAsnV v w)        = text "OPAsnV" <+> pretty v  <+> pretty w
   r _ (OPAsnP v p)        = text "OPAsnP" <+> pretty v  <+> pretty p
   r _ (OPCheq a b)        = text "OPCheq" <+> pretty a  <+> pretty b

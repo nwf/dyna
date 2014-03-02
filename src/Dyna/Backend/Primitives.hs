@@ -7,6 +7,7 @@
 -- we don't have types and we'll enforce modes manually in the procedure
 -- table.
 
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -14,6 +15,7 @@
 module Dyna.Backend.Primitives where
 
 import           Data.ByteString (ByteString)
+import qualified Data.Data                as D
 import qualified Data.Foldable            as F
 import qualified Data.Traversable         as T
 import qualified Text.PrettyPrint.Free    as PP
@@ -24,17 +26,14 @@ import qualified Text.PrettyPrint.Free    as PP
 -- "true/0" and "false/0" to encode those?
 data DPrimData =
 --    DPBool Bool
-    DPDollarNull        -- ^ @$null/0@ for :=
-  | DPDouble Double
+{-    DPDollarNull        -- ^ @$null/0@ for :=
+  | -} DPDouble Double
   | DPDQString ByteString
   | DPInt  Integer
-  | DPNil               -- ^ @$nil/0@
- deriving (Eq,Show)
+  -- | DPNil               -- ^ @$nil/0@
+ deriving (D.Data,D.Typeable,Eq,Ord,Show)
 
 instance PP.Pretty DPrimData where pretty = PP.text . show
-
--- dynaUnitTerm :: DPrimData
--- dynaUnitTerm = DPBool True
 
 {-
 -- | Primitive recursive structures

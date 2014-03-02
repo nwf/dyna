@@ -19,7 +19,7 @@ module Dyna.Term.TTerm (
     Annotation(..),
 
         -- * Term Base Cases
-    TBase(..), TBaseSkolem(..),
+    TBaseSkolem(..),
 
         -- * Terms
     TermF(..), {- DTermV, -} DVar, DFunct, DFunctAr, {- DTerm, -}
@@ -35,7 +35,7 @@ import qualified Data.ByteString       as B
 import qualified Data.Data             as D
 import qualified Data.Foldable         as F
 import qualified Data.Traversable      as T
-import qualified Text.PrettyPrint.Free as PP
+import           Dyna.Backend.Primitives (DPrimData)
 
 -- This is needed to work with ghc 7.4 and bytestring 0.9.2.1
 import qualified Data.ByteString.Char8()
@@ -43,24 +43,8 @@ import qualified Data.ByteString.Char8()
 ------------------------------------------------------------------------}}}
 -- Term Base Cases                                                      {{{
 
-data TBaseSkolem = TSBool | TSNumeric | TSString
+data TBaseSkolem = TSNumeric | TSString
  deriving (Eq,Ord,Show)
-
--- | Term base cases.
-data TBase = TBool !Bool
-           | TNumeric !(Either Integer Double)
-           | TString  !B.ByteString
- deriving (D.Data,D.Typeable,Eq,Ord,Show)
-
-instance PP.Pretty TBase where
-    --pretty (TBool x)            = PP.pretty x
-
-    pretty (TBool True)         = "true"
-    pretty (TBool False)        = "false"
-
-    pretty (TNumeric (Left x))  = PP.pretty x
-    pretty (TNumeric (Right x)) = PP.pretty x
-    pretty (TString s)          = PP.text $ show s
 
 ------------------------------------------------------------------------}}}
 -- Terms                                                                {{{
@@ -69,7 +53,7 @@ data Annotation t = AnnType t
  deriving (D.Data,D.Typeable,Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 data TermF a t = TFunctor !a ![t]
-               | TBase !TBase
+               | TBase !DPrimData
  deriving (Eq,F.Foldable,Functor,Ord,Show,T.Traversable)
 
 type DFunct = B.ByteString

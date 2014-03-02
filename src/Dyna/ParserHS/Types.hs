@@ -21,9 +21,9 @@ module Dyna.ParserHS.Types (
 import qualified Data.ByteString                  as B
 import qualified Data.Data                        as D
 import           Dyna.Analysis.Mode.Inst
+import           Dyna.Backend.Primitives (DPrimData)
 import           Dyna.Main.Defns
-import           Dyna.Term.TTerm (Annotation(..), TBase(..),
-                                  DFunct, DFunctAr)
+import           Dyna.Term.TTerm (Annotation(..), DFunct, DFunctAr)
 import           Dyna.Term.SurfaceSyntax
 import           Text.Trifecta
 
@@ -35,7 +35,7 @@ data Term = TFunctor B.ByteString
           | TAnnot   (Annotation (Spanned Term))
                      (Spanned Term)
           | TVar     B.ByteString
-          | TBase    TBase
+          | TBase    DPrimData
  deriving (D.Data,D.Typeable,Eq,Ord,Show)
 
 -- | Rules are not just terms because we want to make it very syntactically

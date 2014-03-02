@@ -24,12 +24,13 @@ import qualified Data.ByteString.UTF8                as BU
 import           Data.Monoid (mempty)
 -- import qualified Data.Sequence                       as S
 import           Data.String
+import           Dyna.Backend.Primitives (DPrimData(..))
 import           Dyna.Main.Defns
 import           Dyna.ParserHS.Parser
 import           Dyna.ParserHS.OneshotDriver
 import           Dyna.ParserHS.Types
 import           Dyna.Term.SurfaceSyntax
-import           Dyna.Term.TTerm (Annotation(..), TBase(..))
+import           Dyna.Term.TTerm (Annotation(..))
 import           Dyna.XXX.Trifecta (unSpan)
 import           Dyna.XXX.TrifectaTest
 import           Test.Framework                      as TF
@@ -47,7 +48,7 @@ import           Text.Trifecta.Delta
 -- Terms and basic handling                                             {{{
 
 _tNumeric :: Either Integer Double -> Term
-_tNumeric = TBase . TNumeric
+_tNumeric = TBase . either DPInt DPDouble
 
 defDLC :: DLCfg
 defDLC = DLC (mkEOT defOperSpec True) genericAggregators
@@ -64,8 +65,8 @@ case_basicAtom = e @=? (strictterm "foo")
 
 case_booleans_not_atoms :: Assertion
 case_booleans_not_atoms = map snd t @=? map (unSpan.strictterm.fst) t
- where t = [ ("true"   , TBase (TBool True))
-           , ("false"  , TBase (TBool False))
+ where t = [ ("true"   , TFunctor "true"  [])
+           , ("false"  , TFunctor "false" [])
            , ("'true'" , TFunctor "true"  [])
            , ("'false'", TFunctor "false" [])
            ]
@@ -306,7 +307,7 @@ case_ruleFact = e @=? (progrule sr)
   e  = Rule
        (TFunctor "goal" [] :~ Span (Columns 0 0) (Columns 4 4) sr)
        ":-"
-       (TBase (dynaUnitTerm) :~ Span (Columns 4 4) (Columns 5 5) sr)
+       (TFunctor "true" [] :~ Span (Columns 4 4) (Columns 5 5) sr)
       :~ ts
   ts = Span (Columns 0 0) (Columns 5 5) sr
   sr = "goal."

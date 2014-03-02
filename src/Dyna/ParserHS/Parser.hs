@@ -65,9 +65,9 @@ import           Data.Monoid (mempty)
 import           Dyna.Analysis.Mode.Inst
 import qualified Dyna.Analysis.Mode.InstPretty    as IP
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.Backend.Primitives (DPrimData(..))
 import           Dyna.ParserHS.Types
-import           Dyna.Term.TTerm (Annotation(..), TBase(..),
-                                  DFunct)
+import           Dyna.Term.TTerm (Annotation(..), DFunct)
 import           Dyna.Term.SurfaceSyntax
 import           Dyna.XXX.DataUtils
 import           Dyna.XXX.Trifecta (identNL,
@@ -322,11 +322,11 @@ term = token $ choice
 
         ,       spanned $ mkta <$> (colon *> term) <*> term
 
-        , try $ spanned $ TBase . TString  <$> bsf stringLiteral
+        , try $ spanned $ TBase . DPDQString  <$> bsf stringLiteral
 
-        , try $ spanned $ TBase . TNumeric <$> naturalOrDouble
+        , try $ spanned $ TBase . either DPInt DPDouble <$> naturalOrDouble
 
-        , try $ spanned $ TBase . TBool <$> boolean
+        , try $ spanned $ boolean
 
         , try $ spanned $ flip TFunctor [] <$> parseAtom
                         <* (notFollowedBy $ char '(')
@@ -339,8 +339,8 @@ term = token $ choice
  where
   mkta ty te = TAnnot (AnnType ty) te
 
-  boolean = choice [ symbol "true" *> return True
-                   , symbol "false" *> return False
+  boolean = choice [ symbol "true" *> return (TFunctor "true" [])
+                   , symbol "false" *> return (TFunctor "false" [])
                    ]
 
   parenfunc = TFunctor <$> parseFunctor
@@ -471,7 +471,7 @@ rule = token $ do
   h@(_ :~ hs) <- term
   choice [ do
             (_ :~ ds) <- try (spanned (char '.') <* lookAhead whiteSpace)
-            return (Rule h ":-" (TBase dynaUnitTerm :~ ds) :~ (hs <> ds))
+            return (Rule h ":-" (TFunctor "true" [] :~ ds) :~ (hs <> ds))
          , do
             aggr    <- token $ join $ asks dlc_aggrs
             body    <- tfexpr
