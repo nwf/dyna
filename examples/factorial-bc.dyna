@@ -1,7 +1,11 @@
 :- backchain f/1.
 
-
-f(X) := X * f(X-1) for X > 0.
+% We'd like to write
+%   f(X) := X * f(X-1) for X > 0.
+% but we can't since for/2 is moded to require its inputs
+% which causes us to blow our recursion stack.  The following
+% is a sad workaround.
+f(X) := (X for X > 0) * f(X-1).
 f(0) := 1.
 
 a := f(4).
