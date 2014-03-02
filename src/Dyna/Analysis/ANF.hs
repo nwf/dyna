@@ -123,6 +123,11 @@ data UnifCrux v n = CStruct v [v] DFunct   -- ^ Known structure building
                   | CEquals v v            -- ^ Equality constraint
                   | CNotEqu v v            -- ^ Disequality constraint
  deriving (Eq,Ord,Show)
+-- XXX We'd like to do this, but it relies on us being able to express
+-- a "true" or "false" inst behind a DVar in the context of the call.
+-- I'm not sure how to resolve this cleanly.
+-- {-# DEPRECATED CEquals "Prefer call to unification" #-}
+-- {-# DEPRECATED CNotEqu "Prefer call to unification" #-}
 
 type Crux v n = Either (Int,EvalCrux v) (UnifCrux v n)
 
@@ -301,22 +306,6 @@ normTerm_ a m ss d (P.TFunctor f [x T.:~ sx, v T.:~ sv])
                      t <- newLoad "_x" (Left $ NTBase dynaUnitTerm)
                      r <- timesM (newEval "_x" . Left) (n-1) t
                      maybe (return ()) (doUnif r) d
-
--- ",/2", "whenever/2", and "for/2" are also reserved words of the language
--- and get handled here.
---
--- XXX This is wrong, too, of course; these should really be moved into a
--- standard prelude.  But there's no facility for that right now and no
--- reason to make the backend know about them since that's also wrong!
---
--- XXX XREF:ANFRESERVED
-normTerm_ a m ss d (P.TFunctor f [i T.:~ si, r T.:~ sr])
-    | f == dynaConjOper =
-  normConjunct ss f i si r sr (mergeDispositions m SDInherit a) d False
-
-normTerm_ a m ss d (P.TFunctor f [r T.:~ sr, i T.:~ si])
-    | f `elem` dynaRevConjOpers =
-  normConjunct ss f i si r sr (mergeDispositions m SDInherit a) d True
 
 -- Annotations
 --

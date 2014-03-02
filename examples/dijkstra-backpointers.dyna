@@ -9,7 +9,7 @@ goal        = path(end).
 optimalpath = reverse(bestpath(end)).
 
 % extract cheapest path by following backpointers from each vertex.
-bestpath(V) := [V | bestpath($key(path(V)))].
+bestpath(V) := [V | bestpath($key(path(V)))] for _ is path(V).
 bestpath(start) := [start].
 
 % expensive path

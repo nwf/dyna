@@ -33,9 +33,12 @@ import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Mode
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.Analysis.QueryProcTable
 import           Dyna.Analysis.RuleMode
+import           Dyna.Analysis.UpdateProcTable
 import           Dyna.Backend.BackendDefn
 import           Dyna.Backend.Backends
+import           Dyna.Backend.PrimModes
 import           Dyna.Main.Exception
 import qualified Dyna.ParserHS.OneshotDriver  as P
 import           Dyna.Term.TTerm
@@ -342,34 +345,45 @@ processFile fileName = bracket openOut hClose go
   maybeWarnANF xs = Just $ vcat $ map (uncurry renderSpannedWarn) xs
 
   go out = do
+    -- Run the parser
     P.PDP rs iaggmap gbcs pp <- parse (be_aggregators $ dcfg_backend ?dcfg)
 
     dump DumpParsed $
          (vcat $ map (\(i,_,r) -> text $ show (i,r)) rs)
      <> line <> pp
-   
+
+    -- Normalize program 
     let (frs, anfWarns) = unzip $ map normRule rs
 
     dump DumpANF (vcat $ map renderANF frs)
 
     hPutDoc stderr $ vcat $ MA.mapMaybe maybeWarnANF anfWarns
 
+    -- Compute aggregation map
     aggm <- return $! buildAggMap iaggmap frs
 
     dump DumpAgg (M.foldlWithKey (\d f a -> d `above`
                                     (pretty f <+> colon <+> pretty a))
                                  empty aggm)
 
-
+    -- Plan accordingly
     case dcfg_backend ?dcfg of
-      Backend _ be_b be_c be_ddi be_d ->
+      Backend _ be_ddi be_d be_qp be_up ->
         let
+            qpt_init = foldr (\e t -> snd $ addQueryProc t e)
+                        emptyQueryProcTable
+                        (defProcs ++ be_qp)
+
+            upt_init = foldr (\e t -> addUpdateProc t e)
+                        emptyUpdateProcTable
+                        (defUpds ++ be_up)
+
             (bcrules,fcrules) = partitionEithers
                                 $ map
                                   (\r -> maybe (p r)
                                                (\fa -> if fa `S.member` gbcs
                                                         then Left (fa,r)
-                                                        else Right r)
+                                                        else Right (fa,r))
                                         $ findHeadFA (r_head r) (r_ucruxes r))
                                   frs
               where
@@ -377,16 +391,41 @@ processFile fileName = bracket openOut hClose go
                                  <+> (prettySpanLoc (r_span r))
                                  <+> "for chaining direction")
 
+            qpt_bcs = foldr (\e t -> snd $ addQueryProc t e)
+                            qpt_init
+                      $ map (\(f,a) -> QPE f mdout (replicate a mdin) (gbccg f a))
+                      $ S.toList gbcs
+            upt_bcs = foldr (\e t -> addUpdateProc t e)
+                            upt_init
+                      $ map (\fa -> UPE fa UPSForbidden)
+                      $ S.toList gbcs
+
+            qpt_fcs = foldr (\e t -> snd $ addQueryProc t e)
+                            qpt_bcs
+                      $ map (\(f,a) -> QPEFullMat f a)
+                      $ map fst fcrules
+            upt_fcs = foldr (\e t -> addUpdateProc t e)
+                            upt_bcs
+                      $ map (\fa -> UPE fa UPSAccepted)
+                      $ map fst fcrules
+
             initializers = map (\(f,mca) -> either (\e -> Left (f,e))
                                                    (\(c,a) -> Right (f,c,a)) mca)
-                         $ map (\x -> (x, planInitializer be_b gbcs x)) fcrules
+                         $ map (\x -> (x, planInitializer qpt_fcs x))
+                         $ map snd fcrules
 
             cInitializers = rights initializers
   
-            uPlans = map (\x -> (x, planEachEval be_b gbcs be_c x)) fcrules
+            uPlans = map (\x -> (x, planEachEval qpt_fcs isConst x))
+                   $ map snd fcrules
+             where
+              isConst fa = maybe (dynacPanic $ "Predicate with no UPT entry"
+                                              <+> (text $ show fa))
+                                 (\ (UPE _ s) -> s == UPSForbidden )
+                               $ lookupUpdateProc upt_fcs fa
 
             qPlans = map (\(fa@(f,a),r) -> (fa,r,
-                                            planBackchain be_b gbcs (f,mkqm a) r))
+                                            planBackchain qpt_bcs (f,mkqm a) r))
                          bcrules
                       where
                        mkqm a = QMode (replicate a (tus,tus)) (tf,tus) DetSemi
@@ -479,6 +518,16 @@ processFile fileName = bracket openOut hClose go
                                <//> (renderANF r))
                  id
                  (IM.lookup i (r_ecruxes r))
+
+  nfree = nHide IFree
+  nshared = nHide (IUniv UShared)
+  mdout = (nfree, nshared)
+  mdin  = (nshared, nshared)
+  gbccg f a rv avs = OPIter (MV rv nfree nshared)
+                            (map (\v -> MV v nshared nshared) avs)
+                            f
+                            DetSemi
+                            Nothing
 
 ------------------------------------------------------------------------}}}
 -- Main                                                                 {{{

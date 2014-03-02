@@ -11,10 +11,15 @@ import qualified Data.Set                         as S
 import           Dyna.Analysis.Aggregation (AggMap)
 import           Dyna.Analysis.ANF (Rule)
 import           Dyna.Analysis.DOpAMine (BackendRenderDopIter)
-import           Dyna.Analysis.RuleMode (Actions, BackendPossible, Cost)
+import           Dyna.Analysis.RuleMode (Actions, Cost)
+import           Dyna.Analysis.QueryProcTable (QueryProcEntry)
+import           Dyna.Analysis.UpdateProcTable (UpdateProcEntry)
 import           Dyna.Term.TTerm (DFunctAr,DVar)
 import           System.IO (Handle)
 import qualified Text.PrettyPrint.Free            as PP
+
+------------------------------------------------------------------------}}}
+-- Define a backend                                                     {{{
 
 -- XXX The notion of be_constants is not quite right, I think?  It is used
 -- only in Dyna.Analysis.RuleMode.planEachEval to avoid generating some
@@ -42,17 +47,24 @@ data Backend = forall bs . Backend
                -- moment...
                be_aggregators :: Maybe (S.Set String)
 
-               -- | Hook for planner to get builtin information
-             , be_builtin :: BackendPossible bs
-
-               -- | Any constants made available by this backend.
-               -- 
-               -- XXX
-             , be_constants :: DFunctAr -> Bool
-
                -- | Debugging hook to render bits of DOpAMine which
                -- are "backend-specific"
              , be_debug_dop_iter :: forall e . BackendRenderDopIter bs e
+
                -- | Backend driver
              , be_driver  :: BackendDriver bs
+
+               -- | Any additional procedures we know about and would like
+               -- to register.  The actual act of registration takes place
+               -- by the user of the backend; the procedure identifiers are
+               -- not of interest to the backend.
+             , be_queryProcs :: [QueryProcEntry bs]
+
+               -- | Any update procedures provided by the backend.
+               --
+               -- Note that this can include "forbidden" update procedures,
+               -- to indicate that 
+             , be_updateProcs :: [UpdateProcEntry bs]
              }
+
+------------------------------------------------------------------------}}}
