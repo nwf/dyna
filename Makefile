@@ -11,6 +11,7 @@ $(VERFILE):
 	echo "Build date:" `date` >> $@
 	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> $@
 
+.PHONY: upstream
 upstream:
 	git submodule update --init
 	# git submodule update external/ekmett-parsers external/ekmett-trifecta
@@ -18,15 +19,18 @@ upstream:
 	#  external/ekmett-parsers external/ekmett-trifecta .
 	# cabal install --user external/ekmett-parsers external/ekmett-trifecta
 
+.PHONY: deps
 deps:
 	alex --version 2>/dev/null >/dev/null || cabal install alex
 	happy --version 2>/dev/null >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
+.PHONY: build
 build: $(VERFILE)
 	cabal configure --user
 	cabal build
 
+.PHONY: test tests
 test tests:
 	cabal configure --user --enable-tests
 	cabal build

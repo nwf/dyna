@@ -106,7 +106,6 @@ Executable dyna
                         charset >=0.3,
                         containers >=0.4,
                         either >= 3.4,
-                        haskeline >=0.6,
                         ghc-prim,
                         HUnit >=1.2,
                         mtl >=2.1,
