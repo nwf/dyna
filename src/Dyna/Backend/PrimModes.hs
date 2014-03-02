@@ -30,7 +30,7 @@ import           Dyna.Term.TTerm
 -- XXX It's possible that these belong somewhere else, with better names?
 -- We do seem to use them sprinkled about the source base.
 
-ntru, nuniv, nfree :: NIX DFunct
+ntru, nfls, nuniv, nfree :: NIX DFunct
 ntru  = nHide (IBound UShared (M.fromList [("true" ,[])]) False)
 nfls  = nHide (IBound UShared (M.fromList [("false",[])]) False)
 nuniv = nHide (IUniv UShared)
