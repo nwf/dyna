@@ -20,7 +20,7 @@ module Dyna.Analysis.Mode.Execution.NamedInst (
     -- ** Well-formedness predicates
     nWellFormedUniq,
     -- ** Inquiries
-    nAllNotEmpty, nSomeNotEmpty, nGround,
+    nAllNotEmpty, nSomeNotEmpty, nGround, nFree,
     -- ** Construction
     nHide, nShallow, nDeep, nFromMap,
     -- ** Destruction
@@ -135,6 +135,11 @@ nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
 -- UClobbered.  This may not be what you mean.
 nGround :: forall f . NIX f -> Bool
 nGround = autReduce True (runIdentity . iGround_ return) . unNIX
+
+nFree :: forall f . NIX f -> Bool
+nFree x = case autExpose (unNIX x) of
+            IFree -> True
+            _     -> False
 
 nNotEmpty_ :: forall f .
               ([Bool] -> Bool)
