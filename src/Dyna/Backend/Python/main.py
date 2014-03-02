@@ -25,6 +25,7 @@ def main():
                         help='run loaders.')
     parser.add_argument('--debug', action='store_true',
                         help='Debug planner, normalizer and parser.')
+    parser.add_argument('--precompiled', action='store_true')
 
     args = parser.parse_args()
 
@@ -70,7 +71,10 @@ def main():
             exit(1)
 
         try:
-            plan = interp.dynac(args.source)
+            if args.precompiled :
+                plan = args.source
+            else:
+                plan = interp.dynac(args.source)
         except DynaCompilerError as e:
             print e
             exit(1)
