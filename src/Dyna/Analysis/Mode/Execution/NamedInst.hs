@@ -45,14 +45,14 @@ import           Control.Monad.State
 import qualified Data.Foldable                     as F
 import qualified Data.Map                          as M
 import qualified Data.Traversable                  as T
-import           Dyna.Analysis.Automata.Class
-import           Dyna.Analysis.Automata.NamedAut
-import           Dyna.Analysis.Automata.Utilities
 import           Dyna.Analysis.Mode.Inst
 import qualified Dyna.Analysis.Mode.InstPretty     as IP
 import           Dyna.Analysis.Mode.Mode
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.NamedAut
+import           Dyna.XXX.Automata.Utilities
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}

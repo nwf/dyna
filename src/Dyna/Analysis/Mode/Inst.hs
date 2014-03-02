@@ -45,6 +45,7 @@ import qualified Data.Maybe               as MA
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.XXX.DataUtils       as XDU
 import           Dyna.XXX.MonadUtils
+import qualified Prelude.Extras           as PE
 
 -- import qualified Debug.Trace                       as XT
 
@@ -153,6 +154,11 @@ $(makeLensesFor [("_inst_uniq","inst_uniq")
                 ]
                 ''InstF)
 -- Note that makeLensesFor creates INLINE pragmas for its lenses, too. :)
+
+instance (Eq f) => PE.Eq1 (InstF f)
+-- | For the automata library's consumption; for reasoning, use lattice
+-- functions.
+instance (Ord f) => PE.Ord1 (InstF f)
 
 -- | Traverse all of the recursion points @a@, rather than the @M.Map f [a]@
 -- structure itself.  This provides a more robust interface to term
