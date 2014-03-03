@@ -391,25 +391,9 @@ Non-ground terms
 Types
 =====
 
-Type declarations
------------------
+.. todo::
 
-.. todo:: old design at http://www.dyna.org/wiki/index.php?title=Term#Union_types
-
-Typed variables
----------------
-
-Co-inductive types
-------------------
-
-.. todo:: how do we deal with types for varargs and keyword args?
-
-Possible future extensions
---------------------------
-Guarded types?  Nonlinear types?  Parametric types?
-
-Type coercion
-=============
+   Discussion moved to :doc:`/spec/type-system`
 
 
 Unification

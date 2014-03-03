@@ -1,6 +1,12 @@
 ---------------------------------------------------------------------------
 -- | Self-contained, recursive automata, parametric in ply functor.
 --
+-- Automata parameterised by functor F can be expected to behave as maps
+-- from labels to F-structure over labels.  That is, they are labeled
+-- descriptions of fixed points of F.  This interface hides the actual
+-- labeling strategy in use inside an automaton from the user of the
+-- representation.
+--
 -- Note that particular automata implementations (instances) may have an API
 -- that goes (well) beyond what's available here.  In particular, it is
 -- expected that non-trivial construction is beyond the scope of this common
@@ -12,22 +18,27 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Dyna.Analysis.Automata.Class where
+module Dyna.XXX.Automata.Class where
 
 import qualified Data.Traversable                  as T
+import qualified Prelude.Extras                    as PE
 
 ------------------------------------------------------------------------}}}
 -- Utility type definitions                                             {{{
 
 -- | An alias for universal quantification forcing a non-recursive ply of @f@:
--- since there is no defined data of fully polymorphic type, any recursive
--- positions in @f@ must not contain data.
+-- since there is no defined data of fully polymorphic type, this rules out
+-- the use of recursive branches of @f@ (except with 'undefined').
 type NonRec f = forall x . f x
 
 ------------------------------------------------------------------------}}}
 -- Basic class definition                                               {{{
 
-class Automata (a :: (* -> *) -> *) where
+-- | The class of a representations of an automata.  The functions here are
+-- not the user-friendly operations like @intersect@ and @union@ but are
+-- rather designed to provide a reasonably abstract view of the internals of
+-- any backing store for automata.
+class AutomataRepr (a :: (* -> *) -> *) where
   -- Construction
 
   -- | An inverse (up to isomorphism) to 'autExpose'.
@@ -112,7 +123,7 @@ class Automata (a :: (* -> *) -> *) where
   -- states, while the others allow the merge to remain at a leaf state in
   -- one automata while descending the other.
   autBiReduce :: forall f r .
-                 (Ord (f ()))
+                 (PE.Ord1 f)
               => r
               -> (forall x y m .
                      (Monad m)
@@ -128,7 +139,7 @@ class Automata (a :: (* -> *) -> *) where
   -- as part of the index -- that is, a given pair of states may be
   -- given to the callback repeatedly at differing @c@ values.
   autMerge :: forall c f .
-              (Ord c, Ord (f ()))
+              (Ord c, PE.Ord1 f)
            => (forall x y . f x -> f y -> c)
            -> (forall x y z m .
                   (Monad m)
@@ -144,7 +155,7 @@ class Automata (a :: (* -> *) -> *) where
   -- Note that the callbacks are total (monadic) functions: failure is
   -- handled internally to @m@ and may short-circuit.
   autPMerge :: forall c e f .
-               (Ord c, Ord (f ()))
+               (Ord c, PE.Ord1 f)
             => (forall x y . f x -> f y -> c)
             -> (forall x y z m .
                    (Monad m)
@@ -161,5 +172,18 @@ class AutMinimize a where
 
   -- | Automata minimization.
   autMinimize :: (T.Traversable f, Ord (f Int)) => a f -> a f
+
+------------------------------------------------------------------------}}}
+-- Functor recursor class definition                                    {{{
+
+-- XXX Future Work.
+--
+-- Sometimes, there's really only one set of operations we'd like to support
+-- on the structure @f@.  In that case, we can specify the recursors all at
+-- once and have a simpler library of operations which use the appropriate
+-- recursor.  This simpler library will have things like 'union',
+-- 'intersection', 'isEmpty', 'isUniversal', etc. 
+
+-- class AutStruct (f :: * -> *) where
 
 ------------------------------------------------------------------------}}}
