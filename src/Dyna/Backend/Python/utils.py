@@ -1,6 +1,14 @@
 import re
 from external.path import path  # used by other modules
-from IPython.frontend.terminal.embed import InteractiveShellEmbed
+
+try:
+    from IPython import embed as ip
+except ImportError:
+    from IPython.frontend.terminal.embed import InteractiveShellEmbed
+    # interactive IPython shell
+    ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
+
+
 from config import dynahome, dotdynadir
 from collections import namedtuple, defaultdict
 from cStringIO import StringIO
@@ -73,10 +81,6 @@ def user_vars(variables):
     # Note: We also ignore user variables with an underscore prefix
     return tuple((name[1:], val) for name, val in variables
                  if name.startswith('u') and not name.startswith('u_'))
-
-
-# interactive IPython shell
-ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
 
 
 def get_module(cmd, sub):
