@@ -55,7 +55,7 @@ import qualified Prelude.Extras           as PE
 -- | Instantiation states, parametric in Prolog functor @f@ with open
 -- recursion through @i@.
 --
--- We differ from the thesis and the mercury implementation (see prose, p60,
+-- We differ from the mercury thesis and implementation (see prose, p60,
 -- \"Obviously, it is not...\") in the use of open recursion rather than a
 -- @defined_inst@ branch in the @InstF@.  Rather, we use a disjunctive @i@.
 -- Similarly, we use our disjunctive @i@ rather than a separate @alias@
@@ -229,6 +229,8 @@ iNotReached u = IBound u M.empty False
 {-# INLINABLE iNotReached #-}
 
 -- | Indicator function for 'iNotReached'
+--
+-- Note that this is /not the same as/ asking if the inst is empty
 iIsNotReached :: InstF f i -> Bool
 iIsNotReached (IBound _ m False) = M.null m
 iIsNotReached _                  = False

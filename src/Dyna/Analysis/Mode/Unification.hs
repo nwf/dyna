@@ -82,6 +82,8 @@ iLeqGLBRD_,iLeqGLBRL_ :: (Monad m, Ord f)
                       => TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o)))
 iLeqGLBRD_ il ir ml mr m u i1 i2 = do
     io <- iLeqGLB_ il ir ml mr m u i1 i2
+        -- XXX this call to iIsNotReached has me jumpy.  Is there really no
+        -- way to construct an empty inst that will pass this check?
     return $ if iIsNotReached io
               then Left  UFNotReach
               else Right io

@@ -1,7 +1,13 @@
 ---------------------------------------------------------------------------
 -- | Definition and utility functions for the Dyna OPerational Abstract
 -- MachINE.
+--
+-- XXX That this pervasively uses DVar is something of a bug -- we'd rather
+-- it be much more principled in handling of variables, along the lines of
+-- PHOAS.  Unfortunately, libraries like Bound will not work directly
+-- because our language is not one of expression trees but of opcodes.
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -32,7 +38,7 @@ data ModedVar = MV
 $(makeLenses ''ModedVar)
 
 newtype NamedProcedureId = NPI Int
- deriving (Eq,Ord,Show)
+ deriving (Bounded,Enum,Eq,Ord,Show)
 
 -- | Dyna OPerational Abstract MachINE
 --

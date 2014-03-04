@@ -11,6 +11,24 @@
 -- that goes (well) beyond what's available here.  In particular, it is
 -- expected that non-trivial construction is beyond the scope of this common
 -- API.
+--
+-- XXX Is there a natural extension that allows for epsilon transitions in
+-- the definitions?  The typical example of where this comes up is in a
+-- generic "disjunction" branch of @f@.  Defining disjunction-on-disjunction
+-- or disjunction-on-base cases go through in the current formulation, but
+-- disjunction-on-recursion does not.  Is the answer to eliminate the NonRec
+-- requirement on lop-sided callbacks?  In fact, maybe we could eliminate
+-- those parameters altogether, making the type of the 'autBiReduce'
+-- callback
+--   @(x -> m r) -> (y -> m r) -> (x -> y -> m r) -> f x -> f y -> m (f r)@
+-- Pushing that through would complicate (but maybe not badly) the handling
+-- of things like uniqueness in Dyna/Analysis/Mode/Inst.hs:/^iLeqGLB_ ;
+-- maybe it should be using @c@ for that anyway.
+--
+-- XXX How do we generalize this to multi-ply automata?
+--
+-- XXX Does anybody use the fact that we reveal Monads to the callback
+-- functions?  Could they?  Should we be revaling Applicatives instead?
 
 -- Header material                                                      {{{
 {-# LANGUAGE FlexibleContexts #-}
@@ -171,6 +189,8 @@ class AutomataRepr (a :: (* -> *) -> *) where
 class AutMinimize a where
 
   -- | Automata minimization.
+  --
+  -- XXX PE.Ord1 f, not Ord (f Int)
   autMinimize :: (T.Traversable f, Ord (f Int)) => a f -> a f
 
 ------------------------------------------------------------------------}}}
