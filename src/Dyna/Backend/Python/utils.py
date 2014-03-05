@@ -261,7 +261,9 @@ def span_to_src(span, src=None):
     Utility for retrieving source code for Parsec error message (there is
     nothing specific about rules)
     """
-    
+
+    span = re.sub(r'\033(.*?)m', '', span) # remove line numbers highlighting \x..m
+
     # look for intervals like `filename:3:1-filename:3:6`
     lines = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
     if lines:
