@@ -1,6 +1,15 @@
 .. -*- compile-command: "make html" -*-
 .. Dyna documentation master file
 
+.. todo:: use a theme.  At the moment I followed the suggestion in
+	  sampledoc to copy stuff from the sphinx documentation, but
+	  nowadays there is explicit support for themes (I like
+	  "agogo" or "sphinxdoc"), as explained in the sphinx manual.
+
+.. todo:: how to obtain / install Dyna.  Also, licensing (see
+	  http://bugs.dyna.org/rt/Ticket/Display.html?id=52, also
+	  http://bugs.dyna.org/rt/Ticket/Display.html?id=569).
+
 Welcome to Dyna!
 =================================
 
@@ -35,8 +44,14 @@ Contents:
 .. todo:: not sure whether we want a top-level bibliography
 .. todo:: We may want to generate a separate PDF file for each directory
 
+
+Indices and tables
+==================
+
+* :doc:`spec/errors`
 * :doc:`spec/glossary`
 * :ref:`genindex`
+* :ref:`search`
 
 .. todo:: should we also try to add something like the automatic
 	  Python module index (modindex), but for dynabases?

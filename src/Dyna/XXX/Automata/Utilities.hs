@@ -6,7 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Dyna.Analysis.Automata.Utilities where
+module Dyna.XXX.Automata.Utilities where
 
 import           Control.Arrow (first)
 import           Control.Lens
@@ -15,15 +15,18 @@ import qualified Data.Foldable                   as F
 import qualified Data.Traversable                as T
 import qualified Data.Map                        as M
 import qualified Data.Maybe                      as MA
-import           Dyna.Analysis.Automata.Class
-import           Dyna.Analysis.Automata.NamedAut
+import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.NamedAut
 import           Dyna.XXX.PPrint
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
 -- Pretty Printing                                                      {{{
 
-autRender :: (T.Traversable f, Automata a)
+-- | Given a ply-by-ply rendering function, render an automaton.  The
+-- callback should not inspect or manipulate the @Doc e@ in a ply in order
+-- to be a faithful printout of the automaton.
+autRender :: (T.Traversable f, AutomataRepr a)
           => (f (Doc e) -> Doc e)
           -> a f -> Doc e
 autRender f a =
@@ -37,5 +40,9 @@ autRender f a =
  where
   pan = angles . pretty
   defrow (k,v) = pan k <+> equals <+> v
+
+-- XXX Maybe we should consider a version which does not reveal state labels
+-- for non-recursive terms.  "<0> where <0> = U@sh" is a lot more verbose
+-- than "U@sh", even if more standardized.
 
 ------------------------------------------------------------------------}}}
