@@ -43,7 +43,7 @@ import qualified Data.Map                 as M
 import qualified Data.Maybe               as MA
 -- import qualified Data.Set                 as S
 import           Dyna.Analysis.Mode.Uniq
-import           Dyna.XXX.DataUtils       as XDU
+import qualified Dyna.XXX.DataUtils       as XDU
 import           Dyna.XXX.MonadUtils
 import qualified Prelude.Extras           as PE
 
@@ -325,7 +325,7 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     flip mapForallM m $
       \f is -> case M.lookup f m' of
                  Nothing -> return False
-                 Just is' -> allM $ zipWithTails q crf crf is is'
+                 Just is' -> allM $ XDU.zipWithTails q crf crf is is'
     -- XXX Ought to assert that length is == length is'
 {-# INLINABLE iLeq_ #-}
 
@@ -435,7 +435,7 @@ iSub_ _ q (IBound u m b) (IBound u' m' b') = andM1 (u <= u' && b <= b') $
     flip mapForallM m $
       \f is -> case M.lookup f m' of
                  Nothing -> return False
-                 Just is' -> allM $ zipWithTails q crf crf is is'
+                 Just is' -> allM $ XDU.zipWithTails q crf crf is is'
     -- XXX Ought to assert that length is == length is'
 {-# INLINABLE iSub_ #-}
 
@@ -568,7 +568,7 @@ mergeBoundUB :: (Monad m, Ord f)
              -> (i' -> m i'')
              -> M.Map f [i] -> M.Map f [i'] -> m (M.Map f [i''])
 mergeBoundUB q l r lm rm = T.sequence
-                       $ XDU.mergeWithKey (\_ a b -> Just $ sequence $ zipWith q a b)
+                       $ M.mergeWithKey (\_ a b -> Just $ sequence $ zipWith q a b)
                                           (fmap (T.mapM l))
                                           (fmap (T.mapM r))
                                           lm rm

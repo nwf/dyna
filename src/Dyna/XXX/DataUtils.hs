@@ -13,8 +13,6 @@ module Dyna.XXX.DataUtils (
   mapInOrCons, mapMinRepView,
   -- ** Unification-style utilities
   mapSemiprune, intmapSemiprune,
-  -- ** Backports
-  mergeWithKey,
   -- * 'Data.Set' utilities
   -- ** Quantification
   setExists, setForall
@@ -132,14 +130,3 @@ zipWithTails fb fl fr = go
   go [] (r:rs) = fr r : map fr rs
   go (l:ls) [] = fl l : map fl ls
   go (l:ls) (r:rs) = fb l r : go ls rs
-
-
--- | An in-efficient version of map merge, to avoid the need to depend on
--- containers >=0.5, because that breaks people with GHC 7.4.  Sigh.
-mergeWithKey :: Ord k => (k -> a -> b -> Maybe c) -> (M.Map k a -> M.Map k c) -> (M.Map k b -> M.Map k c)
-             -> M.Map k a -> M.Map k b -> M.Map k c
-mergeWithKey f g1 g2 ml mr =
-    let xl = g1 (M.difference ml mr)
-    in let xr = g2 (M.difference mr ml)
-    in let mb = M.mapMaybe id $ M.intersectionWithKey f ml mr
-    in M.unions [xl,xr,mb]
