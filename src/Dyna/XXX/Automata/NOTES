@@ -1,0 +1,21 @@
+Generic Automata Library
+========================
+
+When dealing with automata, there are several things usually all presented
+together that we hope to separate:
+
+* The shape of transitions within the machine.  e.g. DFA vs NFA vs tree
+  automata vs ... ,
+
+* The set of states of the machine and the map from states to transitions,
+
+* Recursive constructions and queries, such as algebra-like (cycle-breaking)
+  eliminators and machine construction,
+
+* Per-transition components of queries, such as emptyness testing, and
+  constructions, like intersection and union.
+
+This is an effort to tease those apart into reusable components.  Sadly, it
+seems like it's drawing too much away from what should be the main thrust of
+research, and so I am going to check it in and then delete most of it, with
+a tag here for some future self or other to hopefully revisit.

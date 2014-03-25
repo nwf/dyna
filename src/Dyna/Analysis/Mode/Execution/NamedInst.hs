@@ -50,9 +50,8 @@ import qualified Dyna.Analysis.Mode.InstPretty     as IP
 import           Dyna.Analysis.Mode.Mode
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
-import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.ReprClass
 import           Dyna.XXX.Automata.NamedAut
-import           Dyna.XXX.Automata.Utilities
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
@@ -136,7 +135,7 @@ nWellFormedUniq u0 n0@(NIX i0 m) = evalState (iWellFormed_ q u0 i0)
 nGround :: forall f . NIX f -> Bool
 nGround = autReduce True (runIdentity . iGround_ return) . unNIX
 
-nFree :: forall f . NIX f -> Bool
+nFree :: forall f . (Ord f) => NIX f -> Bool
 nFree x = case autExpose (unNIX x) of
             IFree -> True
             _     -> False
@@ -174,22 +173,22 @@ nAllNotEmpty = nNotEmpty_ and
 {-# INLINABLE nAllNotEmpty #-}
 
 nUpUniq :: forall f . (Ord f) => Uniq -> NIX f -> NIX f
-nUpUniq u0 = NIX . autAtEachState (\_ -> over inst_uniq (max u0)) . unNIX
+nUpUniq u0 = NIX . autMap (over inst_uniq (max u0)) . unNIX
 {-# INLINABLE nUpUniq #-}
 
 -- | Expose the root ply of a 'NIX' as an Inst which recurses as additional
 -- 'NIX' elements.
 --
 -- Note that recursive use of this function may well diverge!
-nExpose :: NIX f -> InstF f (NIX f)
+nExpose :: (Ord f) => NIX f -> InstF f (NIX f)
 nExpose = fmap NIX . autExpose . unNIX
 {-# INLINABLE nExpose #-}
 
-nHide :: InstF f (NIX f) -> NIX f
+nHide :: (Ord f) => InstF f (NIX f) -> NIX f
 nHide = NIX . autHide . fmap unNIX
 {-# INLinABLE nHide #-}
 
-nShallow :: (Show f) => InstF f x -> Maybe (NIX f)
+nShallow :: (Ord f) => InstF f x -> Maybe (NIX f)
 nShallow = fmap NIX . autShallow
 {-# INLINABLE nShallow #-}
 
@@ -235,35 +234,15 @@ ctxUniq x y = u x `max` u y
  where
   u = maybe UUnique id . iUniq
 
--- XXX This may suggest that we could eliminate the "import" callbacks on
--- iLeqGLB_ and friends now that we're not doing anything special with them.
-
-bendImpl :: forall f i i' i'' m r .
-            TyILeqGLB_ f m i i' i'' r
-         -> (Uniq -> i -> NonRec (InstF f)  -> m i'')
-         -> (Uniq -> NonRec (InstF f) -> i' -> m i'')
-         -> (Uniq -> i -> i' -> m i'')
-         -> Uniq -> InstF f i -> InstF f i' -> r
-bendImpl x lsml lsmr merge = x impl impr lsml' lsmr merge
-   where
-    lsml' :: Uniq -> NonRec (InstF f) -> i -> m i''
-    lsml' u r l = lsml u l r
-
-    impl :: Uniq -> i -> m i''
-    impl u l = lsml u l IFree
-
-    impr :: Uniq -> i' -> m i''
-    impr u r = lsmr u IFree r
-
 nLeqGLB, nSubGLB :: forall f . (Ord f) => NIX f -> NIX f -> NIX f
-nLeqGLB (NIX l) (NIX r) = NIX $ autMerge ctxUniq (bendImpl iLeqGLB_) l r
+nLeqGLB (NIX l) (NIX r) = NIX $ autMerge ctxUniq iLeqGLB_ l r
 nSubGLB (NIX l) (NIX r) = NIX $ autMerge (\_ _ -> ()) go l r
  where
-  go lsml lsmr merge () = iSubGLB_ (flip (lsml ())) (lsmr ()) (merge ())
+  go lsml lsmr merge () = iSubGLB_ (lsml ()) (lsmr ()) (merge ())
 
 nLeqGLBRD, nLeqGLBRL :: (Ord f) => NIX f -> NIX f -> Either UnifFail (NIX f)
-nLeqGLBRD (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq (bendImpl iLeqGLBRD_) l r
-nLeqGLBRL (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq (bendImpl iLeqGLBRL_) l r
+nLeqGLBRD (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq iLeqGLBRD_ l r
+nLeqGLBRL (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq iLeqGLBRL_ l r
 
 ------------------------------------------------------------------------}}}
 -- Mode functions                                                       {{{

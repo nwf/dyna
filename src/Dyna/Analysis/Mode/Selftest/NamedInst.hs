@@ -23,7 +23,7 @@ import qualified Data.Map                  as M
 import qualified Data.Maybe                as MA
 import qualified Data.Set                  as S
 import qualified Data.Traversable          as T
-import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.ReprClass
 import           Dyna.XXX.Automata.Utilities
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst

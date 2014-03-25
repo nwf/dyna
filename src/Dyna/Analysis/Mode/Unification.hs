@@ -8,6 +8,7 @@
 module Dyna.Analysis.Mode.Unification {-(
 )-} where
 
+import           Control.Applicative
 import           Control.Lens.TH
 import qualified Data.Maybe                        as MA
 import           Dyna.Analysis.Mode.Inst
@@ -69,8 +70,8 @@ $(makeLenses ''UnifParams)
 -- by the insts we are given, which makes this test wider, and therefore the
 -- set of unifications we will accept smaller.
 --
-semidet_clobbered_unify :: (Monad m) => InstF f i -> InstF f i' -> m Bool
-semidet_clobbered_unify i i' = return $
+semidet_clobbered_unify :: InstF f i -> InstF f i' -> Bool
+semidet_clobbered_unify i i' =
      (not $ iIsFree i)
   && (not $ iIsFree i')
   && (   UMostlyClobbered <= MA.fromJust (iUniq i )
@@ -78,21 +79,19 @@ semidet_clobbered_unify i i' = return $
     -- The above fromJust calls are safe due to the 'iIsFree' guards.
 {-# INLINABLE semidet_clobbered_unify #-}
 
-iLeqGLBRD_,iLeqGLBRL_ :: (Monad m, Ord f)
-                      => TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o)))
-iLeqGLBRD_ il ir ml mr m u i1 i2 = do
-    io <- iLeqGLB_ il ir ml mr m u i1 i2
         -- XXX this call to iIsNotReached has me jumpy.  Is there really no
         -- way to construct an empty inst that will pass this check?
-    return $ if iIsNotReached io
-              then Left  UFNotReach
-              else Right io
+guard_not_reached i = if iIsNotReached i then Left UFNotReach else Right i
+
+iLeqGLBRD_,iLeqGLBRL_ :: (Applicative m, Ord f)
+                      => TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o)))
+iLeqGLBRD_ ml mr m u i1 i2 = guard_not_reached <$> iLeqGLB_ ml mr m u i1 i2
 {-# INLINABLE iLeqGLBRD_ #-}
-iLeqGLBRL_ il ir ml mr m u i1 i2 = do
-    scu <- semidet_clobbered_unify i1 i2
-    if scu
-     then return (Left UFSemiClob)
-     else iLeqGLBRD_ il ir ml mr m u i1 i2
+
+iLeqGLBRL_ ml mr m u i1 i2 = 
+    if semidet_clobbered_unify i1 i2
+     then pure $ Left UFSemiClob
+     else iLeqGLBRD_ ml mr m u i1 i2
 {-# INLINABLE iLeqGLBRL_ #-}
 
 ------------------------------------------------------------------------}}}

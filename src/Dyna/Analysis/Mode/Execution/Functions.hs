@@ -182,27 +182,22 @@ leqNY :: forall m f n k . (LeqC m f n k) => n -> InstF f (VR f n k) -> m Bool
 leqNY nl (nShallow -> Just nr) = leqNN nl nr
 leqNY nl yr                    = iLeq_ leqNL leqNX (nExpose nl) yr
  where
-  leqNL :: NIX f -> (forall i_ . InstF f i_) -> m Bool
-  leqNL nl' yr' = leqNY nl' (ly yr')
-
-  -- What a mess.  Necessary that it is written and scoped under here to
-  -- avoid ambiguous tyvars.
-  ly :: (forall i_ . InstF f i_) -> InstF f (VR f n k)
-  ly x = x
+  leqNL :: NIX f -> m Bool
+  leqNL nl' = leqNY nl' yr
 
 -- | Induction hypothesis YN
 --
 -- Induction is similarly funny as in 'leqNY'
 leqYN :: (LeqC m f n k) => InstF f (VR f n k) -> n -> m Bool
 leqYN (nShallow -> Just nl) nr = leqNN nl nr
-leqYN yl                    nr = iLeq_ leqXL leqXN yl (nExpose nr)
+leqYN yl                    nr = iLeq_ (\l' -> leqXN l' nr) leqXN yl (nExpose nr)
 
 -- | Induction hypothesis YY
 leqYY :: (LeqC m f n k) => InstF f (VR f n k) -> InstF f (VR f n k) -> m Bool
-leqYY = iLeq_ leqXL leqXX
+leqYY l r = iLeq_ (\l' -> leqXX l' (VRStruct r)) leqXX l r
 
-leqXL :: (LeqC m f n k) => VR f n k -> (forall i_ . InstF f i_) -> m Bool
-leqXL xl yr = leqXX xl (VRStruct yr)
+-- leqXL :: (LeqC m f n k) => VR f n k -> (forall i_ . InstF f i_) -> m Bool
+-- leqXL xl yr = leqXX xl (VRStruct yr)
 
 {-
 -- | Repackage Y as X and invoke generic dispatch.  Despite the growth of
@@ -326,7 +321,7 @@ leqMQY ql yr = leqMYY (q2y ql) yr
 
 -- | Constraints common to all unification functions
 type UnifC  m f n = (Ord f, Show f,
-                       Monad m, MonadError UnifFail m,
+                       Applicative m, Monad m, MonadError UnifFail m,
                        MonadReader UnifParams m,
                        n ~ NIX f)
 
@@ -393,9 +388,6 @@ unifyJQ :: (UnifC m f n, UnifKC m f n k)
 unifyJQ u (Left  na) qb = unifyNQ' u na qb
 unifyJQ u (Right ka) qb = unifyKQ  u ka qb
 
-jUpUniq :: (UnifC m f n, UnifKC m f n k) => Uniq -> Either n k -> m (Either n k)
-jUpUniq u = either (return . Left . nUpUniq u) (liftM Right . kUpUniq u)
-
 unifyKK :: (UnifC m f n, UnifKC m f n k) => Uniq -> k -> k -> m k
 unifyKK u = calias (unifyEE u)
 
@@ -415,12 +407,8 @@ unifyNQ :: (UnifC m f n, UnifKC m f n k)
         => Uniq -> n -> KRI f n k -> m (ENKRI f n k)
 unifyNQ u na (nShallow -> Just nb) = liftM Left $ unifyNN u na nb
 unifyNQ u na qb                    = selUnifI >>= \f ->
-    f (\u' n' -> return $ Left $ nUpUniq u' n')
-      jUpUniq
-      (\u' q' n' -> unifyNQ' u' n' q')
-      (\u' i' j' -> either (liftM Left . unifyNN u' (nHide i'))
-                           (liftM Right . flip (unifyKN u') (nHide i'))
-                           j')
+    f (\u' n' -> unifyNQ' u' n' qb)
+      (\u' j' -> unifyJJ  u' (Left na) j')
       (\u' n' j' -> either (liftM Left . unifyNN u' n')
                            (liftM Right . flip (unifyKN u) n')
                            j')
@@ -441,11 +429,11 @@ unifyQQ :: forall m f n k .
         -> KRI f n k
         -> m (KRI f n k)
 unifyQQ u ya yb = selUnifI >>= \f ->
-    f jUpUniq jUpUniq fJQ fJQ unifyJJ u ya yb
+    f (\u' j' -> unifyJQ u' j' yb) (\u' j' -> unifyJQ u' j' ya) unifyJJ u ya yb
     >>= either throwError return
  where
-  fJQ :: Uniq -> (forall i_. InstF f i_) -> Either n k -> m (Either n k)
-  fJQ u' q' j' = unifyJQ u' j' q'
+  -- fJQ :: Uniq -> (forall i_. InstF f i_) -> Either n k -> m (Either n k)
+  -- fJQ u' q' j' = unifyJQ u' j' q'
 
 -- | Name-on-Name unification, which computes a new name for the result.
 --   We assume that the sources will be updated by the caller, if
@@ -470,7 +458,7 @@ selUnifN :: (Ord f, Show f,
 selUnifN = selUnif_ nLeqGLBRL nLeqGLBRD
 
 selUnifI :: (Ord f,
-             Monad m, MonadReader UnifParams m)
+             Applicative m, MonadReader UnifParams m)
          => m (TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o))))
 selUnifI = selUnif_ iLeqGLBRL_ iLeqGLBRD_
 
@@ -505,19 +493,11 @@ unifyUnaliasedNV n0 v0 = do
   naUnifyNY u na (nShallow -> Just nb) = liftM VRName $ unifyNN u na nb
   naUnifyNY u na yb                    = liftM VRStruct $
     selUnifI >>= \f ->
-    f (\u' n' -> return $ VRName $ nUpUniq u' n')
-      xUpUniq
-      (\u' y' n' -> naUnifyNY u' n' y')
-      (\u' i' x' -> naUnifyNX u' (nHide i') x')
+    f (\u' n' -> naUnifyNY u' n' yb)
+      (\u' x' -> naUnifyNX u' na x')
       naUnifyNX
       u (nExpose na) yb
     >>= either throwError return
-
-  xUpUniq u (VRName   n) = return $ VRName $ nUpUniq u n
-  xUpUniq u (VRKey    k) = liftM VRKey $ kUpUniq u k
-  xUpUniq u (VRStruct y) = liftM VRStruct
-                         $ liftM (over inst_uniq (max u))
-                         $ inst_recps (xUpUniq u) y
 
 -- | Variable-on-Functor unification.  In our case, since we walk over ANF,
 -- where every position has been given a name, we assume the outer functor

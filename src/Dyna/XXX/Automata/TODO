@@ -1,0 +1,105 @@
+One True Binary Operator
+========================
+
+It'd be grand to replace the mishmash of binary recursion schemes that exist
+here with One True Binary Operator.  I haven't figured out a way to make it
+pretty, tho'.
+
+My thoughts are along these lines::
+
+  data AutBiRecQ f z m s =
+    AR1 { aur_step   :: f s -> m (Either (f z, z -> s) s)
+        , aur_cycled :: z -> s
+        }
+
+  data AutBiRec a c f r z = forall r' .
+    ABR { abr_finalize :: r' -> (z -> a f) -> r
+        , abr_cycled   :: z -> r'
+        , abr_step
+          :: forall x y m . (Applicative m)
+          => (f z -> m z) -- build
+          -> (forall s . AutBiRecQ f z m s -> x -> m s) -- l query
+          -> (forall s . AutBiRecQ f z m s -> y -> m s) -- r query
+          -> (c ->        y   -> m r')  -- lop-sided recursor
+          -> (c -> x          -> m r')  -- lop-sided recursor
+          -> (c -> x   -> y   -> m r')  -- binary recursor
+          -> c           -- current context
+          -> f x    -- left position and definition
+          -> f y    -- right position and definition
+          -> m (Either (f z, z -> r') r')
+        }
+
+  class AutomataBiRed (al :: (* -> *) -> *) (ar :: (* -> *) -> *) where
+
+    autGenBiRec  :: forall c f r .
+                    (Ord c, PE.Ord1 f, T.Traversable f)
+                 => (forall z . AutBiRec al c f r z)
+                 -> c -> al f -> ar f -> r
+
+The ``_cycled`` callbacks will be invoked to break cycles in the recursion;
+they are given a key ``z`` that uniquely identifies the context (``c`` or
+``d``) and position (pair) involved (``x``, ``y``).
+
+The ``build`` callback may be used to build additional structure in a
+resulting automata.
+
+The ``Either`` results allow for the step functions to optionally register
+structure into the new automata .  This structure will be given an index
+``z`` (which may have been allocated when the recursion cycled) and the
+given function called with that index to produce the answer.  Alternatively,
+if no such registration is required, an answer may be returned directly.
+
+Other moves available to the ``_step`` function are simultaneous descent
+(``binary recursor``), single-sided descent (which leaves the cursor at the
+current position on the other side), and ``query`` operations -- unary
+recursion schemes -- on either side of the graph.  The query operations are
+themselves equipped with keyed ``_cycled`` callbacks and ``Either`` returns
+as above.
+
+Note that the type of ``z`` is existential and may not be mentioned in ``r``
+(though it may be in ``r'`` and ``s``); the ``_finalize`` callback allows
+sealing of any ``z`` in ``r'`` behind the automata interface.
+
+Implementation For Named Automata
+---------------------------------
+
+Just so I don't lose progress::
+  data AGBRState f c r' a b = AGBRS { _agrbs_next   :: Int
+                                    , _agrbs_ctx    :: M.Map Int (f Int)
+                                    , _agrbs_ictx   :: M.Map (C f Int) Int
+                                    , _agrbs_cache  :: M.Map (c,a,b) r'
+                                    }
+  $(makeLenses ''AGBRState)
+  
+  iAGBRS :: AGBRState f c r' a b
+  iAGBRS = AGBRS 0 M.empty M.empty M.empty
+
+  instance AutomataBiRed NA NA where
+
+    autGenBiRec  :: forall c f r .
+                    (Ord c, PE.Ord1 f, T.Traversable f)
+                 => (forall z . AutBiRec NA c f r z) -> c -> NA f -> NA f -> r
+    autGenBiRec (ABR fin0 cyc0 step) c0 (NA (la0 :: la) lm) (NA (ra0 :: ra) rm) =
+      fin (runState (qip c0 la0 ra0) iAGBRS)
+     where
+      fin (r', st) = undefined
+
+      qip c l r = qdo
+        let lf :: f la = atl la0
+        let rf :: f ra = atr ra0
+        step new redl redr (\c' r' -> qip c' l r') (\c' l' -> qip c' l' r) qip c lf rf
+
+      new fz = tryMapCache agrbs_ictx create (\_ _ -> return ()) (C fz)
+       where
+        create _ = do
+         z <- incState agrbs_next
+         agrbs_ctx . at z .= Just fz
+         return z
+
+      redl f s x = undefined
+      redr f s y = undefined
+
+      atl a = MA.fromJust $ (lm ^. at a)
+      atr a = MA.fromJust $ (rm ^. at a)
+
+

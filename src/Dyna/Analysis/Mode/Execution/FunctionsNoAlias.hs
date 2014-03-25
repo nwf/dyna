@@ -36,7 +36,7 @@ module Dyna.Analysis.Mode.Execution.FunctionsNoAlias (
   leqXX,
 ) where
 
--- import           Control.Applicative
+import           Control.Applicative
 -- import           Control.Exception
 import           Control.Lens
 import           Control.Monad.Error.Class
@@ -93,15 +93,10 @@ type LeqC m f n = (Ord f, Show f,
 
 leqXX :: (LeqC m f n)
       => VR f n -> VR f n -> m Bool
-leqXX (VRStruct yl) (VRStruct yr) = iLeq_ leqXL leqXX yl yr
+leqXX (VRStruct yl) (VRStruct yr) = iLeq_ (\l' -> leqXX l' (VRStruct yr)) leqXX yl yr
 leqXX (VRName   nl) (VRStruct yr) = leqNY nl yr
 leqXX (VRStruct yl) (VRName   nr) = leqYN yl nr
 leqXX (VRName   nl) (VRName   nr) = return $ nLeq nl nr
-
-leqXL :: (LeqC m f n)
-      => VR f n -> (forall i_ . InstF f i_) -> m Bool
-leqXL (VRName   nl) yr = iLeq_ leqNL leqNX (nExpose nl) yr
-leqXL (VRStruct yl) yr = iLeq_ leqXL leqXX yl yr
 
 {-
 leqXY :: (LeqC m f n)
@@ -113,21 +108,16 @@ leqXY (VRStruct yl) yr = iLeq_ leqXY leqXX yl yr
 leqNX :: (LeqC m f n)
       => NIX f -> VR f n -> m Bool
 leqNX nl (VRName   nr) = return $ nLeq nl nr
-leqNX nl (VRStruct yr) = iLeq_ leqNL leqNX (nExpose nl) yr
+leqNX nl (VRStruct yr) = iLeq_ (\l' -> leqNY l' yr) leqNX (nExpose nl) yr
 
 leqNY :: (LeqC m f n)
       => NIX f -> InstF f (VR f n) -> m Bool
 leqNY nl (nShallow -> Just nr) = {- XT.trace "LNYS" $-} return $ nLeq nl nr
-leqNY nl ir = {-XT.traceShow ("LNY",nl,ir) $-} iLeq_ leqNL leqNX (nExpose nl) ir
-
--- XXX I am uncertain why this is necessary.
-leqNL :: (LeqC m f n)
-      => NIX f -> (forall i_ . InstF f i_) -> m Bool
-leqNL n l = leqNY n l
+leqNY nl ir = {-XT.traceShow ("LNY",nl,ir) $-} iLeq_ (\l' -> leqNY l' ir) leqNX (nExpose nl) ir
 
 leqYN :: (LeqC m f n)
       => InstF f (VR f n) -> NIX f -> m Bool
-leqYN il nr = iLeq_ leqXL leqXN il (nExpose nr)
+leqYN il nr = iLeq_ (\l' -> leqXN l' nr) leqXN il (nExpose nr)
 
 {-
 leqXI :: (LeqC m f n)
@@ -167,7 +157,7 @@ leqVX vl xr = do
 
 -- | Constraints common to unification interface functions
 type UnifC'  m f n = (Ord f, Show f,
-                     Monad m,
+                     Applicative m, Monad m,
                      MonadError UnifFail m,
                      n ~ NIX f)
 
@@ -239,10 +229,8 @@ unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
   fake <- view up_fake
   let f = if (live && not fake) then iLeqGLBRL_ else iLeqGLBRD_
   either throwError (return . VRStruct) =<< f
-   (\u x -> return $ xUpUniq u x)
-   (\u x -> return $ xUpUniq u x)
-   (\u y x -> unifyXY u x y)
-   (\u y x -> unifyXY u x y)
+   undefined -- (\u y x -> unifyXY u x y)
+   undefined -- (\u y x -> unifyXY u x y)
    unifyXX
    u0 ya yb
 
@@ -260,12 +248,6 @@ unifyNX u n (VRStruct y) = unifyIY u (nExpose n) y
 unifyIY :: (UnifC m f n)
         => Uniq -> InstF f n -> InstF f (VR f n) -> m (VR f n)
 unifyIY u0 ia yb = unifyYY u0 (fmap VRName ia) yb
-
--- XXX Should stop earlier than it does
-xUpUniq :: (Ord f, n ~ NIX f) => Uniq -> VR f n -> VR f n
-xUpUniq u (VRName   n) = {- XT.trace "XUU1" $ -} VRName   $ nUpUniq u n
-xUpUniq u (VRStruct y) = {- XT.trace "XUU2" $ -} VRStruct $ over inst_uniq (max u)
-                                  $ fmap (xUpUniq u) y
 
 -- | Name-on-Variable unification.  This should not be called on names
 -- looked up from the context, as that would omit important updates to the
@@ -360,13 +342,13 @@ subNN :: (SubC m f n)
 subNN a b = {- XT.traceShow ("SNN",a,b) $-} return $ nSub a b
 
 subXI :: (SubC m f n)
-      => VR f n -> (forall i_ . InstF f i_) -> m Bool
+      => VR f n -> InstF f (NIX f) -> m Bool
 subXI (VRName   ln) ri = subNN ln (nHide ri)
 subXI (VRStruct ly) ri = subYI ly ri
 
 subYI :: (SubC m f n)
       => InstF f (VR f n) -> InstF f (NIX f) -> m Bool
-subYI l r = iSub_ subXI subXN l r
+subYI l r = iSub_ (\l' -> subXI l' r) subXN l r
 
 subXN :: (SubC m f n)
       => VR f n -> NIX f -> m Bool

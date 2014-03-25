@@ -1,4 +1,5 @@
 {-# LANGUAGE Rank2Types #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Dyna.XXX.MonadUtils(
   -- * Data utilities generalizing 'Dyna.XXX.DataUtils'
@@ -11,14 +12,15 @@ module Dyna.XXX.MonadUtils(
   bracketState, incState, readState,
   -- * Monad cache utilities
   trySetCache, tryMapCache,
+  -- * Traversal utilities
+  dtraverse
 ) where
 
--- import           Control.Applicative
+import           Control.Applicative
 import           Control.Lens
 import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Map  as M
-import           Data.Monoid
 import qualified Data.Set  as S
 
 andM :: Monad m => m Bool -> m Bool -> m Bool
@@ -117,15 +119,21 @@ trySetCache l cyc miss e = do
 
 -- | Like 'trySetCache' but a version that actually, well, caches a value.
 -- This depends on us being able to store something into the map before
--- actually recursing and does not update the map while recursing (the
--- callbacks may of course do so at their own risk).
+-- actually recursing (the miss handler).  It is typical that the recursor
+-- will update the map with the actual value as its last action.
 tryMapCache :: (Ord e, MonadState s m)
             => Simple Lens s (M.Map e a)
             -> (e -> m a)                   -- On miss, construct @a@
-            -> (e -> a -> m ())             -- Now, given @a@, recurse
+            -> (e -> a -> m ())             -- Then, given @a@, recurse
             -> e
             -> m a
 tryMapCache l mk rec e = use (l . at e) >>= maybe miss return
  where
   miss = mk e >>= \k -> (l . at e .= Just k) >> rec e k >> return k
 {-# INLINABLE tryMapCache #-}
+
+-- | Rather often we have to nest traversals.
+dtraverse :: (Applicative m, Traversable t, Traversable u)
+          => (a -> m b) -> t (u a) -> m (t (u b))
+dtraverse f = traverse (traverse f)
+{-# INLINABLE dtraverse #-}

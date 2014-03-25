@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,10 +27,12 @@ import qualified Data.Map                          as M
 import qualified Data.Maybe                        as MA
 import qualified Data.Set                          as S
 import qualified Data.Traversable                  as T
-import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.ReprClass
 import           Dyna.XXX.DataUtils (mapInOrCons)
 import           Dyna.XXX.MonadUtils (incState, tryMapCache, trySetCache)
 import qualified Prelude.Extras                    as PE
+import qualified Text.PrettyPrint.Free             as PP
+import           Dyna.XXX.PPrint                   as XPP
 
 ------------------------------------------------------------------------}}}
 -- Definition                                                           {{{
@@ -83,11 +86,12 @@ instance (PE.Eq1 f) => Eq (DC f) where
 instance (PE.Ord1 f) => Ord (DC f) where
   (DC l) `compare` (DC r) = l `PE.compare1` r
 
--- | Downcast away a forall.  The instances above convert our 'PE.Ord1'
--- requirements into the traditional 'Ord' and 'Eq' for 'f ()'.  This serves
--- to hide the use of '()' from the consumer code.
-dc :: NonRec f -> DC f
-dc i = DC i
+newtype C f x = C (f x)
+instance (PE.Eq1 f, Eq x) => Eq (C f x) where
+  (C l) == (C r) = l PE.==# r
+instance (PE.Ord1 f, Ord x) => Ord (C f x) where
+  (C l) `compare` (C r) = l `PE.compare1` r
+
 
 ------------------------------------------------------------------------}}}
 -- Unfolder                                                             {{{
@@ -150,6 +154,12 @@ naUnfold uf t0 s0 = (\(r,(_,m,_)) -> NA r m)
     return i
 -}
 
+{-
+ - XXX There appears to be a bug in this (and frankly I'm not sure why it's
+ - even necessary).  See ./Examples.hs:/^dfa_simple_finite; using this
+ - implementation, there are four states in the resulting automaton when
+ - there really should only be three!
+ - "case dfa_simple_finite of NA r m -> M.size m" can show you.
 naFromMap :: forall f oix .
              (T.Traversable f, Ord oix)
           => M.Map oix (f oix) -> oix -> NA f
@@ -162,6 +172,9 @@ naFromMap m0 a0 = flip evalState (M.empty :: M.Map oix Int) (naUnfold u a0)
     liftM Right $ T.mapM relabel $ MA.fromJust (m0 ^. at oix)
 
   relabel oix = lift (use (at oix)) >>= return . maybe (Right oix) (Left)
+-}
+naFromMap :: (Ord oix, T.Traversable f) => M.Map oix (f oix) -> oix -> NA f
+naFromMap m r = NA r m
 {-# INLINABLE naFromMap #-}
 
 {-
@@ -181,17 +194,28 @@ naFromAut = autReduceIx cyc rec
 ------------------------------------------------------------------------}}}
 -- Internal data types                                                  {{{
 
-data NBinState f c a b = NBS { _nbs_next  :: Int
-                             , _nbs_ctx   :: M.Map Int (f Int)
-                             , _nbs_cache_symm :: M.Map (c,a   ,b   ) Int
-                             , _nbs_cache_lsml :: M.Map (c,a   ,DC f) Int
-                             , _nbs_cache_lsmr :: M.Map (c,DC f,b   ) Int
+-- XXX For import operations, we could be more efficient if we reused
+-- imported structure, keyed on context and importee state.
+
+-- XXX For our lop-sided operations, we could potentially reuse structure
+-- more frequently (i.e. on non-minimized automata) if we indexed instead by
+-- the definition of the stationary state, rather than its state name.
+
+data NBinState f c a b = NBS { _nbs_next       :: Int
+                             , _nbs_ctx        :: M.Map Int (f Int)
+                             , _nbs_cache_symm :: M.Map (c,a,b) Int
                              }
 $(makeLenses ''NBinState)
-type NBSC m f c a b = (Monad m, MonadState (NBinState f c a b) m)
+type NBSC m f c a b = (Applicative m, Monad m, MonadState (NBinState f c a b) m)
 
 iNBS :: forall (f :: * -> *) c a b. NBinState f c a b
-iNBS = NBS 0 M.empty M.empty M.empty M.empty
+iNBS = NBS 0 M.empty M.empty
+
+data NMergeState f c a = NMS { _nms_next       :: Int
+                             , _nms_ctx        :: M.Map Int (f Int)
+                             , _nms_cache      :: M.Map (c,a) Int
+                             }
+$(makeLenses ''NMergeState)
 
 data MinState a c = MS
   { _ms_classes :: M.Map c [a]
@@ -232,10 +256,8 @@ instance AutomataRepr NA where
   autExpose (NA a0 m) = fmap (\a -> NA a m) $ MA.fromJust $ m ^. at a0
   {-# INLINABLE autExpose #-}
 
-  autAtEachState q (NA a0 m0) = NA a0 (M.map q' m0)
-   where
-    q' = q (MA.fromJust . (m0 ^.) . at)
-  {-# INLINABLE autAtEachState #-}
+  autMap q (NA a0 m0) = NA a0 (M.map q m0)
+  {-# INLINABLE autMap #-}
 
   autReduce cyc red (NA a0 m0) = evalState (q a0) M.empty
    where
@@ -249,6 +271,154 @@ instance AutomataRepr NA where
      at a .= Just r
   {-# INLINABLE autReduce #-}
 
+instance AutomataReprBin NA NA where
+  autBiReduce c q (NA la0 lm) (NA ra0 rm) =
+    evalState (qip la0 ra0) S.empty
+   where
+    qip l r = flip (trySetCache id c) (l,r) $ \_ -> do
+               let lf = MA.fromJust $ lm ^. at l
+               let rf = MA.fromJust $ rm ^. at r
+               q (\l' -> qip l' r) (\r' -> qip l r') qip lf rf
+  {-# INLINABLE autBiReduce #-}
+
+  -- While unusual, we need this instance type declaration to introduce
+  -- scoped type variables for us to hold on to down below.  Oy!
+  autGenMerge :: forall c f .
+              (Ord c, PE.Ord1 f, T.Traversable f)
+           => (forall x y . f x -> f y -> c)
+           -> (forall x z m .
+                  (Applicative m)
+               => (c -> x   -> m z)
+               ->  c -> f x -> m (f z))
+           -> (forall x y z m .
+                  (Applicative m)
+               => (c -> x        -> m z)
+               -> (c -> y        -> m z)
+               -> (c -> x        -> m z)
+               -> (c -> y        -> m z)
+               -> (c -> x        -> y        -> m z)
+               ->  c -> f x      -> f y      -> m (f z))
+           -> NA f -> NA f -> NA f
+  autGenMerge ci im f (NA (la0 :: la) lm) (NA (ra0 :: ra) rm) = evalState tlq iNBS
+   where
+    tlq = do
+      let lf :: f la = atl la0
+      let rf :: f ra = atr ra0
+      let ic = ci lf rf
+      ma <- merge ic la0 ra0
+      mm <- use nbs_ctx
+      return (NA ma mm)
+     where
+      merge :: NBSC m f c la ra => c -> la -> ra -> m Int
+      merge c l r = 
+        flip (tryMapCache nbs_cache_symm (\_ -> nxt)) (c,l,r) $ \_ a -> do
+          let lf = atl l
+          let rf = atr r
+          v <- f (imtlq atl)
+                 (imtlq atr)
+                 (\c' l' -> merge c' l' r)
+                 (\c' r' -> merge c' l r')
+                 merge c lf rf
+          ins a v
+      ins k v = nbs_ctx . at k .= Just v
+
+    imtlq :: forall m x . (Ord x, NBSC m f c la ra)
+          => (x -> f x) -> c -> x -> m Int
+    imtlq a c0 x0 = do
+      n <- use nbs_next
+      ctx <- use nbs_ctx
+      let (r, NMS n' ctx' _) = runState (go c0 x0) (NMS n ctx M.empty)
+      nbs_next .= n'
+      nbs_ctx  .= ctx'
+      return r
+     where
+      go c x = tryMapCache nms_cache (\_ -> incState nms_next) impmiss (c,x)
+       where
+        impmiss _ k = do
+         v <- im go c (a x)
+         nms_ctx . at k .= Just v
+
+    atl a = MA.fromJust $ (lm ^. at a)
+    atr a = MA.fromJust $ (rm ^. at a)
+    nxt :: NBSC m f c la ra => m Int
+    nxt = incState nbs_next
+  {-# INLINABLE autGenMerge #-}
+
+  autGenPMerge :: forall c e f .
+               (Ord c, PE.Ord1 f, T.Traversable f)
+            => (forall x y . f x -> f y -> c)
+            -> (forall x z m .
+                  (Applicative m)
+                => (c -> x   -> m z)
+                ->  c -> f x -> m (Either e (f z)))
+            -> (forall x y z m .
+                   (Applicative m)
+                => (c -> x        -> m z)
+                -> (c -> y        -> m z)
+                -> (c -> x        -> m z)
+                -> (c -> y        -> m z)
+                -> (c -> x        -> y        -> m z)
+                ->  c -> f x      -> f y      -> m (Either e (f z)))
+            -> NA f -> NA f -> Either e (NA f)
+  autGenPMerge ci im f (NA (la0 :: la) lm) (NA (ra0 :: ra) rm) =
+    evalState (runEitherT tlq) iNBS
+   where
+    tlq = do
+      let lf :: f la = atl la0
+      let rf :: f ra = atr ra0
+      let ic = ci lf rf
+      ma <- merge ic la0 ra0
+      mm <- use nbs_ctx
+      return (NA ma mm)
+     where
+      merge :: NBSC m f c la ra => c -> la -> ra -> EitherT e m Int
+      merge c l r =
+        flip (tryMapCache nbs_cache_symm (\_ -> nxt)) (c,l,r) $ \_ a -> do
+          let lf = atl l
+          let rf = atr r
+          m <- f (imtlq atl) (imtlq atr)
+                 (\c' l' -> merge c' l' r)
+                 (\c' r' -> merge c' l r')
+                 merge c lf rf
+          v <- hoistEither m
+          ins a v
+
+      ins k v = nbs_ctx . at k .= Just v
+
+    imtlq :: forall m x . (Ord x, NBSC m f c la ra)
+          => (x -> f x) -> c -> x -> EitherT e m Int
+    imtlq a c0 x0 = do
+      n <- use nbs_next
+      ctx <- use nbs_ctx
+      (mr, NMS n' ctx' _) <- runStateT (runEitherT $ go c0 x0) (NMS n ctx M.empty)
+      r <- hoistEither mr
+      nbs_next .= n'
+      nbs_ctx  .= ctx'
+      return r
+     where
+      go c x = tryMapCache nms_cache (\_ -> incState nms_next) impmiss (c,x)
+       where
+        impmiss _ k = do
+         mv <- im go c (a x)
+         v  <- hoistEither mv
+         nms_ctx . at k .= Just v
+
+
+    atl a = MA.fromJust $ (lm ^. at a)
+    atr a = MA.fromJust $ (rm ^. at a)
+    nxt :: NBSC m f c la ra => m Int
+    nxt = incState nbs_next
+  {-# INLINABLE autGenPMerge #-}
+
+------------------------------------------------------------------------}}}
+-- AutomataIxRed instance                                               {{{
+
+instance AutomataIxRed NA where
+  autMapIx q (NA a0 m0) = NA a0 (M.map q' m0)
+   where
+    q' = q (MA.fromJust . (m0 ^.) . at)
+  {-# INLINABLE autMapIx #-}
+
   autReduceIx cyc red (naExposeAll -> (a0,m0)) = evalState (q a0) M.empty
    where
     q a = do
@@ -261,140 +431,30 @@ instance AutomataRepr NA where
      at a .= Just r
   {-# INLINABLE autReduceIx #-}
 
-  autBiReduce c q (NA la0 lm) (NA ra0 rm) =
-    evalState (qip la0 ra0) (S.empty, S.empty, S.empty)
+------------------------------------------------------------------------}}}
+-- AutomataRender instance                                              {{{
+
+instance AutomataRender NA where
+  autRender f a =
+    let (root, defs) = autReduceIx
+                          (\(x :: Int) -> (pan x, M.empty))
+                          (\x fr -> let r  = f $ fmap fst fr
+                                        ms = M.unions $ F.toList $ fmap snd fr
+                                    in  (pan x, M.insert x r ms))
+                          a
+    in root PP.<+> "where" PP.<+> XPP.valign (map defrow $ M.toList defs)
    where
-    qip l r = flip (trySetCache _1 c) (l,r) $ \_ -> do
-               let lf = MA.fromJust $ lm ^. at l
-               let rf = MA.fromJust $ rm ^. at r
-               q qopl qopr qip lf rf
+    pan = PP.angles . PP.pretty
+    defrow (k,v) = pan k PP.<+> PP.equals PP.<+> v
 
-    qopl l r = flip (trySetCache _2 c) (l, dc r) $ \_ -> do
-                let lf = MA.fromJust $ lm ^. at l
-                q qopl qopr qip lf r
-
-    qopr l r = flip (trySetCache _3 c) (dc l, r) $ \_ -> do
-                let rf = MA.fromJust $ rm ^. at r
-                q qopl qopr qip l rf
-  {-# INLINABLE autBiReduce #-}
-
-  -- While unusual, we need this instance type declaration to introduce
-  -- scoped type variables for us to hold on to down below.  Oy!
-  autMerge :: forall c f .
-              (Ord c, PE.Ord1 f)
-           => (forall x y . f x -> f y -> c)
-           -> (forall x y z m .
-                  (Monad m)
-               => (c -> x        -> NonRec f -> m z)
-               -> (c -> NonRec f -> y        -> m z)
-               -> (c -> x        -> y        -> m z)
-               ->  c -> f x      -> f y      -> m (f z))
-           -> NA f -> NA f -> NA f
-  autMerge ci f (NA (la0 :: la) lm) (NA (ra0 :: ra) rm) = evalState tlq iNBS
-   where
-    f' :: NBSC m f c la ra => c -> f la -> f ra -> m (f Int)
-    f' = f lsml lsmr merge
-
-    tlq = do
-      let lf :: f la = MA.fromJust $ lm ^. at la0
-      let rf :: f ra = MA.fromJust $ rm ^. at ra0
-      let ic = ci lf rf
-      ma <- merge ic la0 ra0
-      mm <- use nbs_ctx
-      return (NA ma mm)
-
-    -- These two are here so that the skolems remain local to this
-    -- defintion.  It's a bit of a shame that the type system is
-    -- not willing to let these exist at higher scope.
-    nxt :: NBSC m f c la ra => m Int
-    nxt = incState nbs_next
-    ins k v = nbs_ctx . at k .= Just v
-
-    merge :: NBSC m f c la ra => c -> la -> ra -> m Int
-    merge c l r =
-      flip (tryMapCache nbs_cache_symm (\_ -> nxt)) (c,l,r) $ \_ a -> do
-        let lf = MA.fromJust $ lm ^. at l
-        let rf = MA.fromJust $ rm ^. at r
-        v <- f' c lf rf
-        ins a v
-
-    lsml :: NBSC m f c la ra => c -> la -> NonRec f -> m Int
-    lsml c l r =
-      flip (tryMapCache nbs_cache_lsml (\_ -> nxt)) (c,l,dc r) $ \_ a -> do
-        let lf = MA.fromJust $ lm ^. at l
-        v <- f' c lf r
-        ins a v
-
-    lsmr :: NBSC m f c la ra => c -> NonRec f -> ra -> m Int
-    lsmr c l r =
-      flip (tryMapCache nbs_cache_lsmr (\_ -> nxt)) (c,dc l,r) $ \_ a -> do
-        let rf = MA.fromJust $ rm ^. at r
-        v <- f' c l rf
-        ins a v
-  {-# INLINABLE autMerge #-}
-
-  autPMerge :: forall c e f .
-               (Ord c, PE.Ord1 f)
-            => (forall x y . f x -> f y -> c)
-            -> (forall x y z m .
-                   (Monad m)
-                => (c -> x        -> NonRec f -> m z)
-                -> (c -> NonRec f -> y        -> m z)
-                -> (c -> x        -> y        -> m z)
-                ->  c -> f x      -> f y      -> m (Either e (f z)))
-            -> NA f -> NA f -> Either e (NA f)
-  autPMerge ci f (NA (la0 :: la) lm) (NA (ra0 :: ra) rm) =
-    evalState (runEitherT tlq) iNBS
-   where
-    f' :: NBSC m f c la ra
-       => c -> f la -> f ra -> EitherT e m (Either e (f Int))
-    f' = f lsml lsmr merge
-
-    tlq = do
-      let lf :: f la = MA.fromJust $ lm ^. at la0
-      let rf :: f ra = MA.fromJust $ rm ^. at ra0
-      let ic = ci lf rf
-      ma <- merge ic la0 ra0
-      mm <- use nbs_ctx
-      return (NA ma mm)
-
-    -- These two are here so that the skolems remain local to this
-    -- defintion.  It's a bit of a shame that the type system is
-    -- not willing to let these exist at higher scope.
-    nxt :: NBSC m f c la ra => m Int
-    nxt = incState nbs_next
-    ins k v = nbs_ctx . at k .= Just v
-
-    merge :: NBSC m f c la ra => c -> la -> ra -> EitherT e m Int
-    merge c l r =
-      flip (tryMapCache nbs_cache_symm (\_ -> nxt)) (c,l,r) $ \_ a -> do
-        let lf = MA.fromJust $ lm ^. at l
-        let rf = MA.fromJust $ rm ^. at r
-        m <- f' c lf rf
-        v <- hoistEither m
-        ins a v
-
-    lsml :: NBSC m f c la ra => c -> la -> NonRec f -> EitherT e m Int
-    lsml c l r =
-      flip (tryMapCache nbs_cache_lsml (\_ -> nxt)) (c,l,dc r) $ \_ a -> do
-        let lf = MA.fromJust $ lm ^. at l
-        m <- f' c lf r
-        v <- hoistEither m
-        ins a v
-
-    lsmr :: NBSC m f c la ra => c -> NonRec f -> ra -> EitherT e m Int
-    lsmr c l r =
-      flip (tryMapCache nbs_cache_lsmr (\_ -> nxt)) (c,dc l,r) $ \_ a -> do
-        let rf = MA.fromJust $ rm ^. at r
-        m <- f' c l rf
-        v <- hoistEither m
-        ins a v
-  {-# INLINABLE autPMerge #-}
+-- XXX Maybe we should consider a version which does not reveal state labels
+-- for non-recursive terms.  "<0> where <0> = U@sh" is a lot more verbose
+-- than "U@sh", even if more standardized.
 
 ------------------------------------------------------------------------}}}
--- AutMinimize instance                                                 {{{
+-- AutomataMinimize instance                                            {{{
 
-instance AutMinimize NA where
+instance AutomataMinimize NA where
 
   autMinimize (naPrune -> NA a0 m0) =
     let ms = classifyUntil m0 (MS M.empty M.empty)

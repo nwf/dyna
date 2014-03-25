@@ -21,7 +21,7 @@ import qualified Data.Set                  as S
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Analysis.Mode.Execution.NamedInst
-import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.ReprClass
 import           Dyna.XXX.Automata.Utilities
 import           Test.QuickCheck
 import           Test.SmallCheck           as SC
