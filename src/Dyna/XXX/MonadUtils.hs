@@ -84,7 +84,7 @@ bracketState bs m = do
 -- pass "id" or something similarly simple (frequently much shorter than
 -- the type given here!)
 incState :: (Enum a, MonadState s m)
-         => Overloading (->) (->) ((,) a) s s a a
+         => Optical (->) (->) ((,) a) s s a a
          -> m a
 incState = (<<%= succ)
 {-# INLINABLE incState #-}

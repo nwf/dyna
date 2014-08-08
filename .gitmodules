@@ -7,3 +7,6 @@
 [submodule "external/ekmett-trifecta"]
 	path = external/ekmett-trifecta
 	url = git://github.com/ekmett/trifecta.git
+[submodule "docs/sphinx/_themes/bootstrap"]
+	path = docs/sphinx/_themes/bootstrap
+	url = https://github.com/ryan-roemer/sphinx-bootstrap-theme.git

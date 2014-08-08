@@ -63,7 +63,7 @@ except:
 
 # The full version, including alpha/beta/rc tags.
 try:
-  release = version + ' git=' + subprocess.check_output(["git", "describe", "--always"])
+  release = version + ' git=' + subprocess.check_output(["git", "describe", "--always"]).strip()
 except subprocess.CalledProcessError:
   release = version + ' gitless'
 
@@ -117,7 +117,7 @@ html_theme = 'default'
 #html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
-#html_theme_path = []
+html_theme_path = [ '_themes/bootstrap' ]
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
