@@ -42,6 +42,7 @@
    ~/hw/dyna/docs/inference2.txt
    ~/hw/dyna/docs/manpage.txt
    ~/hw/dyna/docs/manpage-NOTES.txt
+   ~/hw/dyna/docs/{papers}  -- includes writeup of dynabase types etc.
    ~/jot/dopp
    ~/hw/dyna/CITE
    ~/hw/dyna/docs/frozen3.txt
@@ -303,6 +304,7 @@ Functors
 .. todo:: What space are these in?  How do they relate to strings and
 	  dynabases?  See https://github.com/nwf/dyna/issues/49, and
 	  consider RDF names.
+.. todo:: local versus global functors
 
 Single quotes
 ^^^^^^^^^^^^^
@@ -339,16 +341,120 @@ Reserved functors
 .. todo:: how to test for errors (catch errors) - maybe a forward
 	  reference.  Trying to unify two errors -- including during
 	  query or update propagation -- probably needs to give an
-	  error, or errors might silently vanish when they pass
-	  through equality, leading to unexpected results!
+	  error, since otherwise errors might silently vanish when
+	  they pass through equality, leading to unexpected results!
+.. todo:: some discussion of $error in boolean section of
+	  inference2.txt.
 .. todo:: dealing with errors as arguments, e.g., f(X/Y) = ...
 	  may yield f($error(...)).  Presumably this means that
 	  f(X) yields some f($error(...)) matches: are their
 	  values also errors?
-	  
+.. todo:: We need to worry about extending the type system with error
+	  values.  The definition `rational(:int P / :int Q).`
+	  attempts to describe all ratios of integers as rational
+	  (although we may not be able to plan this query unless we
+	  have an enumerator for integers).  Since `Q` can be `0`,
+	  this rule also defines `rational($error)`, where the `$error`
+	  object is statically typed as a float because that's the
+	  output type of division.  As a result, we should discover an
+	  error when we query `rational(:float F)` but not when we
+	  query `rational(:person P)` which is an unrelated use of
+	  `rational` defined by other rules.
+
+Errors are handled declaratively.  Thus, 
+* errors have provenance;
+* the errors that we get don't depend on the execution strategy (in
+  the single-fixpoint world);
+* if `f(1)` has an error value than `f(X)` will also return an error value.
+
+There is at least one special `$error` value.  We may need many such
+values that are particular error tokens (like gensyms) and carry
+messages around and may have specific types.
+
+Where errors originate:
+
+* We define `assert(:bool B)` be `true` if `B` is `true` and
+  `$error` otherwise.  (Perhaps including if the argument is `null`, in
+  which case the argument actually has to be unevaluated as with `?B`.
+  If not, the user can still write `assert(?B)` to have this meaning.)
+
+* Built-ins may have error values.  For example, `$error` is the value
+  of `1/0`.
+
+* User programs may define some items to have an `$error` value.
+  E.g., perhaps `prime` takes integer arguments but we say that
+  `prime(N) = $error for N < 2`.  
+
+* Items can be defined extensionally to have `$error` values.
+
+* If a type has a side condition that must be checked at runtime, then
+  failing that side condition at runtime generates an error.  For
+  example, we might declare a range type of integers that are `>= 2`
+  and we use that as the type of the argument to `prime`.  If the
+  compiler cannot prove at compile time that the argument to `prime`
+  satisfies the `>= 2` test, then it inserts a runtime assertion,
+  replacing `prime(N)` with `assert(N >= 2), prime(N)`.
+
+* Integrity constraints. 
+
+How errors are consumed:
+
+* By default, any item whose name is an `$error` or contains an
+  `$error` has value `$error`.  In other words, if no value can be
+  proved for such an item, its value is taken to be `$error` rather
+  than null.  If a value of `$null` can be proved for such an item,
+  then evaluation of the item does return null.  (Maybe better: if the
+  item unifies with the head of any rule or can be set extensionally,
+  then we skip the default behavior and just go with the rule(s) that
+  define the value, possibly null.  Note that this means that we can't
+  just clear out dead code -- rules that always fail -- because they
+  might ensure that error terms have null values.)
+
+* However, this is overridden by some built-ins.  For example, `true |
+  $error` evalues to `true` and `0 * $error` evaluates to `0`.
+
+* Similarly, a user program can trap errors.  For example,
+  `times(0,$error) := 0`.  Also, `f(:int X) = 0` presumably means that
+  `f($error)` yields 0.
+
+So, is it an error to ask for `5 is 10/X`?  How about `5 is 10/0`?
+(Note that `10 is X*5` and `10 is 0*5` are not errors; the latter just
+fails.)
+
+nwf's opinion is that these just fail (return null) without an error.
+`10/0` returns a special `$error` value that doesn't unify with `5`.
+Handling `$error` like an ordinary value will certainly make it easier
+to catch exceptions by writing rules that unify with `$error`.  A
+downside of the approach is that while `prime(0)` is an error, `true
+is prime(0)` is simply null.
+
+Another approach says that even attempting to unify a non-error with
+`$error` gives an error.  In this case, it's an error to even inspect
+the value of `prime(0)`.  And the query `f(5)` would match against a
+rule head `f(10/0)`, giving an error.  Basically, deriving any value
+for `f($error)` would add an `$error` aggregand to `contrib(f(X))` ...
+This version may not work well because ordinary queries would crash
+when encountering rules that define values for error terms, unless
+those are somehow handled separately or unification is asymmetric.
+Unfolding may also have this problem.
+
+Example: `count += f(X), 1 for prime(X)`.  
+
+We also have to figure out the default value of error terms (see above).
+
+
 
 ``$null``
 ^^^^^^^^^
+
+.. todo:: special value for `:=` (where it overrides) and also for `=`
+	  (where it prevents override by a later value).  But may also
+	  need to use it for error handling (see above).  This use might
+	  cause us to think about an alternative scheme where `$null`
+	  collapses to null upon query, but that probably interacts
+	  badly with folding/unfolding.
+
+.. todo:: what happens when `$null` is used as an argument?
 
 Sets
 ====
@@ -393,8 +499,11 @@ Types
 
 .. todo::
 
-   Discussion moved to :doc:`/spec/type-system`
+Dynamic (non-const) types, and relation to intern table implementations.
 
+Type coercion
+=============
+   Discussion moved to :doc:`/spec/type-system`
 
 Unification
 ===========
@@ -480,13 +589,18 @@ Aggregating queries
 -------------------
 
 .. todo:: i.e., prefix aggregators.  original discussion at http://www.dyna.org/wiki/index.php?title=Syntactic_sugar_for_inference_rules
+	  Also some discussion of prefix aggregators in thread "Quick
+	  question about syntax", 1/10/14 .
+
 .. todo:: use ^ to lift a variable out of the lexical scope of the
 	  aggregator even if it's not mentioned outside.  For example,
 	  ``query (+= foo(I,^J))`` will return a separate answer for
 	  each J, e.g.
 	    (+= foo(I,2)) = 5.
 	    (+= foo(I,3)) = 7.
-          And ``query (*= (+= foo(I,^J)))`` will return 35 in this case.
+          And ``query (*= (+= foo(I,^J)))`` will return 35 in this
+	  case.
+
 .. todo:: getting a prefix aggregator to capture extra variables.
           See discussion in frozen3.txt, and at randomness below.
           
@@ -503,7 +617,13 @@ Some discussion of current approach is in :doc:`/manual/pragmas`.
 .. todo::      
       Language for specifying modes as generalization of types.
       Output format: Finite, sorted, consolidated, ground, etc.
-      Det/semidet/etc.  Overall, or per-variable?  What if it binds a sequence of variables?
+      Det/semidet/etc.  Overall, or per-variable?  What if it binds a
+      sequence of variables?
+
+.. todo:: Discussion of query modes (to be supported in future) that 
+	  return programs.  For example, between(0,X,1) might return
+	  `{ between(0,X,4) := false.  between(0,0,1) := true.
+	  between(0,1,1) := true. }`
 
 .. todo:: error results
 
@@ -522,6 +642,20 @@ Some discussion of current approach is in :doc:`/manual/pragmas`.
 	  variable that requires the original type to successfully
 	  do mode planning.
 
+.. todo:: Dynamic query modes?  Maybe we can only query EM's
+	  posteriors and parameters at timemax, defined by a max=.  So
+	  an external query for a different time might be allowed by
+	  the static API, but would give its error dynamically.  
+
+	  Our internal query modes might also support only this query,
+	  using the peeking value of timemax.  This allows us to save
+	  on memory as we run, under an appropriate plan that proceeds
+	  tier-by-tier and updates timemax only between tiers.  The
+	  planner has to be very careful to keep track of the current
+	  value of timemax that will enable the plan to succeed, and
+	  careful when it updates timemax lest that prevent some
+	  updates currently on the agenda from running.
+
 Lambdas
 =======
 
@@ -537,17 +671,84 @@ Updates
 
 Update modes
 ============
-.. todo:: must discuss aggregators as well as groundedness and form of body
+.. todo:: must discuss aggregators as well as groundedness and form of
+	  body
+
+.. todo:: 
 
 Stability
 =========
 .. todo:: guarantees on queries (what can change as a result of updates; is a := update a definite override?)
 
-.. todo:: The following things might be unstable: ?=, builtins that have free-choice like ?=, latching results, randomness, gensym and dynabase identity.  We should always guarantee that they are stable within a query.  When do we want to guarantee that they are stable across multiple queries of the same snapshot, or queries to (snapshots of) dynabases that are related by "irrelevant" update or extension?  (and how do we define "irrelevant"?)  They might also change across multiple runs, e.g., if the same dynabase is loaded twice.
+.. todo:: The following things might be unstable: ?=, builtins that
+	  have free-choice like ?=, latching results, randomness,
+	  gensym and dynabase identity.  We should always guarantee
+	  that they are stable within a query.  When do we want to
+	  guarantee that they are stable across multiple queries of
+	  the same snapshot, or queries to (snapshots of) dynabases
+	  that are related by "irrelevant" update or extension?  (and
+	  how do we define "irrelevant"?)  They might also change
+	  across multiple runs, e.g., if the same dynabase is loaded
+	  twice.
+
+.. todo:: Regarding latching, we might want to make a weak guarantee:
+	  that we find a minimal fixpoint in the sense that null is
+	  less than any other value.  This means that if we can find a
+	  way to null out a bunch of values in the current fixpoint
+	  and adjust other values (without converting anything from
+	  null to non-null) so that everything becomes consistent,
+	  then we must do so.  Can we make this guarantee for all
+	  programs, or only for programs with stratified negation?
+
+.. todo:: Something stronger than stable would be "replicable," which
+	  forces all loads of the Dyna program to get the same
+	  fixpoint (regardless of the order of queries, the machine
+	  it's run on, etc.).  This means that we need a deterministic
+	  way to add timestamps to items so as to break cycles.  (And
+	  also a deterministic way to set random number seeds and
+	  decide how to handle ?=.  These have to be voodoo-free.)
+	  This might be done by defaults, overridable by pragmas.  The
+	  timestamp on x^{(T)} means that it's the value when x is
+	  updated for the Tth time during forward chaining.  This
+	  timestamping can create an infinitely deep circuit -- but we
+	  can answer a query of x with respect to any x^{(t)} that has
+	  converged, meaning that it equals x^{(t+i)} for any i > 0.
+	  This is guaranteed by failing to prove non-convergence:
+	  x^{(t)} is active (non-converged) if x^{(t+1)} is different
+	  from x^{(t)} or has an active antecedent.  For example,
+	  convert `x=y. y=x.` into `x(T+1)=y(T). y(T)=x(T),`.  Note
+	  that `x(0)` and `y(0)` are explicitly null (or some other
+	  deterministic guess).  We need to ensure that the
+	  timestamping conversion ensures that the timestamps increase
+	  by 1 at each step (may be unfortunate if there are many
+	  updates that don't do anything because the rule contributes
+	  a null aggregand), or at least increase.  In other words,
+	  x(t) can't have x(t') as transecedent for any t' > t, and
+	  perhaps it should have at least one x(t-1) transecedent.
+
+.. todo:: We need a declaration language and API that determines when
+	  things are released from being stable, etc.  For example,
+	  perhaps a fresh load of a dynabase is allowed to get all
+	  new values.  Can stable values depend on unstable values,
+	  especially in another dynabase, and we treat changes to
+	  those values as akin to updates?  Or 
+	  
+	  
 
 Dynabase types
 ==============
-.. todo:: i.e., advertised public interface
+.. todo:: distinguish type from mode=(contents,queries,updates).  See message from Tim on
+	  4/23/14, Subject: "white board".  Also see message from me
+	  on 7/2/14, Subject: "Meeting tomorrow"
+
+.. todo:: integrity constraints.  generally hold at convergence, not
+	  necessarily transiently.  May include functional dependency
+	  or cardinality constraints.  (Note: Hard to take advantage
+	  of integrity constraints in storage layer because they might
+	  fail transiently.  Sometimes we might be able to prove that
+	  they will hold transiently under all updates.  But usually,
+	  we're better off just optimizing storage for common cases
+	  while still allowing rare cases via overflow pointer etc.)
 
 Extensions
 ==========
@@ -723,15 +924,64 @@ Syntax declarations
 
 Declaring new aggregators
 -------------------------
+.. todo:: Hard case: Should be possible to construct a new aggregator based on a
+	  binary operator that is defined at runtime in a semiring dynabase.
 
-Declaration inference
-=====================
+Declaration inference [elaboration]
+===================================
 
 .. todo:: and compile-time errors.  See
 	  http://www.dyna.org/wiki/index.php?title=Declaration_inference
 
-Type inference on variables
----------------------------
+.. todo:: Declared types of functors are exact, i.e., they are both
+	  upper and lower bounds.  Inferred types of functors are
+	  obtained by forward chaining abstract interpretation to get
+	  lower bounds (whereas type checking does backward chaining
+	  with a cosmetic plan to get upper bounds).  We may also have
+	  to do inference to understand the type declarations, e.g.,
+	  declaring the type `f[g[X]]` may use an inferred type for
+	  the `g[X]` argument, and this type may be determined from
+	  rules.
+
+	  When doing type inference, we inflate literals to their
+	  "natural types" (replacing them with typed variables).  This
+	  happens by replacing a literal such as `2` with an item
+	  `someint` of type `:int`.  (Or perhaps by a variable `:int
+	  _`, but then the forward chaining might mistakenly think
+	  that infinite aggregation is going on and be influenced by
+	  that; by using `someint` we give it access to the
+	  information that the literal is a single deterministic
+	  value.)  
+
+	  During inference, we may do lookahead on the 
+
+If we have a rule `f(1).` then we act as if
+	  the rule were `f(:int _).`, and we should get the same
+	  behavior if it were `f(X) :- X=1.`, in other words, `f(X) :=
+	  X = :int Y.`.  It's possible that types might get restricted
+	  in order to pass type checking, e.g., `f(X) :- X=1, g(X).`
+	  where `g(X)` restricts the type of `X` further because it
+	  only takes `#0|#1`.
+
+	  
+   Type checking: when we encounter a subgoal F is f(X,Y,Z), and only
+   F and Z are first-use variables, then we determine the possible
+   values of (Z,F) such that f(X,Y,Z) is well-formed for *any* value
+   of (X,Y) allowed by the current type.  This becomes the type of
+   (Z,F), and we fail type-checking if it is empty.  Actually we must
+   get a joint type of (X,Y,Z,F).  An explicit type restrictor
+   :ty V restricts the type of V and again we fail type-checking
+   if the result is empty.  That is equivalent to saying that 
+   this copy of V by identity_ty(V) declared as
+       :ty identity_ty(:term V)
+   which takes any term and returns a copy of it if it's in the type,
+   otherwise returns null.  That means that we really have 
+       V' is identity_ty(V)
+   as a subgoal and we use V' instead of V.  FURTHERMORE, we 
+   use V' instead of V everywhere later in the rule.
+
+Type inference [elaboration] on variables
+-----------------------------------------
 
 .. todo:: If types have been declared (or inferred) on functors, then
 	  this imposes implicit restrictions on variables that are
@@ -752,10 +1002,8 @@ Type inference on variables
 	  We don't yet know the return types R of r(X) or S of s(Y),
 	  but we have upper bounds on them.
 
-.. todo:: 
-
-Type inference on functors
---------------------------
+Type inference [elaboration] on functors
+----------------------------------------
 
 .. todo:: if the user defines f(0) and f(1), should we guess
 	  that f only takes integers, so that it's a type error
@@ -765,10 +1013,80 @@ Type inference on functors
 	  Are we to generalize from examples to the minimal 
 	  basic or natural types that cover those examples?
 
+	  Answer:
+	  Yes, we should construct a lattice of "natural" types:
+	  * built-ins (int, rational, string, etc.)
+	  * natural subtypes of built-ins (e.g., nonnegative int)
+	  * functor-arity types like f/3 with other natural
+	    types as their arguments
+	  * term
+	  * all user-declared types in this dynabase
+          * possibly some inferred types such as recursive types
+	  * all finite unions and intersections of the types above, 
+	    so that we have a lattice
+
+	  Thus, we have a notion of the least "natural" upper bound on
+	  a non-ground term.  A constant like `f(3,3)` can be
+	  generalized to `f(:int X,:int X)` if a type `f(X,X)` is
+	  declared, otherwise to `f(:int X, :int Y)` by recursing on
+	  the arguments.
+
+	  The user may declare types for some terms and items.  We
+	  desugar each rule using these declarations.  If the head 
+	  has variables, then we restrict them according to any
+	  declarations of the head term, a
+
+	  according to the way that they're declared), 
+	  Type inference proceeds by forward chaining from body to
+	  head, in order to inflate lower bounds on the item type (the
+	  `is` terms).  We inflate the head to the least "natural"
+	  upper bound, i.e., if we have a rule `f(1) = false` then we
+	  always `:bool is f(:int)` in the item type.  This allows
+	  the user to query `f(3)` and use the result in a boolean
+	  expression, even though the result will definitely be null
+	  with the current version of the program.
+
+	  (However, for items that only appear in the body and are not
+	  declared as updatable, we have to guess their update types
+	  based on usage.  We want to guess the maximal type that will
+	  type-check.  For example, if `g(0)+1` appears as a subgoal,
+	  then we know that `g` must be able to take int (lower bound)
+	  and must return at most int (upper bound), 
+
+	  We later do type checking based on left-to-right ordering.
+	  It must be possible to construct each term based on the type
+	  of the binding of previously used variables
+	  
+
+
+          If our type inference proves that a particular collection of
+	  terms can be items, then we relax the inferred type to the
+	  least "natural" upper bound (i.e., the lub in this lattice).
+	  This lub is never `term` unless the inferred type was term.
+	  This relaxation might happen during type inference.
+
+	  Type inference has to get a type for items, i.e., (name,value) pairs.
+	  The term type (within this dynabase) should be the set of
+	  types of subterms of these item pairs ... although it's not
+	  clear that foreign terms themselves count, only the terms
+	  that they are part of.
+
+	  Type checking is different from this.
+
+	  Infer recursive types: with the rules `f(s(X)) = f(X).` and
+	  `f(z) = 3.`, we probably say that the type tau of the argument
+	  to f must contain both z and s(tau).  This constructs an
+	  automaton where the tau state receives a z hyperarc with no
+	  inputs and an s hyperarc from itself.
+
+	  If the user writes `f(0)=3. f(1)="hello".` then is it a
+	  likely error?  Should we give a warning if we are forced up
+	  to an undeclared union type in the value or the argument?
+
 .. todo:: can we infer parametric types?
 
-Aggregator inference
---------------------
+Aggregator declaration inference [elaboration]
+----------------------------------------------
 
 .. todo:: similar to above, if the user says that += is the
 	  aggregator for f(0), do we conclude that it is
@@ -843,17 +1161,28 @@ Standard library
 
 There is currently some documentation in :doc:`/manual/builtins`.
 
+.. todo:: in general, builtins presumably act as if they were aggregated by `=`,
+	  so that they can't be overridden.  We might allow the user
+	  to declare otherwise but it's dangerous.
+
 Generic operators and aggregators
 =================================
 
 .. todo:: :=, =, ?=, comma/for
+      Note that `?=` when distributed over multiple rules might
+      implicitly do `;; $null` for each rule, so that if one branch
+      fails then we are not required to fall back to other branches
+      That generally isn't the case within a rule, e.g.,
+      `arbitrary_member(set) ?= X for X in set` should not be allowed
+      to return null by choosing some `X` not in the set (which
+      makes the body null).
 
 Boolean operators and aggregators
 =================================
 
-.. todo:: note tricks like forcing null to false by using ``||
-	  false``.  Or in the 2-valued case where false is not
-	  possible, ``?`` can be used.
+.. todo:: note tricks like forcing null to false by using `||
+	  false`.  Or in the 2-valued case where false is not
+	  possible, `?` can be used.  See inference2.txt.
 
 Numeric operators and aggregators
 =================================
