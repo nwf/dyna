@@ -254,7 +254,12 @@ nLeqGLB, nSubGLB :: forall f . (Ord f) => NIX f -> NIX f -> NIX f
 nLeqGLB (NIX l) (NIX r) = NIX $ autMerge ctxUniq (bendImpl iLeqGLB_) l r
 nSubGLB (NIX l) (NIX r) = NIX $ autMerge (\_ _ -> ()) go l r
  where
-  go lsml lsmr merge () = iSubGLB_ (flip (lsml ())) (lsmr ()) (merge ())
+  go :: forall m x y z . (Monad m)
+     => (() -> x                -> NonRec (InstF f) -> m z)
+     -> (() -> NonRec (InstF f) -> y                -> m z)
+     -> (() -> x                -> y                -> m z)
+     ->  () -> InstF f x        -> InstF f y        -> m (InstF f z)
+  go lsml lsmr merge () = iSubGLB_ (\x y -> lsml () y x) (lsmr ()) (merge ())
 
 nLeqGLBRD, nLeqGLBRL :: (Ord f) => NIX f -> NIX f -> Either UnifFail (NIX f)
 nLeqGLBRD (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq (bendImpl iLeqGLBRD_) l r
