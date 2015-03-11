@@ -700,6 +700,8 @@ Stability
 	  then we must do so.  Can we make this guarantee for all
 	  programs, or only for programs with stratified negation?
 
+.. todo:: See email from Jason "preventing latches" on 12/19/14.
+
 .. todo:: Something stronger than stable would be "replicable," which
 	  forces all loads of the Dyna program to get the same
 	  fixpoint (regardless of the order of queries, the machine
@@ -738,7 +740,7 @@ Stability
 Dynabase types
 ==============
 .. todo:: distinguish type from mode=(contents,queries,updates).  See message from Tim on
-	  4/23/14, Subject: "white board".  Also see message from me
+	  4/23/14, Subject: "white board".  Also see message from Jason
 	  on 7/2/14, Subject: "Meeting tomorrow"
 
 .. todo:: integrity constraints.  generally hold at convergence, not
@@ -980,6 +982,22 @@ If we have a rule `f(1).` then we act as if
    as a subgoal and we use V' instead of V.  FURTHERMORE, we 
    use V' instead of V everywhere later in the rule.
 
+   If update or query modes are declared for a particular functor,
+   they are assumed to be exhaustive.  If they are not declared, then
+   we automatically declare ground update modes (available to the
+   user), at least if writeable, and infer as many query modes as we
+   can manage to support.  Note the ground updates may feed through
+   the graph to produce non-ground updates, so we must be able to plan
+   those even if they're not public, and we must advertise them for
+   other dynabases that are customers of ours.  Also, if we write
+   rules that refer to other dynabases that emit non-ground updates,
+   we must be able to accept those updates, which may cause us to emit
+   non-ground updates.  The reason we only allow ground updates by
+   default is that those are enough in practice and if we have more
+   ground updates then (we think) we may have to have fewer queries,
+   i.e., there is not a unique way to infer declarations that are
+   as generous as possible.
+
 Type inference [elaboration] on variables
 -----------------------------------------
 
@@ -1103,6 +1121,12 @@ Scripting commands
 
 .. todo:: Maybe this should be in another section.  Somewhere, we need to describe the repl and notebook interfaces.  (These are very closely related: a .dyna file is like only the input to a notebook, and a session with the repl is logged to a .dyna file.  Editing the .dyna file is like changing the notebook in place (it's just that the old input and output can't be seen).)
 
+.. todo:: see manpage.txt, etc.
+
+.. todo:: perhaps scripting commands start with prefix ">" which is also the default repl prompt.  Nice!
+	  If so, and the repl has a continuation prompt, then allow it to be at the start of subsequent 
+	  lines (to support cut-and-paste and dump).
+
 Include
 =======
 .. todo:: what is interaction with syntax table?
@@ -1145,6 +1169,13 @@ Changing the syntax table
 	  A possible new design is in :doc:`/manual/pragmas`.
 
 .. todo:: nwf started working with Jay's parser: http://bugs.dyna.org/rt/Ticket/Display.html?id=588
+
+.. todo:: type-checking cares about argument order.  f(g(X),h(X)) means
+	  that g's domain must be a subset of h's domain so that h can
+	  be applied to anything that comes back from g.  So how does
+	  that interact with syntactic sugar?  Suppose we define A//B
+	  to mean f(B,A).  Do we respect the order and actually define
+	  it to mean f_rev(A,B) where that is defined to mean f(B,A)?
 
 Printing
 ========
@@ -1238,6 +1269,12 @@ Randomness
 	  For multiple samples from the same variable, we might
 	  want explicitly `mean= strength("Atlas").sample(I) for 1 <= I <= 100`.
 	  Maybe there should be a nicer way to generate a vector of samples.
+
+.. todo:: Note memoization in Church.  Goodman & Lassiter: "The
+	  semantics of memoization is defined so that all random
+	  values that may be returned by a memoized function are
+	  created when the memoized function is *created*, not when it
+	  is called."
 
 
 String operators and aggregators
