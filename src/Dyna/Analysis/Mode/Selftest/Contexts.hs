@@ -17,7 +17,7 @@ import qualified Dyna.Analysis.Mode.Execution.Functions        as FA
 import qualified Dyna.Analysis.Mode.Execution.FunctionsNoAlias as FNA
 import           Dyna.Analysis.Mode.Execution.NamedInst
 import           Dyna.Analysis.Mode.Inst
-import           Dyna.Analysis.Mode.Selftest.NamedInst
+import           Dyna.Analysis.Mode.Selftest.NamedInst (nWFN')
 import           Dyna.Analysis.Mode.Selftest.Term
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
@@ -136,5 +136,8 @@ prop_alias_unifyVF = unifProp nWFN' alias_unifyVF gold
 
 selftest :: TF.Test
 selftest = moreTries 1000 $(testGroupGenerator)
+
+main :: IO ()
+main = TF.defaultMain [selftest]
 
 ------------------------------------------------------------------------}}}

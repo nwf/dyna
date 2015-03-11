@@ -229,8 +229,8 @@ unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
   fake <- view up_fake
   let f = if (live && not fake) then iLeqGLBRL_ else iLeqGLBRD_
   either throwError (return . VRStruct) =<< f
-   undefined -- (\u y x -> unifyXY u x y)
-   undefined -- (\u y x -> unifyXY u x y)
+   (\u xa -> unifyXY u xa yb)
+   (\u xb -> unifyXY u xb ya)
    unifyXX
    u0 ya yb
 
@@ -293,7 +293,7 @@ unifyVF lf v f vs = do
   -- bound(unique, f(...)).  This gets us just the join on the lattice.
   i''  <- runReaderT (unifyXY UUnique vy (IBound UUnique
                                                  (M.singleton f vys)
-												 False))
+                                                 False))
                      (UnifParams False True)
 
   -- If we arrive here, unification was successful;

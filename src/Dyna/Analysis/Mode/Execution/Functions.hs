@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE AllowAmbiguousTypes #-} -- XXX doCall
 {-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.Mode.Execution.Functions (
