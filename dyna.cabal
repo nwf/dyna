@@ -100,6 +100,9 @@ Executable dyna
     ghc-options:        -Wall
                         -main-is Dyna.Main.Driver
 
+    if (impl(ghc < 7.7))
+        cpp-options:	-DDYNA_GHC_PRE_77
+
     Build-Depends:      ansi-wl-pprint >= 0.6,
                         base >=4 && <6,
                         bytestring >=0.9,
@@ -134,6 +137,9 @@ Test-suite dyna-selftests
 
     ghc-options:        -Wall
                         -main-is Dyna.Main.TestsDriver
+
+    if (impl(ghc < 7.7))
+        cpp-options:	-DDYNA_GHC_PRE_77
 
     Build-Depends:      ansi-wl-pprint >= 0.6,
                         base >=4 && <6,
