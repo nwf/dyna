@@ -3,6 +3,7 @@
 -- call during mode analysis.
 
 -- Header material                                                      {{{
+{-# LANGUAGE CPP #-} -- XXX doCall
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -10,7 +11,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+#if MIN_TOOL_VERSION_ghc(7,7,0)
 {-# LANGUAGE AllowAmbiguousTypes #-} -- XXX doCall
+#endif
 {-# OPTIONS_GHC -Wall #-}
 
 module Dyna.Analysis.Mode.Execution.Functions (
