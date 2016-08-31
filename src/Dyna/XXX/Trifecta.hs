@@ -78,7 +78,7 @@ triInteract :: (Monad m, Show a)
             => (Parser a)                 -- ^ Parser
             -> (m (Maybe String))         -- ^ Continuation callback
             -> (a -> m b)                 -- ^ Success callback
-            -> (PPA.Doc -> m b)          -- ^ Failure callback
+            -> (ErrInfo -> m b)           -- ^ Failure callback
             -> String                     -- ^ Initial input
             -> m b
 triInteract p c s f i = loop (feed (BU.fromString i) $ stepParser (release dd *> p) dd mempty)

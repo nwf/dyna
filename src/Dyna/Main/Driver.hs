@@ -450,7 +450,7 @@ processFile fileName = bracket openOut hClose go
   parse aggs = do
     pr <- T.parseFromFileEx (P.oneshotDynaParser aggs <* T.eof) fileName
     case pr of
-      TR.Failure td -> dynacParseErr $ PPA.align td
+      TR.Failure td -> dynacParseErr $ PPA.align (TR._errDoc td)
       TR.Success rs -> return rs
 
   forceUpdatePlans :: [(Rule,[(Int,

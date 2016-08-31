@@ -30,7 +30,7 @@ module Dyna.Analysis.Mode.Inst(
   InstF(..), inst_uniq, inst_rec, inst_recps, inst_irecps,
   iNotReached, iIsNotReached,
   iUniq, iIsFree, iWellFormed_, iEq_, iGround_,
-  iLeq_, iLeqGLB_, TyILeqGLB_,
+  iLeq_, iLeqGLB_, ILeqGLBParams(..), TyILeqGLB_,
   iSub_, iSubGLB_, iSubLUB_,
 ) where
 
@@ -327,22 +327,26 @@ iLeq_ _ q (IBound u m b) (IBound u' m' b') = andM1 (b <= b' && u' <= u) $
     -- XXX Ought to assert that length is == length is'
 {-# INLINABLE iLeq_ #-}
 
+-- Hide universal quantification inside wrapper.  Whoof.
+data ILeqGLBParams f m i i' i'' = ILeqGLBParams
+         (Uniq -> i  -> m i'')               -- ^ Import left
+         (Uniq -> i' -> m i'')               -- ^ Import right
+         (Uniq -> (forall i_ . InstF f i_) -> i  -> m i'') -- ^ Lopsided merge left
+         (Uniq -> (forall i_ . InstF f i_) -> i' -> m i'') -- ^ Lopsided merge right
+         (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
+
+
 -- | The type of iLeqGLB_, given a name so that we can reuse it elsewhere.
 --
 -- Note that not all parameters are free -- @r@ is typically @m' (InstF f
 -- i'')@ for some 'Monad' @m'@ built up in terms of @m@, but the lack of
 -- type lambdas forces us to resort to passing the whole type in.
-type TyILeqGLB_ f m i i' i'' r = 
-            (Uniq -> i  -> m i'')               -- ^ Import left
-         -> (Uniq -> i' -> m i'')               -- ^ Import right
-         -> (Uniq -> (forall i_ . InstF f i_) -> i  -> m i'') -- ^ Lopsided merge left
-         -> (Uniq -> (forall i_ . InstF f i_) -> i' -> m i'') -- ^ Lopsided merge right
-         -> (Uniq -> i -> i' -> m i'')          -- ^ Simultaneous Merge
+type TyILeqGLB_ f m i i' i'' r =
+            ILeqGLBParams f m i i' i''
          -> Uniq                                -- ^ Uniq of outer context
          -> InstF f i                           -- ^ Left
          -> InstF f i'                          -- ^ Right
          -> r
-
 
 -- | Compute the GLB under iLeq_ (⋏) at a particular uniqueness.
 --
@@ -369,32 +373,31 @@ type TyILeqGLB_ f m i i' i'' r =
 -- variables).
 
 iLeqGLB_ :: (Monad m, Ord f) => TyILeqGLB_ f m i i' i'' (m (InstF f i''))
-iLeqGLB_ _ r _ _ _ u IFree      x            = liftM (over inst_uniq (max u))
-                                             $ T.mapM (r u) x
-iLeqGLB_ l _ _ _ _ u x          IFree        = liftM (over inst_uniq (max u))
-                                             $ T.mapM (l u) x
+iLeqGLB_ (ILeqGLBParams _ r _ _ _) u IFree      x            =
+  liftM (over inst_uniq (max u)) $ T.mapM (r u) x
+iLeqGLB_ (ILeqGLBParams l _ _ _ _) u x          IFree        =
+  liftM (over inst_uniq (max u)) $ T.mapM (l u) x
 
-iLeqGLB_ _ _ _ _ _ _ (IAny u)   (IAny u')    = return $ IAny (max u u')
+iLeqGLB_ _         _ (IAny u)   (IAny u')    = return $ IAny (max u u')
+iLeqGLB_ _         _ (IAny u')  (IUniv u)    = return $ IUniv (max u u')
+iLeqGLB_ _         _ (IUniv u)  (IAny u')    = return $ IUniv (max u u')
+iLeqGLB_ _         _ (IUniv u)  (IUniv u')   = return $ IUniv (max u u')
 
-iLeqGLB_ _ _ _ _ _ _ (IAny u')  (IUniv u)    = return $ IUniv (max u u')
-iLeqGLB_ _ _ _ _ _ _ (IUniv u)  (IAny u')    = return $ IUniv (max u u')
-iLeqGLB_ _ _ _ _ _ _ (IUniv u)  (IUniv u')   = return $ IUniv (max u u')
-
-iLeqGLB_ _ _ l _ _ _ (IBound u m b) (IAny u') =
+iLeqGLB_ (ILeqGLBParams _ _ l _ _) _ (IBound u m b) (IAny u') =
  let v = max u u'
  in return . flip (IBound v) b =<< T.mapM (T.mapM (l v $ IAny v)) m
-iLeqGLB_ _ _ _ r _ _ (IAny u') (IBound u m b) =
+iLeqGLB_ (ILeqGLBParams _ _ _ r _) _ (IAny u') (IBound u m b) =
  let v = max u u'
  in return . flip (IBound v) b =<< T.mapM (T.mapM (r v $ IAny v)) m
 
-iLeqGLB_ _ _ l _ _ _ (IBound u m b) (IUniv u') =
+iLeqGLB_ (ILeqGLBParams _ _ l _ _) _ (IBound u m b) (IUniv u') =
  let v = max u u'
  in return . flip (IBound v) b =<< T.mapM (T.mapM (l v $ IUniv v)) m
-iLeqGLB_ _ _ _ r _ _ (IUniv u') (IBound u m b) =
+iLeqGLB_ (ILeqGLBParams _ _ _ r _) _ (IUniv u') (IBound u m b) =
  let v = max u u'
  in return . flip (IBound v) b =<< T.mapM (T.mapM (r v $ IUniv v)) m
 
-iLeqGLB_ _ _ _ _ q _ (IBound u m b) (IBound u' m' b') = do
+iLeqGLB_ (ILeqGLBParams _ _ _ _ q) _ (IBound u m b) (IBound u' m' b') = do
     let v = max u u'
     m'' <- mergeBoundLB (q v) m m'
     return $! IBound v m'' (b && b')

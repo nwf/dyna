@@ -4,7 +4,6 @@
 -- See bin/interpreter.py
 
 -- Header material                                                      {{{
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}

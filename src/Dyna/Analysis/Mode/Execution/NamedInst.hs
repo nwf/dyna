@@ -239,7 +239,7 @@ bendImpl :: forall f i i' i'' m r .
          -> (Uniq -> NonRec (InstF f) -> i' -> m i'')
          -> (Uniq -> i -> i' -> m i'')
          -> Uniq -> InstF f i -> InstF f i' -> r
-bendImpl x lsml lsmr merge = x impl impr lsml' lsmr merge
+bendImpl x lsml lsmr merge = x (ILeqGLBParams impl impr lsml' lsmr merge)
    where
     lsml' :: Uniq -> NonRec (InstF f) -> i -> m i''
     lsml' u r l = lsml u l r

@@ -421,17 +421,19 @@ unifyNQ :: (UnifC m f n, UnifKC m f n k)
         => Uniq -> n -> KRI f n k -> m (ENKRI f n k)
 unifyNQ u na (nShallow -> Just nb) = liftM Left $ unifyNN u na nb
 unifyNQ u na qb                    = selUnifI >>= \f ->
-    f (\u' n' -> return $ Left $ nUpUniq u' n')
-      jUpUniq
-      (\u' q' n' -> unifyNQ' u' n' q')
-      (\u' i' j' -> either (liftM Left . unifyNN u' (nHide i'))
-                           (liftM Right . flip (unifyKN u') (nHide i'))
-                           j')
-      (\u' n' j' -> either (liftM Left . unifyNN u' n')
-                           (liftM Right . flip (unifyKN u) n')
-                           j')
-      u (nExpose na) qb
+    f params u (nExpose na) qb
     >>= either throwError (return . Right)
+ where
+  params = ILeqGLBParams
+             (\u' n' -> return $ Left $ nUpUniq u' n')
+             jUpUniq
+             (\u' q' n' -> unifyNQ' u' n' q')
+             (\u' i' j' -> either (liftM Left . unifyNN u' (nHide i'))
+                                  (liftM Right . flip (unifyKN u') (nHide i'))
+                                  j')
+             (\u' n' j' -> either (liftM Left . unifyNN u' n')
+                                  (liftM Right . flip (unifyKN u) n')
+                                  j')
 
 unifyNQ' :: (UnifC m f n, UnifKC m f n k)
          => Uniq -> n -> KRI f n k -> m (Either n k)
@@ -447,7 +449,7 @@ unifyQQ :: forall m f n k .
         -> KRI f n k
         -> m (KRI f n k)
 unifyQQ u ya yb = selUnifI >>= \f ->
-    f jUpUniq jUpUniq fJQ fJQ unifyJJ u ya yb
+    f (ILeqGLBParams jUpUniq jUpUniq fJQ fJQ unifyJJ) u ya yb
     >>= either throwError return
  where
   fJQ :: Uniq -> (forall i_. InstF f i_) -> Either n k -> m (Either n k)
@@ -511,13 +513,15 @@ unifyUnaliasedNV n0 v0 = do
   naUnifyNY u na (nShallow -> Just nb) = liftM VRName $ unifyNN u na nb
   naUnifyNY u na yb                    = liftM VRStruct $
     selUnifI >>= \f ->
-    f (\u' n' -> return $ VRName $ nUpUniq u' n')
-      xUpUniq
-      (\u' y' n' -> naUnifyNY u' n' y')
-      (\u' i' x' -> naUnifyNX u' (nHide i') x')
-      naUnifyNX
-      u (nExpose na) yb
+    f params u (nExpose na) yb
     >>= either throwError return
+   where
+    params = ILeqGLBParams
+              (\u' n' -> return $ VRName $ nUpUniq u' n')
+              xUpUniq
+              (\u' y' n' -> naUnifyNY u' n' y')
+              (\u' i' x' -> naUnifyNX u' (nHide i') x')
+              naUnifyNX
 
   xUpUniq u (VRName   n) = return $ VRName $ nUpUniq u n
   xUpUniq u (VRKey    k) = liftM VRKey $ kUpUniq u k

@@ -17,7 +17,9 @@
 module Dyna.XXX.Automata.NamedAut(NA(NA), naUnfold, naFromMap) where
 
 import           Control.Applicative
-import           Control.Lens
+import           Control.Lens (makeLenses, at, use)
+import           Control.Lens.Operators
+import           Control.Lens.Tuple
 import           Control.Monad.Identity
 import           Control.Monad.Trans.Either
 import           Control.Monad.State
@@ -261,7 +263,7 @@ instance AutomataRepr NA where
      at a .= Just r
   {-# INLINABLE autReduceIx #-}
 
-  autBiReduce c q (NA la0 lm) (NA ra0 rm) =
+  autBiReduce (c :: r) q (NA (la0 :: al) lm :: NA f) (NA (ra0 :: ar) rm :: NA f) =
     evalState (qip la0 ra0) (S.empty, S.empty, S.empty)
    where
     qip l r = flip (trySetCache _1 c) (l,r) $ \_ -> do
@@ -269,10 +271,12 @@ instance AutomataRepr NA where
                let rf = MA.fromJust $ rm ^. at r
                q qopl qopr qip lf rf
 
+    qopl :: al -> (forall a_ . f a_) -> State (S.Set (al,ar), S.Set (al, DC f), S.Set (DC f, ar)) r
     qopl l r = flip (trySetCache _2 c) (l, dc r) $ \_ -> do
                 let lf = MA.fromJust $ lm ^. at l
                 q qopl qopr qip lf r
 
+    qopr :: (forall a_ . f a_) -> ar -> State (S.Set (al,ar), S.Set (al, DC f), S.Set (DC f, ar)) r
     qopr l r = flip (trySetCache _3 c) (dc l, r) $ \_ -> do
                 let rf = MA.fromJust $ rm ^. at r
                 q qopl qopr qip l rf
