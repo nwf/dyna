@@ -16,7 +16,7 @@ unsafeFS (Failure td) = error $ "Errors: " ++ show td
 unsafeFF :: (String -> Assertion) -> Result t -> Assertion
 unsafeFF _ (Success _) = assertFailure "Unexpected success"
 unsafeFF a (Failure td) = a $ flip PPA.displayS ""
-                               (filterSD $ PPA.renderCompact td)
+                               (filterSD $ PPA.renderCompact (_errDoc td))
  where
   -- strip out any ANSI BS
   filterSD PPA.SEmpty = PPA.SEmpty

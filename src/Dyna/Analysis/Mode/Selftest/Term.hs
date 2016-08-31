@@ -94,7 +94,6 @@ genFuncMap stf gi = do
 -- Term: QuickCheck Generators                                          {{{
 
 instance Arbitrary TestFunct where arbitrary = arbitraryBoundedEnum
-instance Arbitrary (S.Set TestFunct) where arbitrary = arbitrarySetBEO
 
 -- | Generate an arbitrary, well-formed NIX at some uniqueness.
 arbNIX :: Uniq -> Gen (NIX TestFunct)
