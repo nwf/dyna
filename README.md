@@ -54,18 +54,20 @@ Optionally, installing the following will enable certain extensions:
 
 Now you're ready to build.  Enter the project directory and type
 
-    make
+    $ make
 
 to build dependencies and the Dyna compiler executable.  Run the test
-harness, just to make sure things built and are working:
+harness, just to make sure things built and are working.  Some of the
+doctests require that graphviz and additional packages be installed:
 
-    make tests
+    $ easy_install path.py
+    $ make tests
 
 Now you're ready to run a Dyna program. 
 
 * Run the python backend interactively (leave off the "-i" for bulk operation):
 
-        ./dyna -i examples/papa2.dyna
+    $ ./dyna -i examples/papa2.dyna
 
 * Work through the tutorial and homework exercises listed above.
 

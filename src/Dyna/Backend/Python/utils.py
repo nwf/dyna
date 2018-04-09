@@ -1,6 +1,14 @@
 import re
 from external.path import path  # used by other modules
-from IPython.frontend.terminal.embed import InteractiveShellEmbed
+
+try:
+    from IPython import embed as ip
+except ImportError:
+    from IPython.frontend.terminal.embed import InteractiveShellEmbed
+    # interactive IPython shell
+    ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
+
+
 from config import dynahome, dotdynadir
 from collections import namedtuple, defaultdict
 from cStringIO import StringIO
@@ -73,10 +81,6 @@ def user_vars(variables):
     # Note: We also ignore user variables with an underscore prefix
     return tuple((name[1:], val) for name, val in variables
                  if name.startswith('u') and not name.startswith('u_'))
-
-
-# interactive IPython shell
-ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
 
 
 def get_module(cmd, sub):
@@ -257,9 +261,17 @@ def span_to_src(span, src=None):
     Utility for retrieving source code for Parsec error message (there is
     nothing specific about rules)
     """
-
-    [(filename, bl, bc, el, ec)] = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
-
+    
+    # look for intervals like `filename:3:1-filename:3:6`
+    lines = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
+    if lines:
+        [(filename, bl, bc, el, ec)] = lines
+    else:
+        # look for point-like errors as in `filename:3:1`
+        [(filename, bl, bc)] = re.findall(r'(.*):(\d+):(\d+)', span)
+        el = bl
+        ec = bc
+    
     (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
 
     if not src:

@@ -238,13 +238,15 @@ unifyYY u0 ya yb = {- XT.traceShow ("YY", ya, yb) $-} do
   live <- view up_live
   fake <- view up_fake
   let f = if (live && not fake) then iLeqGLBRL_ else iLeqGLBRD_
-  either throwError (return . VRStruct) =<< f
+  either throwError (return . VRStruct) =<< f params u0 ya yb 
+ where
+  params = ILeqGLBParams
    (\u x -> return $ xUpUniq u x)
    (\u x -> return $ xUpUniq u x)
    (\u y x -> unifyXY u x y)
    (\u y x -> unifyXY u x y)
    unifyXX
-   u0 ya yb
+
 
 unifyXY :: (UnifC m f n)
         => Uniq -> VR f n -> InstF f (VR f n) -> m (VR f n)

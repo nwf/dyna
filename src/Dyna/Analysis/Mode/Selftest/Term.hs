@@ -18,11 +18,11 @@ import qualified Data.List                 as L
 import qualified Data.Map                  as M
 import qualified Data.Maybe                as MA
 import qualified Data.Set                  as S
-import           Dyna.Analysis.Automata.Class
-import           Dyna.Analysis.Automata.Utilities
 import           Dyna.Analysis.Mode.Inst
 import           Dyna.Analysis.Mode.Uniq
 import           Dyna.Analysis.Mode.Execution.NamedInst
+import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.Utilities
 import           Test.QuickCheck
 import           Test.SmallCheck           as SC
 import           Test.SmallCheck.Series    as SCS
@@ -94,7 +94,6 @@ genFuncMap stf gi = do
 -- Term: QuickCheck Generators                                          {{{
 
 instance Arbitrary TestFunct where arbitrary = arbitraryBoundedEnum
-instance Arbitrary (S.Set TestFunct) where arbitrary = arbitrarySetBEO
 
 -- | Generate an arbitrary, well-formed NIX at some uniqueness.
 arbNIX :: Uniq -> Gen (NIX TestFunct)

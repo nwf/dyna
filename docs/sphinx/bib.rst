@@ -1,7 +1,14 @@
+.. -*- compile-command: "make html" -*-
 .. Bibliography
 
 Bibliography
 ############
+
+The publications below are referred to from this documentation site.
+In addition, the old website has a list of `publications about Dyna
+<http://www.dyna.org/wiki/index.php?title=Publications>`_ as well as
+some `publications that use Dyna
+<http://www.dyna.org/wiki/index.php?title=Users>`_.
 
 .. [filardo-eisner-2012] Nathaniel W. Filardo and Jason Eisner.
    :t:`A flexible solver for finite arithmetic circuits`.

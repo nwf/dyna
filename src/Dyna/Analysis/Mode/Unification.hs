@@ -80,17 +80,17 @@ semidet_clobbered_unify i i' = return $
 
 iLeqGLBRD_,iLeqGLBRL_ :: (Monad m, Ord f)
                       => TyILeqGLB_ f m i i' o (m (Either UnifFail (InstF f o)))
-iLeqGLBRD_ il ir ml mr m u i1 i2 = do
-    io <- iLeqGLB_ il ir ml mr m u i1 i2
+iLeqGLBRD_ p u i1 i2 = do
+    io <- iLeqGLB_ p u i1 i2
     return $ if iIsNotReached io
               then Left  UFNotReach
               else Right io
 {-# INLINABLE iLeqGLBRD_ #-}
-iLeqGLBRL_ il ir ml mr m u i1 i2 = do
+iLeqGLBRL_ p u i1 i2 = do
     scu <- semidet_clobbered_unify i1 i2
     if scu
      then return (Left UFSemiClob)
-     else iLeqGLBRD_ il ir ml mr m u i1 i2
+     else iLeqGLBRD_ p u i1 i2
 {-# INLINABLE iLeqGLBRL_ #-}
 
 ------------------------------------------------------------------------}}}

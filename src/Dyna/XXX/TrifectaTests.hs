@@ -56,7 +56,7 @@ interactTest p (i:is) = runState (triInteract p next success failure i) is
             x:xs -> put xs >> return (Just x)
 
   success = return.Right
-  failure = return.Left
+  failure = return.Left . _errDoc
 
 successInteract p r i = either (const $ assertFailure "Parser failure")
                                (assertEqual "" r) $

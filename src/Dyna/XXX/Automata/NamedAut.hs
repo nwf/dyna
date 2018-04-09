@@ -14,10 +14,12 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Dyna.Analysis.Automata.NamedAut(NA(NA), naUnfold, naFromMap) where
+module Dyna.XXX.Automata.NamedAut(NA(NA), naUnfold, naFromMap) where
 
 import           Control.Applicative
-import           Control.Lens
+import           Control.Lens (makeLenses, at, use)
+import           Control.Lens.Operators
+import           Control.Lens.Tuple
 import           Control.Monad.Identity
 import           Control.Monad.Trans.Either
 import           Control.Monad.State
@@ -26,13 +28,16 @@ import qualified Data.Map                          as M
 import qualified Data.Maybe                        as MA
 import qualified Data.Set                          as S
 import qualified Data.Traversable                  as T
-import           Dyna.Analysis.Automata.Class
+import           Dyna.XXX.Automata.Class
 import           Dyna.XXX.DataUtils (mapInOrCons)
 import           Dyna.XXX.MonadUtils (incState, tryMapCache, trySetCache)
+import qualified Prelude.Extras                    as PE
 
 ------------------------------------------------------------------------}}}
 -- Definition                                                           {{{
 
+-- | A single-accepting-state automaton representation, using an existential
+-- for state labels.
 data NA f = forall a . (Ord a) => NA a (M.Map a (f a))
 
 ------------------------------------------------------------------------}}}
@@ -74,10 +79,17 @@ naExposeAll (NA a0 m0) = let labels = naRelabel_ m0
                                $ M.mapKeysWith (error "NA relabel collision")
                                                relabel m0)
 
+newtype DC f = DC (f ())
+instance (PE.Eq1 f) => Eq (DC f) where
+  (DC l) == (DC r) = l PE.==# r
+instance (PE.Ord1 f) => Ord (DC f) where
+  (DC l) `compare` (DC r) = l `PE.compare1` r
 
--- | Downcast away a forall.
-dc :: NonRec f -> f ()
-dc i = i
+-- | Downcast away a forall.  The instances above convert our 'PE.Ord1'
+-- requirements into the traditional 'Ord' and 'Eq' for 'f ()'.  This serves
+-- to hide the use of '()' from the consumer code.
+dc :: NonRec f -> DC f
+dc i = DC i
 
 ------------------------------------------------------------------------}}}
 -- Unfolder                                                             {{{
@@ -174,8 +186,8 @@ naFromAut = autReduceIx cyc rec
 data NBinState f c a b = NBS { _nbs_next  :: Int
                              , _nbs_ctx   :: M.Map Int (f Int)
                              , _nbs_cache_symm :: M.Map (c,a   ,b   ) Int
-                             , _nbs_cache_lsml :: M.Map (c,a   ,f ()) Int
-                             , _nbs_cache_lsmr :: M.Map (c,f (),b   ) Int
+                             , _nbs_cache_lsml :: M.Map (c,a   ,DC f) Int
+                             , _nbs_cache_lsmr :: M.Map (c,DC f,b   ) Int
                              }
 $(makeLenses ''NBinState)
 type NBSC m f c a b = (Monad m, MonadState (NBinState f c a b) m)
@@ -198,7 +210,7 @@ $(makeLenses ''MinSplitState)
 ------------------------------------------------------------------------}}}
 -- Automata instance                                                    {{{
 
-instance Automata NA where
+instance AutomataRepr NA where
   autHide i0 = flip evalState (0::Int, M.empty) $ do
     i0' <- T.traverse go i0
     ra  <- nxt
@@ -251,7 +263,7 @@ instance Automata NA where
      at a .= Just r
   {-# INLINABLE autReduceIx #-}
 
-  autBiReduce c q (NA la0 lm) (NA ra0 rm) =
+  autBiReduce (c :: r) q (NA (la0 :: al) lm :: NA f) (NA (ra0 :: ar) rm :: NA f) =
     evalState (qip la0 ra0) (S.empty, S.empty, S.empty)
    where
     qip l r = flip (trySetCache _1 c) (l,r) $ \_ -> do
@@ -259,10 +271,12 @@ instance Automata NA where
                let rf = MA.fromJust $ rm ^. at r
                q qopl qopr qip lf rf
 
+    qopl :: al -> (forall a_ . f a_) -> State (S.Set (al,ar), S.Set (al, DC f), S.Set (DC f, ar)) r
     qopl l r = flip (trySetCache _2 c) (l, dc r) $ \_ -> do
                 let lf = MA.fromJust $ lm ^. at l
                 q qopl qopr qip lf r
 
+    qopr :: (forall a_ . f a_) -> ar -> State (S.Set (al,ar), S.Set (al, DC f), S.Set (DC f, ar)) r
     qopr l r = flip (trySetCache _3 c) (dc l, r) $ \_ -> do
                 let rf = MA.fromJust $ rm ^. at r
                 q qopl qopr qip l rf
@@ -271,7 +285,7 @@ instance Automata NA where
   -- While unusual, we need this instance type declaration to introduce
   -- scoped type variables for us to hold on to down below.  Oy!
   autMerge :: forall c f .
-              (Ord c, Ord (f ()))
+              (Ord c, PE.Ord1 f)
            => (forall x y . f x -> f y -> c)
            -> (forall x y z m .
                   (Monad m)
@@ -324,7 +338,7 @@ instance Automata NA where
   {-# INLINABLE autMerge #-}
 
   autPMerge :: forall c e f .
-               (Ord c, Ord (f ()))
+               (Ord c, PE.Ord1 f)
             => (forall x y . f x -> f y -> c)
             -> (forall x y z m .
                    (Monad m)

@@ -45,14 +45,14 @@ import           Control.Monad.State
 import qualified Data.Foldable                     as F
 import qualified Data.Map                          as M
 import qualified Data.Traversable                  as T
-import           Dyna.Analysis.Automata.Class
-import           Dyna.Analysis.Automata.NamedAut
-import           Dyna.Analysis.Automata.Utilities
 import           Dyna.Analysis.Mode.Inst
 import qualified Dyna.Analysis.Mode.InstPretty     as IP
 import           Dyna.Analysis.Mode.Mode
 import           Dyna.Analysis.Mode.Unification
 import           Dyna.Analysis.Mode.Uniq
+import           Dyna.XXX.Automata.Class
+import           Dyna.XXX.Automata.NamedAut
+import           Dyna.XXX.Automata.Utilities
 import           Text.PrettyPrint.Free
 
 ------------------------------------------------------------------------}}}
@@ -239,7 +239,7 @@ bendImpl :: forall f i i' i'' m r .
          -> (Uniq -> NonRec (InstF f) -> i' -> m i'')
          -> (Uniq -> i -> i' -> m i'')
          -> Uniq -> InstF f i -> InstF f i' -> r
-bendImpl x lsml lsmr merge = x impl impr lsml' lsmr merge
+bendImpl x lsml lsmr merge = x (ILeqGLBParams impl impr lsml' lsmr merge)
    where
     lsml' :: Uniq -> NonRec (InstF f) -> i -> m i''
     lsml' u r l = lsml u l r
@@ -254,7 +254,12 @@ nLeqGLB, nSubGLB :: forall f . (Ord f) => NIX f -> NIX f -> NIX f
 nLeqGLB (NIX l) (NIX r) = NIX $ autMerge ctxUniq (bendImpl iLeqGLB_) l r
 nSubGLB (NIX l) (NIX r) = NIX $ autMerge (\_ _ -> ()) go l r
  where
-  go lsml lsmr merge () = iSubGLB_ (flip (lsml ())) (lsmr ()) (merge ())
+  go :: forall m x y z . (Monad m)
+     => (() -> x                -> NonRec (InstF f) -> m z)
+     -> (() -> NonRec (InstF f) -> y                -> m z)
+     -> (() -> x                -> y                -> m z)
+     ->  () -> InstF f x        -> InstF f y        -> m (InstF f z)
+  go lsml lsmr merge () = iSubGLB_ (\x y -> lsml () y x) (lsmr ()) (merge ())
 
 nLeqGLBRD, nLeqGLBRL :: (Ord f) => NIX f -> NIX f -> Either UnifFail (NIX f)
 nLeqGLBRD (NIX l) (NIX r) = fmap NIX $ autPMerge ctxUniq (bendImpl iLeqGLBRD_) l r

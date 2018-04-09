@@ -6,27 +6,34 @@ all: deps build sphinxbuild
 
 .PHONY: $(VERFILE)
 $(VERFILE):
+	mkdir -p `dirname $@`
 	echo "Version: Dyna 0.4 pre-release" `git describe --all` > $@
 	echo "Build date:" `date` >> $@
 	echo "Commit: https://github.com/nwf/dyna/commit/"`git rev-parse HEAD` >> $@
 
+.PHONY: upstream
 upstream:
-	git submodule init
+	git submodule update --init
 	# git submodule update external/ekmett-parsers external/ekmett-trifecta
 	# cabal install --user --enable-tests --only-dependencies \
 	#  external/ekmett-parsers external/ekmett-trifecta .
 	# cabal install --user external/ekmett-parsers external/ekmett-trifecta
 
+.PHONY: deps
 deps:
 	alex --version 2>/dev/null >/dev/null || cabal install alex
 	happy --version 2>/dev/null >/dev/null || cabal install happy
 	cabal install --user --enable-tests --only-dependencies .
 
+.PHONY: build
 build: $(VERFILE)
-	cabal configure --user --enable-tests
+	cabal configure --user
 	cabal build
 
-test tests: build
+.PHONY: test tests
+test tests:
+	cabal configure --user --enable-tests
+	cabal build
 	dist/build/dyna-selftests/dyna-selftests
 	misc/dyna-doctest.py
 	# cabal test
@@ -50,10 +57,7 @@ clean:
 	rm -rf *.tix
 	rm -f tags TAGS
 veryclean: clean
-	rm -rf dist
-
-run-parser:
-	ghci -isrc Dyna.ParserHS.Parser
+	rm -rf dist/*
 
 # Cabal's haddock integration is sort of sad; since I want to have
 # everything we use in one place, run haddock by hand.  This still isn't
@@ -72,11 +76,10 @@ haddock:
 # Build our sphinx documentation
 .PHONY: sphinxbuild sphinxdoc
 sphinxbuild:
-	(cd docs/sphinx; make html)
+	which sphinx-build >/dev/null && (cd docs/sphinx; make html)
 
 sphinxdoc: sphinxbuild
-	python -c 'import webbrowser; \
-	  webbrowser.open("./docs/sphinx/_build/html/index.html")'
+	python -m webbrowser "./docs/sphinx/_build/html/index.html"
 
 doc: sphinxbuild haddock
 
