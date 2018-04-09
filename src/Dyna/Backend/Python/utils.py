@@ -4,9 +4,15 @@ from external.path import path  # used by other modules
 try:
     from IPython import embed as ip
 except ImportError:
-    from IPython.frontend.terminal.embed import InteractiveShellEmbed
-    # interactive IPython shell
-    ip = InteractiveShellEmbed(banner1 = 'Dropping into IPython\n')
+    try:
+        from IPython.frontend.terminal.embed import InteractiveShellEmbed
+    except ImportError:
+        from IPython.terminal.embed import InteractiveShellEmbed
+
+    def ip(banner1='Dropping into IPython\n', **kw):
+        "interactive IPython shell"
+        shell = InteractiveShellEmbed.instance(banner1=banner1, **kw)
+        shell(header='', stack_depth=2)
 
 
 from config import dynahome, dotdynadir
@@ -261,7 +267,7 @@ def span_to_src(span, src=None):
     Utility for retrieving source code for Parsec error message (there is
     nothing specific about rules)
     """
-    
+
     # look for intervals like `filename:3:1-filename:3:6`
     lines = re.findall(r'(.*):(\d+):(\d+)-\1:(\d+):(\d+)', span)
     if lines:
@@ -271,7 +277,7 @@ def span_to_src(span, src=None):
         [(filename, bl, bc)] = re.findall(r'(.*):(\d+):(\d+)', span)
         el = bl
         ec = bc
-    
+
     (bl, bc, el, ec) = map(int, [bl, bc, el, ec])
 
     if not src:
