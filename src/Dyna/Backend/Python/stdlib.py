@@ -1,4 +1,4 @@
-import re, os
+import re, os, sys
 from term import Term, Cons, Nil, MapsTo
 from collections import Counter
 from utils import true, false, null, isbool
@@ -19,6 +19,12 @@ from glob import glob
 #        # try to add scalar
 #        return todyna([x+a for a in self.aslist])
 
+
+from arsenal.viz import lineplot
+def dirty_plot(channel, x):
+    print '[dirty plot]', channel, x
+    with lineplot(channel) as d:
+        d.append(x)
 
 def lookup(k, alist):
     a = dict(alist)
@@ -85,9 +91,13 @@ def pycall(name, *args):
     """
     Temporary foreign function interface - call Python functions from dyna!
     """
+
+    print '[pycall]', name, args
+    
     args = tuple(topython(x) for x in args)
     x = eval(name)(*args)
     return todyna(x)
+
 
 # TODO: should convert Term arguments
 def topython(x):
